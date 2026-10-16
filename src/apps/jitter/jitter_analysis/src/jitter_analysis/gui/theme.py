@@ -862,6 +862,11 @@ QFrame#runInfoDivider {{
     max-height: 1px;
     margin: 2px 0px;
 }}
+QFrame#jitterTableToolbar {{
+    background: {spec.subtle_bg};
+    border: 1px solid {spec.border_soft};
+    border-radius: 10px;
+}}
 QWidget#analysisOutlierFilterPanel {{
     background: transparent;
     border: none;
@@ -980,7 +985,7 @@ QTabWidget#analysisTabs::pane {{
     border: 1px solid {spec.section_border};
     border-radius: 14px;
     background: {spec.section_bg};
-    top: -1px;
+    top: 0px;
 }}
 QTabBar#analysisTabBar::tab {{
     background: {spec.tab_bg};

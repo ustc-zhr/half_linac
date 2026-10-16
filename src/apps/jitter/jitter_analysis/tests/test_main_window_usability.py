@@ -9,6 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from jitter_analysis.domain.types import MultiKnobStepRecord, RunMode, RunStatus, SampleRecord
 from jitter_analysis.gui import main_window as main_window_module
+from jitter_analysis.gui.plots import jitter_plot as jitter_plot_module
 from jitter_analysis.gui.state import AppState
 from jitter_analysis.services.run_service import RunService
 from jitter_analysis.services.task_service import TaskService
@@ -37,6 +38,21 @@ def window(qt_app, monkeypatch):
 def test_setup_banner_offers_direct_action_when_config_is_missing(window):
     assert window.mode_status_action_button.text() == "Load PV Library"
     assert not window.mode_status_action_button.isHidden()
+
+
+def test_jitter_summary_table_and_plot_are_resizable(window):
+    splitter = window.jitter_summary_splitter
+    assert splitter.orientation() == main_window_module.QtCore.Qt.Vertical
+    assert splitter.widget(0) is window.jitter_table
+    assert splitter.widget(1) is window.jitter_plot
+    assert not splitter.childrenCollapsible()
+    assert not splitter.isCollapsible(0)
+    assert not splitter.isCollapsible(1)
+    assert splitter.handleWidth() == 7
+
+    header = window.jitter_table.horizontalHeader()
+    assert header.sectionResizeMode(0) == main_window_module.QtWidgets.QHeaderView.Interactive
+    assert header.sectionSize(0) == 420
 
 
 def test_loaded_config_keeps_setup_in_manual_control(window):
@@ -194,3 +210,101 @@ def test_random_seed_is_generated_internally_and_invalidated_when_plan_changes(w
         window.scan_panel.random_point_count_spin.value() + 1
     )
     assert window._random_preview_seed is None
+
+
+def test_series_visibility_dialog_searches_groups_and_applies_in_batch(qt_app):
+    rows = [
+        {
+            "pv_id": "bpm01_x",
+            "label": "BPM01 X",
+            "group_id": "bpm_x",
+            "group_label": "BPM X",
+            "read_pv": "TEST:BPM01:X",
+            "tags": ["orbit"],
+        },
+        {
+            "pv_id": "bpm02_x",
+            "label": "BPM02 X",
+            "group_id": "bpm_x",
+            "group_label": "BPM X",
+            "read_pv": "TEST:BPM02:X",
+            "tags": ["orbit"],
+        },
+        {
+            "pv_id": "llrf_phase",
+            "label": "LLRF Phase",
+            "group_id": "llrf_channel_phase",
+            "group_label": "LLRF Channel Phase",
+            "read_pv": "TEST:LLRF:PHASE",
+            "tags": ["phase"],
+        },
+    ]
+    dialog = jitter_plot_module.SeriesVisibilityDialog(rows, ["bpm01_x"])
+    try:
+        assert dialog.selected_pv_ids() == ["bpm01_x"]
+        assert "Results: 3/3" in dialog.status_label.text()
+
+        dialog.search_edit.setText("phase")
+        assert "Results: 1/3" in dialog.status_label.text()
+        dialog.select_filtered_button.click()
+        assert dialog.selected_pv_ids() == ["bpm01_x", "llrf_phase"]
+
+        group_index = dialog.group_combo.findData("bpm_x")
+        dialog.search_edit.clear()
+        dialog.group_combo.setCurrentIndex(group_index)
+        assert "Results: 2/3" in dialog.status_label.text()
+
+        bpm_group = dialog.tree.topLevelItem(0)
+        bpm_group.setCheckState(0, main_window_module.QtCore.Qt.Checked)
+        assert dialog.selected_pv_ids() == ["bpm01_x", "bpm02_x", "llrf_phase"]
+
+        dialog.clear_button.click()
+        assert dialog.selected_pv_ids() == []
+    finally:
+        dialog.close()
+
+
+def test_jitter_table_search_actions_and_numeric_sorting(window):
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "irfel_pvlist.json"
+    assert window._load_config_path(config_path)
+    objects = window.loaded_config.objects[:3]
+    window.current_series_values = {
+        objects[0].id: [2.0, 2.0, 2.0],
+        objects[1].id: [10.0, 10.0, 10.0],
+        objects[2].id: [100.0, 100.0, 100.0],
+    }
+    window.current_series_metadata = {}
+
+    window._populate_jitter_table()
+
+    assert window.jitter_table.rowCount() == 3
+    assert window.jitter_table_match_label.text() == "3 / 3 rows"
+    assert window.jitter_table.isSortingEnabled()
+    jitter_layout = window.analysis_tabs.widget(window.jitter_tab_index).layout()
+    assert jitter_layout.contentsMargins().top() == 16
+    assert jitter_layout.contentsMargins().left() == 12
+    assert window.jitter_table_toolbar.height() == 44
+    assert window.jitter_table_filter_edit.height() == 28
+    assert window.jitter_show_selected_button.height() == 28
+    assert window.jitter_show_filtered_button.height() == 28
+    assert window.jitter_show_selected_button.property("compactControl") == "true"
+
+    window.jitter_table.sortItems(2, main_window_module.QtCore.Qt.DescendingOrder)
+    sorted_means = [
+        float(window.jitter_table.item(row, 2).text())
+        for row in range(window.jitter_table.rowCount())
+    ]
+    assert sorted_means == [100.0, 10.0, 2.0]
+
+    target = objects[1]
+    window.jitter_table_filter_edit.setText(target.read_pv)
+    assert window.jitter_table_match_label.text() == "1 / 3 rows"
+    assert window._visible_jitter_table_pv_ids() == [target.id]
+    assert window.jitter_show_filtered_button.isEnabled()
+
+    window.jitter_show_filtered_button.click()
+    assert window.jitter_plot.current_pv_ids() == [target.id]
+
+    window.jitter_table_filter_edit.clear()
+    assert window.jitter_table_match_label.text() == "3 / 3 rows"
+    assert not window.jitter_show_filtered_button.isEnabled()

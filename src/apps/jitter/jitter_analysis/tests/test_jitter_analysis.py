@@ -1,4 +1,5 @@
 from pathlib import Path
+import math
 import sys
 
 
@@ -19,8 +20,17 @@ def test_compute_jitter_stats():
     assert stats.count == 4
     assert stats.mean == 2.5
     assert round(stats.std, 6) == 1.118034
-    assert round(stats.rms, 6) == 1.118034
+    assert round(stats.relative_jitter_percent, 6) == 44.72136
+
+    negative_mean_stats = compute_jitter_stats([-4.0, -3.0, -2.0, -1.0])
+    assert round(negative_mean_stats.relative_jitter_percent, 6) == 44.72136
     assert round(stats.peak_to_peak, 6) == 3.0
+
+
+def test_compute_jitter_stats_relative_jitter_is_undefined_for_zero_mean():
+    stats = compute_jitter_stats([-1.0, 1.0])
+
+    assert math.isnan(stats.relative_jitter_percent)
 
 
 def test_transform_jitter_values_mean_centered():

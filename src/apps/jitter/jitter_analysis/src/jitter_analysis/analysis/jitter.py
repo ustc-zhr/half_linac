@@ -12,7 +12,7 @@ class JitterStats:
     count: int
     mean: float
     std: float
-    rms: float
+    relative_jitter_percent: float
     peak_to_peak: float
     minimum: float
     maximum: float
@@ -39,14 +39,17 @@ def compute_jitter_stats(values: Sequence[float]) -> JitterStats:
 
     mean = float(np.mean(data))
     std = float(np.std(data, ddof=0))
-    centered = data - mean
-    rms = float(math.sqrt(np.mean(np.square(centered))))
+    scale = max(float(np.max(np.abs(data))), 1.0)
+    mean_is_effectively_zero = abs(mean) <= np.finfo(float).eps * scale
+    relative_jitter_percent = (
+        math.nan if mean_is_effectively_zero else 100.0 * std / abs(mean)
+    )
     peak_to_peak = float(np.ptp(data))
     return JitterStats(
         count=int(data.size),
         mean=mean,
         std=std,
-        rms=rms,
+        relative_jitter_percent=relative_jitter_percent,
         peak_to_peak=peak_to_peak,
         minimum=float(np.min(data)),
         maximum=float(np.max(data)),

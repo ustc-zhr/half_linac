@@ -213,8 +213,23 @@ def require_qt():
 
 
 if QtWidgets is not None:
+    _JITTER_NUMERIC_SORT_ROLE = QtCore.Qt.UserRole + 10
+
+    class _NumericTableWidgetItem(QtWidgets.QTableWidgetItem):
+        def __init__(self, text: str, sort_value: float) -> None:
+            super().__init__(text)
+            self.setData(_JITTER_NUMERIC_SORT_ROLE, float(sort_value))
+
+        def __lt__(self, other) -> bool:
+            left = self.data(_JITTER_NUMERIC_SORT_ROLE)
+            right = other.data(_JITTER_NUMERIC_SORT_ROLE)
+            if left is None or right is None:
+                return super().__lt__(other)
+            return float(left) < float(right)
+
     _MainWindowBase = QtWidgets.QMainWindow
 else:  # pragma: no cover - fallback for non-GUI tests
+    _NumericTableWidgetItem = object
     _MainWindowBase = object
 
 
@@ -883,29 +898,81 @@ class MainWindow(_MainWindowBase):
     def _build_jitter_summary(self):
         widget = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(12, 16, 12, 12)
+        layout.setSpacing(10)
+
+        self.jitter_table_toolbar = QtWidgets.QFrame(widget)
+        self.jitter_table_toolbar.setObjectName("jitterTableToolbar")
+        self.jitter_table_toolbar.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed
+        )
+        self.jitter_table_toolbar.setFixedHeight(44)
+        table_controls = QtWidgets.QHBoxLayout(self.jitter_table_toolbar)
+        table_controls.setContentsMargins(8, 7, 8, 7)
+        table_controls.setSpacing(8)
+        table_controls.setAlignment(QtCore.Qt.AlignVCenter)
+        table_controls.addWidget(QtWidgets.QLabel("Filter table"))
+        self.jitter_table_filter_edit = QtWidgets.QLineEdit(widget)
+        self.jitter_table_filter_edit.setPlaceholderText("Search name, PV, group, or tags")
+        self.jitter_table_filter_edit.setClearButtonEnabled(True)
+        self.jitter_table_filter_edit.setFixedHeight(28)
+        self.jitter_table_match_label = QtWidgets.QLabel("0 / 0 rows", widget)
+        self.jitter_show_selected_button = QtWidgets.QPushButton("Show Selected Only", widget)
+        self.jitter_show_filtered_button = QtWidgets.QPushButton("Show Filtered", widget)
+        for button in (self.jitter_show_selected_button, self.jitter_show_filtered_button):
+            button.setProperty("compactControl", "true")
+            button.setFixedHeight(28)
+            button.setEnabled(False)
+        table_controls.addWidget(self.jitter_table_filter_edit, 1)
+        table_controls.addWidget(self.jitter_table_match_label)
+        table_controls.addWidget(self.jitter_show_selected_button)
+        table_controls.addWidget(self.jitter_show_filtered_button)
+        layout.addWidget(self.jitter_table_toolbar, 0)
+
         self.jitter_table = QtWidgets.QTableWidget(0, 9)
         self.jitter_table.setHorizontalHeaderLabels(
-            ["PV", "Count", "Mean", "Std", "Jitter RMS", "P2P", "Min", "Max", "Unit"]
+            ["PV", "Count", "Mean", "Std", "Jitter (%)", "P2P", "Min", "Max", "Unit"]
         )
         self.jitter_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.jitter_table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.jitter_table.setAlternatingRowColors(True)
+        self.jitter_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.jitter_table.setSortingEnabled(True)
         self.jitter_table.verticalHeader().setVisible(False)
         self._apply_jitter_table_column_layout()
-        layout.addWidget(self.jitter_table)
         self.jitter_plot = JitterPlot()
         self.analysis_outlier_filter_panel = self._build_analysis_outlier_filter_panel()
         self.jitter_plot.add_trailing_control_widget(self.analysis_outlier_filter_panel)
-        layout.addWidget(self.jitter_plot, 1)
+        self.jitter_table_filter_edit.textChanged.connect(self._apply_jitter_table_filter)
+        self.jitter_table.itemSelectionChanged.connect(self._update_jitter_table_actions)
+        self.jitter_table.itemDoubleClicked.connect(
+            lambda _item: self._show_selected_jitter_only()
+        )
+        self.jitter_show_selected_button.clicked.connect(self._show_selected_jitter_only)
+        self.jitter_show_filtered_button.clicked.connect(self._show_filtered_jitter)
+
+        self.jitter_summary_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.jitter_summary_splitter.setObjectName("jitterSummarySplitter")
+        self.jitter_summary_splitter.setChildrenCollapsible(False)
+        self.jitter_summary_splitter.setHandleWidth(7)
+        self.jitter_summary_splitter.addWidget(self.jitter_table)
+        self.jitter_summary_splitter.addWidget(self.jitter_plot)
+        self.jitter_summary_splitter.setCollapsible(0, False)
+        self.jitter_summary_splitter.setCollapsible(1, False)
+        self.jitter_summary_splitter.setStretchFactor(0, 0)
+        self.jitter_summary_splitter.setStretchFactor(1, 1)
+        self.jitter_summary_splitter.setSizes([180, 640])
+        layout.addWidget(self.jitter_summary_splitter, 1)
         return widget
 
     def _apply_jitter_table_column_layout(self) -> None:
         header = self.jitter_table.horizontalHeader()
         header.setStretchLastSection(False)
         header.setMinimumSectionSize(54)
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Interactive)
+        if not getattr(self, "_jitter_column_layout_initialized", False):
+            self.jitter_table.setColumnWidth(0, 420)
+            self._jitter_column_layout_initialized = True
         fixed_widths = {
             1: 70,
             2: 92,
@@ -919,6 +986,59 @@ class MainWindow(_MainWindowBase):
         for column, width in fixed_widths.items():
             header.setSectionResizeMode(column, QtWidgets.QHeaderView.Fixed)
             self.jitter_table.setColumnWidth(column, width)
+
+    def _apply_jitter_table_filter(self, *_args) -> None:
+        query_tokens = [
+            token
+            for token in self.jitter_table_filter_edit.text().casefold().split()
+            if token
+        ]
+        for row in range(self.jitter_table.rowCount()):
+            item = self.jitter_table.item(row, 0)
+            search_text = str(item.data(QtCore.Qt.UserRole + 1) or "") if item else ""
+            matches = all(token in search_text for token in query_tokens)
+            self.jitter_table.setRowHidden(row, not matches)
+        self._update_jitter_table_actions()
+
+    def _visible_jitter_table_pv_ids(self) -> list[str]:
+        pv_ids = []
+        for row in range(self.jitter_table.rowCount()):
+            if self.jitter_table.isRowHidden(row):
+                continue
+            item = self.jitter_table.item(row, 0)
+            if item is not None:
+                pv_ids.append(str(item.data(QtCore.Qt.UserRole)))
+        return pv_ids
+
+    def _selected_jitter_table_pv_id(self) -> str | None:
+        row = self.jitter_table.currentRow()
+        if row < 0 or self.jitter_table.isRowHidden(row):
+            return None
+        item = self.jitter_table.item(row, 0)
+        return str(item.data(QtCore.Qt.UserRole)) if item is not None else None
+
+    def _update_jitter_table_actions(self, *_args) -> None:
+        visible_count = len(self._visible_jitter_table_pv_ids())
+        total_count = self.jitter_table.rowCount()
+        self.jitter_table_match_label.setText(f"{visible_count} / {total_count} rows")
+        selected_pv_id = self._selected_jitter_table_pv_id()
+        self.jitter_show_selected_button.setEnabled(bool(selected_pv_id))
+        self.jitter_show_filtered_button.setEnabled(
+            bool(self.jitter_table_filter_edit.text().strip()) and visible_count > 0
+        )
+
+    def _show_selected_jitter_only(self, *_args) -> None:
+        pv_id = self._selected_jitter_table_pv_id()
+        if pv_id:
+            self.jitter_plot.set_visible_pv_ids([pv_id], focused_pv_id=pv_id)
+
+    def _show_filtered_jitter(self, *_args) -> None:
+        pv_ids = self._visible_jitter_table_pv_ids()
+        if not pv_ids:
+            return
+        selected_pv_id = self._selected_jitter_table_pv_id()
+        focused_pv_id = selected_pv_id if selected_pv_id in pv_ids else pv_ids[0]
+        self.jitter_plot.set_visible_pv_ids(pv_ids, focused_pv_id=focused_pv_id)
 
     def _build_placeholder(self, text: str):
         widget = QtWidgets.QWidget()
@@ -4072,6 +4192,7 @@ class MainWindow(_MainWindowBase):
 
     def _clear_jitter_table(self) -> None:
         self.jitter_table.setRowCount(0)
+        self._apply_jitter_table_filter()
         self._update_jitter_filter_status()
         self.jitter_plot.clear_data("Run a task to populate jitter statistics and inspect point-by-point data.")
         self._set_analysis_available(False)
@@ -4096,6 +4217,7 @@ class MainWindow(_MainWindowBase):
             return
 
         objects_by_id = {obj.id: obj for obj in self.loaded_config.objects}
+        group_labels = {group.id: group.label for group in self.loaded_config.groups}
         rows = []
         plot_rows = []
         total_removed = 0
@@ -4116,19 +4238,34 @@ class MainWindow(_MainWindowBase):
             obj = objects_by_id.get(pv_id)
             name = obj.name if obj else pv_id
             unit = obj.unit if obj else ""
+            group_id = obj.group if obj else ""
+            group_label = group_labels.get(group_id, group_id)
+            read_pv = obj.read_pv if obj else ""
+            tags = list(obj.tags) if obj else []
+            search_text = " ".join(
+                str(part).strip().casefold()
+                for part in (name, pv_id, read_pv, group_id, group_label, *tags)
+                if str(part).strip()
+            )
             if len(filtered_sample_indices) != len(filtered_values):
                 filtered_sample_indices = list(range(len(filtered_values)))
-            rows.append((pv_id, name, stats, unit, raw_count, removed_count))
+            rows.append(
+                (pv_id, name, stats, unit, raw_count, removed_count, search_text)
+            )
             plot_rows.append(
                 {
                     "pv_id": pv_id,
                     "label": name,
                     "unit": unit,
+                    "group_id": group_id,
+                    "group_label": group_label,
+                    "read_pv": read_pv,
+                    "tags": tags,
                     "sample_indices": filtered_sample_indices,
                     "values": filtered_values,
                     "mean": stats.mean,
                     "std": stats.std,
-                    "rms": stats.rms,
+                    "relative_jitter_percent": stats.relative_jitter_percent,
                     "p2p": stats.peak_to_peak,
                     "raw_count": raw_count,
                     "removed_count": removed_count,
@@ -4136,30 +4273,74 @@ class MainWindow(_MainWindowBase):
                 }
             )
 
+        sorting_enabled = self.jitter_table.isSortingEnabled()
+        header = self.jitter_table.horizontalHeader()
+        sort_column = header.sortIndicatorSection()
+        sort_order = header.sortIndicatorOrder()
+        self.jitter_table.setSortingEnabled(False)
         self.jitter_table.setRowCount(len(rows))
-        for row_index, (pv_id, name, stats, unit, raw_count, removed_count) in enumerate(rows):
+        for row_index, (
+            pv_id,
+            name,
+            stats,
+            unit,
+            raw_count,
+            removed_count,
+            search_text,
+        ) in enumerate(rows):
+            relative_jitter_text = (
+                f"{stats.relative_jitter_percent:.6g}"
+                if math.isfinite(stats.relative_jitter_percent)
+                else "N/A"
+            )
             values = [
                 name,
                 str(stats.count),
                 f"{stats.mean:.6g}",
                 f"{stats.std:.6g}",
-                f"{stats.rms:.6g}",
+                relative_jitter_text,
                 f"{stats.peak_to_peak:.6g}",
                 f"{stats.minimum:.6g}",
                 f"{stats.maximum:.6g}",
                 unit,
             ]
+            numeric_sort_values = {
+                1: float(stats.count),
+                2: stats.mean,
+                3: stats.std,
+                4: (
+                    stats.relative_jitter_percent
+                    if math.isfinite(stats.relative_jitter_percent)
+                    else -math.inf
+                ),
+                5: stats.peak_to_peak,
+                6: stats.minimum,
+                7: stats.maximum,
+            }
             tooltip = (
                 f"Raw valid samples: {raw_count}\n"
                 f"Samples kept in Jitter tab: {stats.count}\n"
                 f"Filtered outliers: {removed_count}"
             )
             for col_index, value in enumerate(values):
-                item = QtWidgets.QTableWidgetItem(value)
+                if col_index in numeric_sort_values:
+                    item = _NumericTableWidgetItem(value, numeric_sort_values[col_index])
+                else:
+                    item = QtWidgets.QTableWidgetItem(value)
                 if col_index == 0:
                     item.setData(QtCore.Qt.UserRole, pv_id)
-                item.setToolTip(tooltip)
+                    item.setData(QtCore.Qt.UserRole + 1, search_text)
+                if col_index == 4:
+                    item.setToolTip(
+                        tooltip + "\nRelative jitter = Std / |Mean| × 100%; N/A when Mean is zero."
+                    )
+                else:
+                    item.setToolTip(tooltip)
                 self.jitter_table.setItem(row_index, col_index, item)
+        self.jitter_table.setSortingEnabled(sorting_enabled)
+        if sorting_enabled and sort_column >= 0:
+            self.jitter_table.sortItems(sort_column, sort_order)
+        self._apply_jitter_table_filter()
         self._apply_jitter_table_column_layout()
         self._update_jitter_filter_status(total_removed=total_removed, affected_variables=affected_variables)
         current_pv_ids = self.jitter_plot.current_pv_ids()
@@ -4179,16 +4360,30 @@ class MainWindow(_MainWindowBase):
         if plot_rows:
             blockers = [QtCore.QSignalBlocker(self.jitter_table)]
             try:
-                target_row = 0
+                visible_rows = [
+                    row_index
+                    for row_index in range(self.jitter_table.rowCount())
+                    if not self.jitter_table.isRowHidden(row_index)
+                ]
+                target_row = visible_rows[0] if visible_rows else -1
                 if focused_pv_id:
                     for row_index in range(self.jitter_table.rowCount()):
                         item = self.jitter_table.item(row_index, 0)
-                        if item is not None and str(item.data(QtCore.Qt.UserRole)) == focused_pv_id:
+                        if (
+                            item is not None
+                            and not self.jitter_table.isRowHidden(row_index)
+                            and str(item.data(QtCore.Qt.UserRole)) == focused_pv_id
+                        ):
                             target_row = row_index
                             break
-                self.jitter_table.setCurrentCell(target_row, 0)
+                if target_row >= 0:
+                    self.jitter_table.setCurrentCell(target_row, 0)
+                else:
+                    self.jitter_table.clearSelection()
+                    self.jitter_table.setCurrentCell(-1, -1)
             finally:
                 del blockers
+            self._update_jitter_table_actions()
         self._set_analysis_available(self._has_current_run_data())
 
     def _populate_sensitivity_view(self) -> None:
