@@ -3078,9 +3078,16 @@
       "note": "Center energy"
     },
     {
-      "name": "PRF02_energy_deviation",
+      "name": "PRF02_energy",
       "pv_name": "IN:BD:PRF02:H:E",
       "readback": "IN:BD:PRF02:H:E",
+      "group": "energy-spectrum",
+      "note": "Actual energy"
+    },
+    {
+      "name": "PRF02_energy_deviation",
+      "pv_name": "IN:BD:PRF02:H:DeltaE",
+      "readback": "IN:BD:PRF02:H:DeltaE",
       "group": "energy-spectrum",
       "note": "Energy deviation"
     },
@@ -3346,9 +3353,16 @@
       "note": "Center energy"
     },
     {
-      "name": "ENY_energy_deviation",
+      "name": "ENY_energy",
       "pv_name": "IN:BD:ENY:H:E",
       "readback": "IN:BD:ENY:H:E",
+      "group": "energy-spectrum",
+      "note": "Actual energy"
+    },
+    {
+      "name": "ENY_energy_deviation",
+      "pv_name": "IN:BD:ENY:H:DeltaE",
+      "readback": "IN:BD:ENY:H:DeltaE",
       "group": "energy-spectrum",
       "note": "Energy deviation"
     },
