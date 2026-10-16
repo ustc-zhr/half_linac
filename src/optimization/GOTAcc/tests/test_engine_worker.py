@@ -1,8 +1,11 @@
-import pytest
+from types import SimpleNamespace
+
 import numpy as np
+import pytest
 
 pytest.importorskip("PyQt5")
 
+from gotacc.gui.views.controllers.run_results_presenter import RunResultsPresenter
 from gotacc.gui.workers.engine_worker import EngineWorker
 
 
@@ -42,6 +45,33 @@ def _offline_task(tmp_path):
 class _FailingOptimizer:
     def optimize(self):
         raise RuntimeError("optimizer failed")
+
+
+def test_best_history_starts_at_first_feasible_evaluation():
+    run = SimpleNamespace(best_value=None)
+    state = SimpleNamespace(
+        objective_dim=1,
+        objective_history=[],
+        best_history=[],
+        run=run,
+    )
+    window = SimpleNamespace(state=state, view_adapter=SimpleNamespace())
+    presenter = RunResultsPresenter(window)
+
+    presenter._append_objective_snapshot(
+        {"objective_value": 5.0, "best_value": None, "feasible": False}
+    )
+    run.best_value = 3.0
+    presenter._append_objective_snapshot(
+        {"objective_value": 3.0, "best_value": 3.0, "feasible": True}
+    )
+    presenter._append_objective_snapshot(
+        {"objective_value": 8.0, "best_value": 3.0, "feasible": False}
+    )
+
+    assert state.objective_history == [5.0, 3.0, 8.0]
+    assert np.isnan(state.best_history[0])
+    assert state.best_history[1:] == [3.0, 3.0]
 
 
 class _EvaluatingOptimizer:

@@ -75,7 +75,18 @@
          <widget class="QWidget" name="tab_obj"><attribute name="title"><string>Objective</string></attribute><layout class="QVBoxLayout" name="verticalLayout_obj"><item><widget class="QFrame" name="frame_obj"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item></layout></widget>
          <widget class="QWidget" name="tab_constraints"><attribute name="title"><string>Constraints</string></attribute><layout class="QVBoxLayout" name="verticalLayout_constraints"><item><widget class="QFrame" name="frame_constraints"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item></layout></widget>
          <widget class="QWidget" name="tab_pareto"><attribute name="title"><string>Pareto</string></attribute><layout class="QVBoxLayout" name="verticalLayout_pareto"><item><widget class="QFrame" name="frame_pareto"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item></layout></widget>
-         <widget class="QWidget" name="tab_variables"><attribute name="title"><string>Variables</string></attribute><layout class="QVBoxLayout" name="verticalLayout_variables"><item><widget class="QFrame" name="frame_variables"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item></layout></widget>
+         <widget class="QWidget" name="tab_variables">
+          <attribute name="title"><string>Variables</string></attribute>
+          <layout class="QGridLayout" name="verticalLayout_variables">
+           <item row="0" column="0"><widget class="QFrame" name="frame_variables"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+           <item row="0" column="0" alignment="Qt::AlignLeft|Qt::AlignTop">
+            <layout class="QHBoxLayout" name="horizontalLayout_variableDisplay">
+             <item><widget class="QLabel" name="label_variableDisplay"><property name="text"><string>Display</string></property></widget></item>
+             <item><widget class="QComboBox" name="comboBox_variableTrajectoryMode"><property name="maximumSize"><size><width>180</width><height>16777215</height></size></property></widget></item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
         </widget>
        </item>
       </layout>

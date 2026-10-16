@@ -28,7 +28,7 @@ class RuntimeStatusController:
             best_tooltip = "Dominated objective-space volume for the current Pareto front."
         else:
             objective_label = self.window.results_controller.objective_labels(1, task=task)[0]
-            best_title = f"Best Optimizer Score · {objective_label}"
+            best_title = f"Best Feasible Optimizer Score · {objective_label}"
             best_tooltip = self.window.results_controller.objective_sampling_tooltip(
                 1, task=task
             )
@@ -247,7 +247,7 @@ class RuntimeStatusController:
             best_tooltip = "Dominated objective-space volume for the current Pareto front."
         else:
             objective_label = self.window.results_controller.objective_labels(1, task=display_task)[0]
-            best_title = f"Best Optimizer Score · {objective_label}"
+            best_title = f"Best Feasible Optimizer Score · {objective_label}"
             best_tooltip = self.window.results_controller.objective_sampling_tooltip(
                 1, task=display_task
             )

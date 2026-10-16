@@ -655,7 +655,15 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
     import sys
 
     from PyQt5.QtCore import Qt
-    from PyQt5.QtWidgets import QApplication, QDialog, QFrame, QPushButton, QSizePolicy
+    from PyQt5.QtWidgets import (
+        QApplication,
+        QDialog,
+        QFrame,
+        QGridLayout,
+        QHeaderView,
+        QPushButton,
+        QSizePolicy,
+    )
 
     import gotacc.gui.main  # noqa: F401 - configures Qt runtime paths
     import gotacc.gui.views.main_window as main_window_module
@@ -1065,6 +1073,40 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         window.run_ui.splitter_main.setSizes([430, 240])
         assert not window.run_ui.splitter_runRight.childrenCollapsible()
         assert window.run_ui.tabWidget_plots.documentMode()
+        run_mode_combo = window.run_ui.comboBox_variableTrajectoryMode
+        results_mode_combo = window.ui.comboBox_variableTrajectoryMode
+        for overlay_layout in (
+            window.run_ui.verticalLayout_variables,
+            window.ui.verticalLayout_variablePlot,
+        ):
+            assert isinstance(overlay_layout, QGridLayout)
+            assert [
+                overlay_layout.getItemPosition(index)
+                for index in range(overlay_layout.count())
+            ] == [(0, 0, 1, 1), (0, 0, 1, 1)]
+        assert [run_mode_combo.itemData(i) for i in range(run_mode_combo.count())] == [
+            "raw",
+            "bounds",
+            "delta_initial",
+        ]
+        assert run_mode_combo.currentData() == "raw"
+        run_mode_combo.setCurrentIndex(run_mode_combo.findData("bounds"))
+        assert window.results_controller.variable_trajectory_mode == "bounds"
+        assert results_mode_combo.currentData() == "bounds"
+        results_mode_combo.setCurrentIndex(results_mode_combo.findData("delta_initial"))
+        assert window.results_controller.variable_trajectory_mode == "delta_initial"
+        assert run_mode_combo.currentData() == "delta_initial"
+
+        window.state.latest_task_snapshot = _offline_task(tmp_path)
+        window.state.eval_x_history[:] = [[-1.0], [0.0], [1.5]]
+        window.results_controller.set_variable_trajectory_mode("bounds")
+        variable_axis = window.run_var_canvas.figure.axes[0]
+        np.testing.assert_allclose(variable_axis.lines[0].get_ydata(), [0.0, 50.0, 125.0])
+        assert variable_axis.get_ylabel() == "Position in bounds (%)"
+        assert variable_axis.get_title() == "Variable Trajectories — Bounds %"
+        window.state.eval_x_history.clear()
+        window.state.latest_task_snapshot.clear()
+        window.results_controller.set_variable_trajectory_mode("raw")
         assert window.run_ui.frame_obj.property("plotHost") is True
         assert window.run_ui.frame_obj.frameShape() == window.run_ui.frame_obj.NoFrame
         assert window.run_ui.verticalLayout_main.indexOf(window.run_ui.groupBox_runtime) == 1
@@ -1113,6 +1155,12 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.pushButton_writeSelectedPareto.text() == "Write Selected to Machine"
         assert window.ui.pushButton_writeSelectedPareto.property("machineWrite") is True
         assert not window.ui.tableWidget_paretoSolutions.wordWrap()
+        pareto_header = window.ui.tableWidget_paretoSolutions.horizontalHeader()
+        assert all(
+            pareto_header.sectionResizeMode(column) == QHeaderView.Interactive
+            for column in range(window.ui.tableWidget_paretoSolutions.columnCount())
+        )
+        assert pareto_header.stretchLastSection()
         assert not hasattr(window.ui, "tableWidget_paretoSelectionDetail")
         assert window.ui.label_paretoSolutionsHint.isHidden()
         assert window.label_results_source_task.text() == "No run"
@@ -1272,7 +1320,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         window.runtime_status_controller.update_runtime_labels()
         assert (
             window.run_ui.label_bestTitle.text()
-            == "Best Optimizer Score · sphere ↑ · w=1"
+            == "Best Feasible Optimizer Score · sphere ↑ · w=1"
         )
         tooltip = window.run_ui.label_bestTitle.toolTip()
         assert "sphere: maximize; configured weight=1" in tooltip
@@ -1353,3 +1401,79 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert not window.ui.groupBox_environmentStatus.isVisible()
     finally:
         window.close()
+
+
+def test_variable_trajectory_display_transforms():
+    pytest.importorskip("PyQt5")
+    from gotacc.gui.views.controllers.results_controller import ResultsController
+
+    values = np.array([[2.0, 120.0, 1.0], [12.0, 150.0, 1.0]])
+    metadata = [
+        {"name": "small", "lower": 0.0, "upper": 10.0, "initial": 2.0},
+        {"name": "large", "lower": 100.0, "upper": 200.0, "initial": None},
+        {"name": "fixed", "lower": 1.0, "upper": 1.0, "initial": 1.0},
+    ]
+
+    raw, raw_indices, raw_info = ResultsController.transform_variable_trajectories(
+        values, metadata, "raw"
+    )
+    np.testing.assert_allclose(raw, values)
+    assert raw_indices == [0, 1, 2]
+    assert raw_info["ylabel"] == "Value"
+
+    bounded, bounded_indices, bounded_info = (
+        ResultsController.transform_variable_trajectories(values, metadata, "bounds")
+    )
+    np.testing.assert_allclose(bounded, [[20.0, 20.0], [120.0, 50.0]])
+    assert bounded_indices == [0, 1]
+    assert bounded_info["skipped"] == ["fixed"]
+    assert bounded_info["reference_lines"] == [0.0, 100.0]
+
+    delta, delta_indices, delta_info = ResultsController.transform_variable_trajectories(
+        values, metadata, "delta_initial"
+    )
+    np.testing.assert_allclose(delta, [[0.0, 0.0], [100.0, 30.0]])
+    assert delta_indices == [0, 1]
+    assert delta_info["fallback_initials"] == ["large"]
+    assert delta_info["skipped"] == ["fixed"]
+
+
+def test_variable_trajectory_metadata_prefers_frozen_task_snapshot():
+    pytest.importorskip("PyQt5")
+    from types import SimpleNamespace
+
+    from gotacc.gui.views.controllers.results_controller import ResultsController
+
+    frozen_task = {
+        "variables": [
+            {
+                "Enable": "Yes",
+                "Name": "frozen_x",
+                "Lower": "-5",
+                "Upper": "5",
+                "Initial": "1",
+            }
+        ]
+    }
+    current_task = {
+        "variables": [
+            {
+                "Enable": "Yes",
+                "Name": "edited_x",
+                "Lower": "0",
+                "Upper": "100",
+                "Initial": "50",
+            }
+        ]
+    }
+    window = SimpleNamespace(
+        state=SimpleNamespace(latest_task_snapshot=frozen_task),
+        view_adapter=SimpleNamespace(current_task=lambda: current_task),
+        task_ui=SimpleNamespace(tableWidget_variables=None),
+    )
+
+    metadata = ResultsController(window, canvas_class=None)._variable_trajectory_metadata(1)
+
+    assert metadata == [
+        {"name": "frozen_x", "lower": -5.0, "upper": 5.0, "initial": 1.0}
+    ]

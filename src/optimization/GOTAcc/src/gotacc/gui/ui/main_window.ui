@@ -726,13 +726,27 @@
                    <property name="title">
                     <string>Variables</string>
                    </property>
-                   <layout class="QVBoxLayout" name="verticalLayout_variablePlot">
-                    <item>
+                   <layout class="QGridLayout" name="verticalLayout_variablePlot">
+                    <item row="0" column="0">
                      <widget class="QFrame" name="frame_plotVariables">
                       <property name="frameShape">
                        <enum>QFrame::StyledPanel</enum>
                       </property>
                      </widget>
+                    </item>
+                    <item row="0" column="0" alignment="Qt::AlignLeft|Qt::AlignTop">
+                     <layout class="QHBoxLayout" name="horizontalLayout_variableDisplay">
+                      <item>
+                       <widget class="QLabel" name="label_variableDisplay">
+                        <property name="text"><string>Display</string></property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QComboBox" name="comboBox_variableTrajectoryMode">
+                        <property name="maximumSize"><size><width>180</width><height>16777215</height></size></property>
+                       </widget>
+                      </item>
+                     </layout>
                     </item>
                    </layout>
                   </widget>

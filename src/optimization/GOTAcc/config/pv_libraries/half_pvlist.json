@@ -612,409 +612,409 @@
       "name": "QL01",
       "pv_name": "IN:PS:LE07:QL01:current:ao",
       "readback": "IN:PS:LE07:QL01:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL02",
       "pv_name": "IN:PS:LE07:QL02:current:ao",
       "readback": "IN:PS:LE07:QL02:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL03",
       "pv_name": "IN:PS:LE07:QL03:current:ao",
       "readback": "IN:PS:LE07:QL03:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL04",
       "pv_name": "IN:PS:LE07:QL04:current:ao",
       "readback": "IN:PS:LE07:QL04:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL05",
       "pv_name": "IN:PS:LE07:QL05:current:ao",
       "readback": "IN:PS:LE07:QL05:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL06",
       "pv_name": "IN:PS:LE07:QL06:current:ao",
       "readback": "IN:PS:LE07:QL06:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL07",
       "pv_name": "IN:PS:LE07:QL07:current:ao",
       "readback": "IN:PS:LE07:QL07:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL08",
       "pv_name": "IN:PS:LE07:QL08:current:ao",
       "readback": "IN:PS:LE07:QL08:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL09",
       "pv_name": "IN:PS:LE07:QL09:current:ao",
       "readback": "IN:PS:LE07:QL09:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL10",
       "pv_name": "IN:PS:LE07:QL10:current:ao",
       "readback": "IN:PS:LE07:QL10:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL11",
       "pv_name": "IN:PS:LE07:QL11:current:ao",
       "readback": "IN:PS:LE07:QL11:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL12",
       "pv_name": "IN:PS:LE07:QL12:current:ao",
       "readback": "IN:PS:LE07:QL12:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL13",
       "pv_name": "IN:PS:LE07:QL13:current:ao",
       "readback": "IN:PS:LE07:QL13:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL14",
       "pv_name": "IN:PS:LE07:QL14:current:ao",
       "readback": "IN:PS:LE07:QL14:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL15",
       "pv_name": "IN:PS:LE07:QL15:current:ao",
       "readback": "IN:PS:LE07:QL15:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL16",
       "pv_name": "IN:PS:LE07:QL16:current:ao",
       "readback": "IN:PS:LE07:QL16:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL17",
       "pv_name": "IN:PS:LE07:QL17:current:ao",
       "readback": "IN:PS:LE07:QL17:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL18",
       "pv_name": "IN:PS:LE07:QL18:current:ao",
       "readback": "IN:PS:LE07:QL18:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL19",
       "pv_name": "IN:PS:LE07:QL19:current:ao",
       "readback": "IN:PS:LE07:QL19:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL20",
       "pv_name": "IN:PS:LE07:QL20:current:ao",
       "readback": "IN:PS:LE07:QL20:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL21",
       "pv_name": "IN:PS:LE07:QL21:current:ao",
       "readback": "IN:PS:LE07:QL21:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL22",
       "pv_name": "IN:PS:LE07:QL22:current:ao",
       "readback": "IN:PS:LE07:QL22:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL23",
       "pv_name": "IN:PS:LE07:QL23:current:ao",
       "readback": "IN:PS:LE07:QL23:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL24",
       "pv_name": "IN:PS:LE07:QL24:current:ao",
       "readback": "IN:PS:LE07:QL24:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL25",
       "pv_name": "IN:PS:LE07:QL25:current:ao",
       "readback": "IN:PS:LE07:QL25:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL26",
       "pv_name": "IN:PS:LE07:QL26:current:ao",
       "readback": "IN:PS:LE07:QL26:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QL27",
       "pv_name": "IN:PS:LE07:QL27:current:ao",
       "readback": "IN:PS:LE07:QL27:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT01",
       "pv_name": "IN:PS:LE16:QT01:current:ao",
       "readback": "IN:PS:LE16:QT01:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT02",
       "pv_name": "IN:PS:LE16:QT02:current:ao",
       "readback": "IN:PS:LE16:QT02:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT03",
       "pv_name": "IN:PS:LE16:QT03:current:ao",
       "readback": "IN:PS:LE16:QT03:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT04",
       "pv_name": "IN:PS:LE16:QT04:current:ao",
       "readback": "IN:PS:LE16:QT04:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT05",
       "pv_name": "IN:PS:LE16:QT05:current:ao",
       "readback": "IN:PS:LE16:QT05:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT06",
       "pv_name": "IN:PS:LE16:QT06:current:ao",
       "readback": "IN:PS:LE16:QT06:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT07",
       "pv_name": "IN:PS:LE16:QT07:current:ao",
       "readback": "IN:PS:LE16:QT07:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT08",
       "pv_name": "IN:PS:LE16:QT08:current:ao",
       "readback": "IN:PS:LE16:QT08:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT09",
       "pv_name": "IN:PS:LE16:QT09:current:ao",
       "readback": "IN:PS:LE16:QT09:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT10",
       "pv_name": "IN:PS:LE16:QT10:current:ao",
       "readback": "IN:PS:LE16:QT10:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT11",
       "pv_name": "IN:PS:LE16:QT11:current:ao",
       "readback": "IN:PS:LE16:QT11:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT12",
       "pv_name": "IN:PS:LE16:QT12:current:ao",
       "readback": "IN:PS:LE16:QT12:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT13",
       "pv_name": "IN:PS:LE16:QT13:current:ao",
       "readback": "IN:PS:LE16:QT13:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT14",
       "pv_name": "IN:PS:LE16:QT14:current:ao",
       "readback": "IN:PS:LE16:QT14:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT15",
       "pv_name": "IN:PS:LE16:QT15:current:ao",
       "readback": "IN:PS:LE16:QT15:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT16",
       "pv_name": "IN:PS:LE16:QT16:current:ao",
       "readback": "IN:PS:LE16:QT16:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT17",
       "pv_name": "IN:PS:LE16:QT17:current:ao",
       "readback": "IN:PS:LE16:QT17:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT18",
       "pv_name": "IN:PS:LE16:QT18:current:ao",
       "readback": "IN:PS:LE16:QT18:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT19",
       "pv_name": "IN:PS:LE16:QT19:current:ao",
       "readback": "IN:PS:LE16:QT19:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT20",
       "pv_name": "IN:PS:LE16:QT20:current:ao",
       "readback": "IN:PS:LE16:QT20:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT21",
       "pv_name": "IN:PS:LE16:QT21:current:ao",
       "readback": "IN:PS:LE16:QT21:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT22",
       "pv_name": "IN:PS:LE16:QT22:current:ao",
       "readback": "IN:PS:LE16:QT22:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT23",
       "pv_name": "IN:PS:LE16:QT23:current:ao",
       "readback": "IN:PS:LE16:QT23:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT24",
       "pv_name": "IN:PS:LE16:QT24:current:ao",
       "readback": "IN:PS:LE16:QT24:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT25",
       "pv_name": "IN:PS:LE16:QT25:current:ao",
       "readback": "IN:PS:LE16:QT25:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT26",
       "pv_name": "IN:PS:LE16:QT26:current:ao",
       "readback": "IN:PS:LE16:QT26:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT27",
       "pv_name": "IN:PS:LE16:QT27:current:ao",
       "readback": "IN:PS:LE16:QT27:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT28",
       "pv_name": "IN:PS:LE16:QT28:current:ao",
       "readback": "IN:PS:LE16:QT28:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT29",
       "pv_name": "IN:PS:LE16:QT29:current:ao",
       "readback": "IN:PS:LE16:QT29:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT30",
       "pv_name": "IN:PS:LE16:QT30:current:ao",
       "readback": "IN:PS:LE16:QT30:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT31",
       "pv_name": "IN:PS:LE16:QT31:current:ao",
       "readback": "IN:PS:LE16:QT31:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT32",
       "pv_name": "IN:PS:LE16:QT32:current:ao",
       "readback": "IN:PS:LE16:QT32:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT33",
       "pv_name": "IN:PS:LE16:QT33:current:ao",
       "readback": "IN:PS:LE16:QT33:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT34",
       "pv_name": "IN:PS:LE16:QT34:current:ao",
       "readback": "IN:PS:LE16:QT34:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT35",
       "pv_name": "IN:PS:LE16:QT35:current:ao",
       "readback": "IN:PS:LE16:QT35:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QT36",
       "pv_name": "IN:PS:LE16:QT36:current:ao",
       "readback": "IN:PS:LE16:QT36:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QE01",
       "pv_name": "IN:PS:LE16:QE01:current:ao",
       "readback": "IN:PS:LE16:QE01:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QE02",
       "pv_name": "IN:PS:LE16:QE02:current:ao",
       "readback": "IN:PS:LE16:QE02:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QE03",
       "pv_name": "IN:PS:LE16:QE03:current:ao",
       "readback": "IN:PS:LE16:QE03:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QDU01",
       "pv_name": "IN:PS:LE16:QDU01:current:ao",
       "readback": "IN:PS:LE16:QDU01:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "QDU02",
       "pv_name": "IN:PS:LE16:QDU02:current:ao",
       "readback": "IN:PS:LE16:QDU02:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "BL01A",
@@ -1464,307 +1464,307 @@
       "name": "QL01_K1",
       "pv_name": "IN:MG:L002:QUAD:QL01:K1",
       "readback": "IN:MG:L002:QUAD:QL01:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL02_K1",
       "pv_name": "IN:MG:L002:QUAD:QL02:K1",
       "readback": "IN:MG:L002:QUAD:QL02:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL03_K1",
       "pv_name": "IN:MG:L002:QUAD:QL03:K1",
       "readback": "IN:MG:L002:QUAD:QL03:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL04_K1",
       "pv_name": "IN:MG:L002:QUAD:QL04:K1",
       "readback": "IN:MG:L002:QUAD:QL04:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL05_K1",
       "pv_name": "IN:MG:L002:QUAD:QL05:K1",
       "readback": "IN:MG:L002:QUAD:QL05:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL06_K1",
       "pv_name": "IN:MG:L002:QUAD:QL06:K1",
       "readback": "IN:MG:L002:QUAD:QL06:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL07_K1",
       "pv_name": "IN:MG:L002:QUAD:QL07:K1",
       "readback": "IN:MG:L002:QUAD:QL07:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL08_K1",
       "pv_name": "IN:MG:L002:QUAD:QL08:K1",
       "readback": "IN:MG:L002:QUAD:QL08:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL09_K1",
       "pv_name": "IN:MG:L002:QUAD:QL09:K1",
       "readback": "IN:MG:L002:QUAD:QL09:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL10_K1",
       "pv_name": "IN:MG:L002:QUAD:QL10:K1",
       "readback": "IN:MG:L002:QUAD:QL10:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL11_K1",
       "pv_name": "IN:MG:L002:QUAD:QL11:K1",
       "readback": "IN:MG:L002:QUAD:QL11:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QL12_K1",
       "pv_name": "IN:MG:L002:QUAD:QL12:K1",
       "readback": "IN:MG:L002:QUAD:QL12:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT01_K1",
       "pv_name": "IN:MG:L002:QUAD:QT01:K1",
       "readback": "IN:MG:L002:QUAD:QT01:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT02_K1",
       "pv_name": "IN:MG:L002:QUAD:QT02:K1",
       "readback": "IN:MG:L002:QUAD:QT02:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT03_K1",
       "pv_name": "IN:MG:L002:QUAD:QT03:K1",
       "readback": "IN:MG:L002:QUAD:QT03:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT04_K1",
       "pv_name": "IN:MG:L002:QUAD:QT04:K1",
       "readback": "IN:MG:L002:QUAD:QT04:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT05_K1",
       "pv_name": "IN:MG:L002:QUAD:QT05:K1",
       "readback": "IN:MG:L002:QUAD:QT05:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT06_K1",
       "pv_name": "IN:MG:L002:QUAD:QT06:K1",
       "readback": "IN:MG:L002:QUAD:QT06:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT07_K1",
       "pv_name": "IN:MG:L002:QUAD:QT07:K1",
       "readback": "IN:MG:L002:QUAD:QT07:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT08_K1",
       "pv_name": "IN:MG:L002:QUAD:QT08:K1",
       "readback": "IN:MG:L002:QUAD:QT08:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT09_K1",
       "pv_name": "IN:MG:L002:QUAD:QT09:K1",
       "readback": "IN:MG:L002:QUAD:QT09:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT10_K1",
       "pv_name": "IN:MG:L002:QUAD:QT10:K1",
       "readback": "IN:MG:L002:QUAD:QT10:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT11_K1",
       "pv_name": "IN:MG:L002:QUAD:QT11:K1",
       "readback": "IN:MG:L002:QUAD:QT11:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT12_K1",
       "pv_name": "IN:MG:L002:QUAD:QT12:K1",
       "readback": "IN:MG:L002:QUAD:QT12:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT13_K1",
       "pv_name": "IN:MG:L002:QUAD:QT13:K1",
       "readback": "IN:MG:L002:QUAD:QT13:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT14_K1",
       "pv_name": "IN:MG:L002:QUAD:QT14:K1",
       "readback": "IN:MG:L002:QUAD:QT14:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT15_K1",
       "pv_name": "IN:MG:L002:QUAD:QT15:K1",
       "readback": "IN:MG:L002:QUAD:QT15:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT16_K1",
       "pv_name": "IN:MG:L002:QUAD:QT16:K1",
       "readback": "IN:MG:L002:QUAD:QT16:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT17_K1",
       "pv_name": "IN:MG:L002:QUAD:QT17:K1",
       "readback": "IN:MG:L002:QUAD:QT17:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT18_K1",
       "pv_name": "IN:MG:L002:QUAD:QT18:K1",
       "readback": "IN:MG:L002:QUAD:QT18:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT19_K1",
       "pv_name": "IN:MG:L002:QUAD:QT19:K1",
       "readback": "IN:MG:L002:QUAD:QT19:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT20_K1",
       "pv_name": "IN:MG:L002:QUAD:QT20:K1",
       "readback": "IN:MG:L002:QUAD:QT20:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT21_K1",
       "pv_name": "IN:MG:L002:QUAD:QT21:K1",
       "readback": "IN:MG:L002:QUAD:QT21:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT22_K1",
       "pv_name": "IN:MG:L002:QUAD:QT22:K1",
       "readback": "IN:MG:L002:QUAD:QT22:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT23_K1",
       "pv_name": "IN:MG:L002:QUAD:QT23:K1",
       "readback": "IN:MG:L002:QUAD:QT23:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT24_K1",
       "pv_name": "IN:MG:L002:QUAD:QT24:K1",
       "readback": "IN:MG:L002:QUAD:QT24:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT25_K1",
       "pv_name": "IN:MG:L002:QUAD:QT25:K1",
       "readback": "IN:MG:L002:QUAD:QT25:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT26_K1",
       "pv_name": "IN:MG:L002:QUAD:QT26:K1",
       "readback": "IN:MG:L002:QUAD:QT26:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT27_K1",
       "pv_name": "IN:MG:L002:QUAD:QT27:K1",
       "readback": "IN:MG:L002:QUAD:QT27:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT28_K1",
       "pv_name": "IN:MG:L002:QUAD:QT28:K1",
       "readback": "IN:MG:L002:QUAD:QT28:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT29_K1",
       "pv_name": "IN:MG:L002:QUAD:QT29:K1",
       "readback": "IN:MG:L002:QUAD:QT29:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT30_K1",
       "pv_name": "IN:MG:L002:QUAD:QT30:K1",
       "readback": "IN:MG:L002:QUAD:QT30:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT31_K1",
       "pv_name": "IN:MG:L002:QUAD:QT31:K1",
       "readback": "IN:MG:L002:QUAD:QT31:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT32_K1",
       "pv_name": "IN:MG:L002:QUAD:QT32:K1",
       "readback": "IN:MG:L002:QUAD:QT32:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT33_K1",
       "pv_name": "IN:MG:L002:QUAD:QT33:K1",
       "readback": "IN:MG:L002:QUAD:QT33:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT34_K1",
       "pv_name": "IN:MG:L002:QUAD:QT34:K1",
       "readback": "IN:MG:L002:QUAD:QT34:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT35_K1",
       "pv_name": "IN:MG:L002:QUAD:QT35:K1",
       "readback": "IN:MG:L002:QUAD:QT35:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QT36_K1",
       "pv_name": "IN:MG:L002:QUAD:QT36:K1",
       "readback": "IN:MG:L002:QUAD:QT36:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QE01_K1",
       "pv_name": "IN:MG:L002:QUAD:QE01:K1",
       "readback": "IN:MG:L002:QUAD:QE01:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QE02_K1",
       "pv_name": "IN:MG:L002:QUAD:QE02:K1",
       "readback": "IN:MG:L002:QUAD:QE02:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "QE03_K1",
       "pv_name": "IN:MG:L002:QUAD:QE03:K1",
       "readback": "IN:MG:L002:QUAD:QE03:K1",
-      "group": "magnet-model"
+      "group": "quadrupole-K1"
     },
     {
       "name": "KLY01_HV_delay",

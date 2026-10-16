@@ -246,157 +246,157 @@
       "name": "LA_PS_Q1",
       "pv_name": "LA_PS_Q1:current:ao",
       "readback": "LA_PS_Q1:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q2",
       "pv_name": "LA_PS_Q2:current:ao",
       "readback": "LA_PS_Q2:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q3",
       "pv_name": "LA_PS_Q3:current:ao",
       "readback": "LA_PS_Q3:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q4",
       "pv_name": "LA_PS_Q4:current:ao",
       "readback": "LA_PS_Q4:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q5",
       "pv_name": "LA_PS_Q5:current:ao",
       "readback": "LA_PS_Q5:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q6",
       "pv_name": "LA_PS_Q6:current:ao",
       "readback": "LA_PS_Q6:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q7",
       "pv_name": "LA_PS_Q7:current:ao",
       "readback": "LA_PS_Q7:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q8",
       "pv_name": "LA_PS_Q8:current:ao",
       "readback": "LA_PS_Q8:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q9",
       "pv_name": "LA_PS_Q9:current:ao",
       "readback": "LA_PS_Q9:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q10",
       "pv_name": "LA_PS_Q10:current:ao",
       "readback": "LA_PS_Q10:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q11",
       "pv_name": "LA_PS_Q11:current:ao",
       "readback": "LA_PS_Q11:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_Q12",
       "pv_name": "LA_PS_Q12:current:ao",
       "readback": "LA_PS_Q12:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_AQ2",
       "pv_name": "LA_PS_AQ2:current:ao",
       "readback": "LA_PS_AQ2:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA_PS_AQ3",
       "pv_name": "LA_PS_AQ3:current:ao",
       "readback": "LA_PS_AQ3:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q1",
       "pv_name": "TL_PS_Q1:current:ao",
       "readback": "TL_PS_Q1:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q2",
       "pv_name": "TL_PS_Q2:current:ao",
       "readback": "TL_PS_Q2:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q3",
       "pv_name": "TL_PS_Q3:current:ao",
       "readback": "TL_PS_Q3:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q4",
       "pv_name": "TL_PS_Q4:current:ao",
       "readback": "TL_PS_Q4:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q5",
       "pv_name": "TL_PS_Q5:current:ao",
       "readback": "TL_PS_Q5:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q6",
       "pv_name": "TL_PS_Q6:current:ao",
       "readback": "TL_PS_Q6:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q7",
       "pv_name": "TL_PS_Q7:current:ao",
       "readback": "TL_PS_Q7:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q8",
       "pv_name": "TL_PS_Q8:current:ao",
       "readback": "TL_PS_Q8:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q9",
       "pv_name": "TL_PS_Q9:current:ao",
       "readback": "TL_PS_Q9:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q10",
       "pv_name": "TL_PS_Q10:current:ao",
       "readback": "TL_PS_Q10:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q11",
       "pv_name": "TL_PS_Q11:current:ao",
       "readback": "TL_PS_Q11:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "TL_PS_Q12",
       "pv_name": "TL_PS_Q12:current:ao",
       "readback": "TL_PS_Q12:current:ai",
-      "group": "quadrupole"
+      "group": "quadrupole-current"
     },
     {
       "name": "LA-PCI-KLY1",

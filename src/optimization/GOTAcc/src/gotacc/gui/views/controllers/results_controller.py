@@ -43,10 +43,21 @@ except ImportError:  # pragma: no cover - local script fallback
 
 
 class ResultsController:
+    VARIABLE_TRAJECTORY_MODES = (
+        ("raw", "Raw", "Plot the original variable values."),
+        ("bounds", "Bounds %", "Plot each variable as a percentage of its configured bounds."),
+        (
+            "delta_initial",
+            "Δ Initial %",
+            "Plot change from the configured initial value as a percentage of the variable span.",
+        ),
+    )
+
     def __init__(self, window: "MainWindow", canvas_class) -> None:
         self.window = window
         self.view = window.view_adapter
         self.canvas_class = canvas_class
+        self.variable_trajectory_mode = "raw"
 
     def init_results_page(self) -> None:
         tree = self.window.ui.treeWidget_runList
@@ -131,7 +142,48 @@ class ResultsController:
         }.get(outcome, "subtle")
         self.window._set_status_label_tone(self.window.label_results_source_outcome, tone)
 
+    def _variable_trajectory_controls(self) -> list[Any]:
+        controls = []
+        for owner in (getattr(self.window, "run_ui", None), getattr(self.window, "ui", None)):
+            combo = getattr(owner, "comboBox_variableTrajectoryMode", None)
+            if combo is not None:
+                controls.append(combo)
+        return controls
+
+    def _init_variable_trajectory_controls(self) -> None:
+        for combo in self._variable_trajectory_controls():
+            combo.blockSignals(True)
+            combo.clear()
+            for mode, label, tooltip in self.VARIABLE_TRAJECTORY_MODES:
+                combo.addItem(label, mode)
+                combo.setItemData(combo.count() - 1, tooltip, Qt.ToolTipRole)
+            combo.setCurrentIndex(max(0, combo.findData(self.variable_trajectory_mode)))
+            combo.blockSignals(False)
+            combo.setToolTip("Choose how variable trajectories are scaled for display.")
+            if not combo.property("trajectoryModeConnected"):
+                combo.currentIndexChanged.connect(
+                    lambda _index, source=combo: self.set_variable_trajectory_mode(
+                        source.currentData()
+                    )
+                )
+                combo.setProperty("trajectoryModeConnected", True)
+
+    def set_variable_trajectory_mode(self, mode: str | None) -> None:
+        valid_modes = {item[0] for item in self.VARIABLE_TRAJECTORY_MODES}
+        resolved = str(mode or "raw")
+        if resolved not in valid_modes:
+            resolved = "raw"
+        self.variable_trajectory_mode = resolved
+        for combo in self._variable_trajectory_controls():
+            index = combo.findData(resolved)
+            combo.blockSignals(True)
+            combo.setCurrentIndex(max(0, index))
+            combo.blockSignals(False)
+        if hasattr(self.window, "var_canvas") or hasattr(self.window, "run_var_canvas"):
+            self.draw_variable_trajectories()
+
     def init_plot_canvases(self) -> None:
+        self._init_variable_trajectory_controls()
         self.window.obj_canvas = self.attach_plot_canvas(self.window.run_ui.frame_obj)
         self.window.pareto_canvas = self.attach_plot_canvas(self.window.run_ui.frame_pareto)
         self.window.run_var_canvas = self.attach_plot_canvas(self.window.run_ui.frame_variables)
@@ -187,12 +239,11 @@ class ResultsController:
         table.itemSelectionChanged.connect(self.on_pareto_solution_selection_changed)
         table.setMinimumHeight(180)
         header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Fixed)
-        header.setSectionResizeMode(1, QHeaderView.Fixed)
-        table.setColumnWidth(0, 64)
-        table.setColumnWidth(1, 78)
-        for column in range(2, 5):
-            header.setSectionResizeMode(column, QHeaderView.Stretch)
+        header.setMinimumSectionSize(48)
+        for column, width in enumerate((64, 78, 380, 260, 360)):
+            header.setSectionResizeMode(column, QHeaderView.Interactive)
+            table.setColumnWidth(column, width)
+        header.setStretchLastSection(True)
         group_layout.addWidget(table)
 
         actions = QHBoxLayout()
@@ -331,7 +382,7 @@ class ResultsController:
             title = f"{objective_label} · Optimizer Score Convergence"
         ax.plot(xs, state.objective_history, label=objective_label)
         if state.best_history:
-            ax.plot(xs, state.best_history, label="best-so-far")
+            ax.plot(xs, state.best_history, label="best feasible so far")
         ax.set_title(title)
         ax.set_xlabel("Evaluation")
         ax.set_ylabel(f"Optimizer Score · {objective_label}")
@@ -573,6 +624,111 @@ class ResultsController:
         except (TypeError, ValueError):
             return False
 
+    @staticmethod
+    def _optional_finite_float(value: Any) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        return number if math.isfinite(number) else None
+
+    def _variable_trajectory_metadata(self, count: int) -> list[dict[str, Any]]:
+        task = self.window.state.latest_task_snapshot or self.view.current_task()
+        rows = [
+            row
+            for row in TaskService._enabled_rows(task.get("variables", []) or [])
+            if isinstance(row, dict)
+        ]
+        fallback_names = self._current_variable_names(count)
+        metadata: list[dict[str, Any]] = []
+        for index in range(count):
+            row = rows[index] if index < len(rows) else {}
+            metadata.append(
+                {
+                    "name": str(row.get("Name", "")).strip() or fallback_names[index],
+                    "lower": self._optional_finite_float(row.get("Lower")),
+                    "upper": self._optional_finite_float(row.get("Upper")),
+                    "initial": self._optional_finite_float(row.get("Initial")),
+                }
+            )
+        return metadata
+
+    @staticmethod
+    def transform_variable_trajectories(
+        values: Any, metadata: list[dict[str, Any]], mode: str
+    ) -> tuple[Any, list[int], dict[str, Any]]:
+        import numpy as np
+
+        X = np.asarray(values, dtype=float)
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
+        if X.ndim != 2:
+            raise ValueError("Variable trajectory history must be a two-dimensional array.")
+
+        if mode == "raw":
+            return (
+                X.copy(),
+                list(range(X.shape[1])),
+                {
+                    "ylabel": "Value",
+                    "title_suffix": "",
+                    "reference_lines": [],
+                    "skipped": [],
+                    "fallback_initials": [],
+                },
+            )
+
+        transformed = []
+        plotted_indices: list[int] = []
+        skipped: list[str] = []
+        fallback_initials: list[str] = []
+        for index in range(X.shape[1]):
+            item = metadata[index] if index < len(metadata) else {}
+            name = str(item.get("name", f"x{index}"))
+            lower = ResultsController._optional_finite_float(item.get("lower"))
+            upper = ResultsController._optional_finite_float(item.get("upper"))
+            if lower is None or upper is None or upper <= lower:
+                skipped.append(name)
+                continue
+            span = upper - lower
+            series = X[:, index]
+            if mode == "bounds":
+                displayed = 100.0 * (series - lower) / span
+            elif mode == "delta_initial":
+                initial = ResultsController._optional_finite_float(item.get("initial"))
+                if initial is None:
+                    finite_positions = np.flatnonzero(np.isfinite(series))
+                    if not finite_positions.size:
+                        skipped.append(name)
+                        continue
+                    initial = float(series[int(finite_positions[0])])
+                    fallback_initials.append(name)
+                displayed = 100.0 * (series - initial) / span
+            else:
+                raise ValueError(f"Unknown variable trajectory mode: {mode}")
+            transformed.append(displayed)
+            plotted_indices.append(index)
+
+        plot_values = (
+            np.column_stack(transformed)
+            if transformed
+            else np.empty((X.shape[0], 0), dtype=float)
+        )
+        if mode == "bounds":
+            info = {
+                "ylabel": "Position in bounds (%)",
+                "title_suffix": " — Bounds %",
+                "reference_lines": [0.0, 100.0],
+            }
+        else:
+            info = {
+                "ylabel": "Change from initial (% span)",
+                "title_suffix": " — Δ Initial %",
+                "reference_lines": [0.0],
+            }
+        info.update({"skipped": skipped, "fallback_initials": fallback_initials})
+        return plot_values, plotted_indices, info
+
     def draw_variable_trajectories(self) -> None:
         targets = []
         if hasattr(self.window, "var_canvas"):
@@ -588,23 +744,74 @@ class ResultsController:
 
         import numpy as np
 
-        X = np.array(self.window.state.eval_x_history)
-        if X.ndim == 1:
-            X = X.reshape(-1, 1)
-        variable_names = self._current_variable_names(X.shape[1])
+        try:
+            X = np.asarray(self.window.state.eval_x_history, dtype=float)
+            if X.ndim == 1:
+                X = X.reshape(-1, 1)
+            if X.ndim != 2:
+                raise ValueError
+        except (TypeError, ValueError):
+            for canvas in targets:
+                canvas.clear_with_message(
+                    "Variable Trajectories", "Evaluation vectors have inconsistent dimensions."
+                )
+            return
+
+        metadata = self._variable_trajectory_metadata(X.shape[1])
+        mode = self.variable_trajectory_mode
+        plot_values, plotted_indices, info = self.transform_variable_trajectories(
+            X, metadata, mode
+        )
+        title = "Variable Trajectories" + info["title_suffix"]
+        if not plotted_indices:
+            for canvas in targets:
+                canvas.clear_with_message(
+                    title, "No variables have valid finite, non-zero-width bounds."
+                )
+            return
+
+        note_parts = []
+        if info["skipped"]:
+            note_parts.append("Skipped invalid bounds: " + ", ".join(info["skipped"]))
+        if info["fallback_initials"]:
+            note_parts.append(
+                "First evaluation used as initial: " + ", ".join(info["fallback_initials"])
+            )
+
         for canvas in targets:
             canvas.figure.clear()
             ax = canvas.figure.add_subplot(111)
-
             x_axis = range(1, X.shape[0] + 1)
-            for i, name in enumerate(variable_names):
-                ax.plot(x_axis, X[:, i], ".-", linewidth=1.1, markersize=3, label=name)
-            ax.set_title("Variable Trajectories")
+            for column, variable_index in enumerate(plotted_indices):
+                ax.plot(
+                    x_axis,
+                    plot_values[:, column],
+                    ".-",
+                    linewidth=1.1,
+                    markersize=3,
+                    label=metadata[variable_index]["name"],
+                )
+            for reference in info["reference_lines"]:
+                ax.axhline(reference, color="gray", linestyle="--", linewidth=0.8, alpha=0.65)
+            ax.set_title(title)
             ax.set_xlabel("Evaluation")
-            ax.set_ylabel("Value")
+            ax.set_ylabel(info["ylabel"])
             ax.grid(True, alpha=0.3)
-            if X.shape[1] <= 30:
-                ax.legend(fontsize=7, ncol=max(1, min(4, (X.shape[1] + 7) // 8)))
+            if len(plotted_indices) <= 30:
+                ax.legend(
+                    fontsize=7,
+                    ncol=max(1, min(4, (len(plotted_indices) + 7) // 8)),
+                )
+            if note_parts:
+                ax.text(
+                    0.01,
+                    0.02,
+                    "\n".join(note_parts),
+                    transform=ax.transAxes,
+                    fontsize=7,
+                    alpha=0.8,
+                    verticalalignment="bottom",
+                )
             canvas.apply_theme_to_axes(ax)
             canvas.figure.subplots_adjust(left=0.12, right=0.98, top=0.88, bottom=0.16)
             canvas.draw_idle()
@@ -1061,7 +1268,7 @@ class ResultsController:
         best_label = (
             "Hypervolume"
             if state.objective_dim > 1
-            else f"Best Optimizer Score · {self.objective_labels(1)[0]}"
+            else f"Best Feasible Optimizer Score · {self.objective_labels(1)[0]}"
         )
         summary.addChild(
             QTreeWidgetItem(
@@ -1192,7 +1399,7 @@ class ResultsController:
         best_label = (
             "Hypervolume"
             if state.objective_dim > 1
-            else f"Best Optimizer Score · {self.objective_labels(1)[0]}"
+            else f"Best Feasible Optimizer Score · {self.objective_labels(1)[0]}"
         )
         rows.append(
             (best_label, "--" if state.run.best_value is None else f"{state.run.best_value:.6f}")
@@ -1445,7 +1652,9 @@ class ResultsController:
                 state.objective_history.append(value)
                 if record.get("feasible", True):
                     running_best = value if running_best is None else max(running_best, value)
-                state.best_history.append(value if running_best is None else running_best)
+                state.best_history.append(
+                    float("nan") if running_best is None else running_best
+                )
             elif len(objective_values) >= 2:
                 state.pareto_points.append((float(objective_values[0]), float(objective_values[1])))
             updates = record.get("hypervolume_updates") or []

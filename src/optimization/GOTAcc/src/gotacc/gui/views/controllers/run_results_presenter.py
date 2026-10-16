@@ -36,8 +36,10 @@ class RunResultsPresenter:
                 scalar_value = float(objective_values[0])
             if scalar_value is not None:
                 state.objective_history.append(scalar_value)
-                best_val = run.best_value if run.best_value is not None else scalar_value
-                state.best_history.append(float(best_val))
+                best_val = payload.get("best_value", run.best_value)
+                state.best_history.append(
+                    float("nan") if best_val is None else float(best_val)
+                )
             return
 
         if len(objective_values) >= 2:

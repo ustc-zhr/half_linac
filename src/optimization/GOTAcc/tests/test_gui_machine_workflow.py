@@ -366,7 +366,7 @@ def test_objective_display_labels_include_online_aggregation(tmp_path, window):
     window.runtime_status_controller.update_runtime_labels()
     assert (
         window.run_ui.label_bestTitle.text()
-        == "Best Optimizer Score · Transmission [mean] ↑ · w=2.5"
+        == "Best Feasible Optimizer Score · Transmission [mean] ↑ · w=2.5"
     )
     assert "mean over 5 sample(s)" in window.run_ui.label_bestTitle.toolTip()
 
