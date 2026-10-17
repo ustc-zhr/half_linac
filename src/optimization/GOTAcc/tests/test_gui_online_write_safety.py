@@ -148,6 +148,48 @@ def test_results_start_stores_a_deep_task_snapshot(tmp_path):
     )
 
 
+def test_delta_link_pareto_uses_optimizer_variable_names(tmp_path):
+    task = _online_task(tmp_path)
+    task["variables"].extend(
+        [
+            {"Enable": "Yes", "Name": "FOLLOW1", "Lower": "-2", "Upper": "2", "Initial": "0"},
+            {"Enable": "Yes", "Name": "Q2", "Lower": "-2", "Upper": "2", "Initial": "0"},
+            {"Enable": "Yes", "Name": "FOLLOW2", "Lower": "-2", "Upper": "2", "Initial": "0"},
+        ]
+    )
+    task["machine"]["mapping"].extend(
+        [
+            {"Role": "knob", "Name": name, "PV Name": f"TEST:{name}:SET", "Readback": f"TEST:{name}:RB"}
+            for name in ("FOLLOW1", "Q2", "FOLLOW2")
+        ]
+    )
+    task["machine"]["write_policy"] = "delta_link"
+    task["machine"]["write_links"] = [
+        {"Source Knob": "Q1", "Target Knob": "FOLLOW1", "Scale": "1", "Enabled": "True"},
+        {"Source Knob": "Q2", "Target Knob": "FOLLOW2", "Scale": "1", "Enabled": "True"},
+    ]
+
+    state = GuiSessionState()
+    state.latest_task_snapshot = copy.deepcopy(task)
+    window = SimpleNamespace(
+        state=state,
+        view_adapter=SimpleNamespace(current_task=lambda: task),
+    )
+    controller = ResultsController(window, canvas_class=None)
+
+    solutions = controller._build_pareto_solutions(
+        {"pareto_x": [[1.25, -0.5]], "pareto_y": [[2.0, 3.0]]}
+    )
+
+    assert solutions[0]["x"] == {"Q1": 1.25, "Q2": -0.5}
+    assert controller._evaluation_values_complete(
+        {"x_values": {"Q1": 1.25, "Q2": -0.5}}, task
+    )
+    assert not controller._evaluation_values_complete(
+        {"x_values": {"Q1": 1.25, "FOLLOW1": -0.5}}, task
+    )
+
+
 class _FakeRunSession:
     def __init__(self):
         self.started = []
@@ -435,6 +477,22 @@ def test_archived_delta_link_set_best_restores_state_and_previews_derived_value(
             "value": 11.5,
         }
     ]
+
+    window.results_controller = SimpleNamespace(
+        selected_pareto_solution=lambda: {
+            "index": 0,
+            "feasible": True,
+            "x": {"FOLLOW": 1.25},
+            "x_values": [1.25],
+            "y": [2.0],
+        }
+    )
+    RunController(window).set_selected_pareto_to_machine()
+
+    assert backend.policy_states == [policy_state, policy_state]
+    assert backend.vectors == [[1.5], [1.25]]
+    assert _FakeDialog.kwargs[1]["values"] == {"Q1": 1.25}
+    assert _FakeDialog.kwargs[1]["linked_values"][0]["value"] == 11.25
 
 
 def test_machine_write_dialog_lists_delta_link_derived_values(tmp_path, qapp):

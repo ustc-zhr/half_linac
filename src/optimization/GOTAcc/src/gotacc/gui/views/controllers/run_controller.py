@@ -216,7 +216,13 @@ class RunController:
             return
 
         x_dict = solution.get("x")
-        values: Any = x_dict if isinstance(x_dict, Mapping) and x_dict else solution.get("x_values")
+        x_values = solution.get("x_values")
+        has_vector = (
+            isinstance(x_values, Sequence)
+            and not isinstance(x_values, (str, bytes))
+            and len(x_values) > 0
+        )
+        values: Any = x_values if has_vector else x_dict
         if values is None or (isinstance(values, Sequence) and not values):
             QMessageBox.critical(
                 self.window,

@@ -936,7 +936,7 @@ class ResultsController:
         values = record.get("x_values") if record else None
         names = [
             str(row.get("Name", "")).strip() or f"x{i}"
-            for i, row in enumerate(TaskService._enabled_rows(task.get("variables", [])))
+            for i, row in enumerate(TaskService.optimizer_variables(task))
         ]
         if not isinstance(values, dict) or not names or set(values) != set(names):
             return False
@@ -1037,27 +1037,8 @@ class ResultsController:
             return False
         return default
 
-    def _row_enabled(self, row: dict[str, Any]) -> bool:
-        value = row.get("Enabled", "")
-        if value == "":
-            return True
-        return self._coerce_bool(value, default=True)
-
     def _pareto_variable_names(self, count: int) -> list[str]:
-        task = self.window.state.latest_task_snapshot or self.view.current_task()
-        names: list[str] = []
-        for row in task.get("variables", []) or []:
-            if not isinstance(row, dict) or not self._row_enabled(row):
-                continue
-            name = str(row.get("Name", "")).strip()
-            names.append(name or f"x{len(names)}")
-            if len(names) >= count:
-                break
-        if len(names) < count:
-            names = self._current_variable_names(count)
-        while len(names) < count:
-            names.append(f"x{len(names)}")
-        return names[:count]
+        return self._current_variable_names(count)
 
     def _build_pareto_solutions(self, payload: dict) -> list[dict[str, Any]]:
         pareto_x = payload.get("pareto_x") or []
