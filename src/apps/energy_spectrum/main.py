@@ -4340,6 +4340,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def ESA_running(self, write_latest=True, archive_result=False):
         palette = self._palette()
+        auto_tune = resolve_energy_spectrum_auto_tune(self.energy_config)
+        measurement_config = dict(auto_tune.get("measurement", {}))
         self.fit_method = self._selected_fit_method()
         self._update_fit_status(self.comboBox_fitmethod.currentText())
         self._clear_readout_status()
@@ -4459,7 +4461,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 x, denx0, fit_method,
                 allow_direct_fallback=False,
                 reject_poor_fit=False,
-                min_r_squared=float(self.bend_scan.get("min_fit_r_squared", 0.3)),
+                min_r_squared=float(measurement_config.get("min_fit_r_squared", 0.3)),
             )
         except SpectrumProfileError as exc:
             self.sigx = None
