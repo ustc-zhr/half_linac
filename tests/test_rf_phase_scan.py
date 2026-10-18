@@ -509,6 +509,37 @@ def test_rf_projection_preserves_established_edge_crop():
     np.testing.assert_array_equal(projection.image, image[1:-1, 1:-1])
 
 
+def test_frame_energy_samples_are_converted_and_grouped_by_phase():
+    from half_linac.src.apps.rf_phase_scan.main import (
+        _frame_energies_mev, _frame_sample_plot_data,
+    )
+
+    energies = _frame_energies_mev(
+        2200.0, [-1.0, 0.0, 1.0], 0.0, -0.5
+    )
+    assert energies == pytest.approx([2204.4, 2200.0, 2195.6])
+
+    points = [
+        {
+            "offset_deg": -10.0,
+            "requested_phase_unwrapped_deg": 20.0,
+            "frame_energies_mev": energies[:2],
+        },
+        {
+            "offset_deg": 10.0,
+            "requested_phase_unwrapped_deg": 40.0,
+            "frame_energies_mev": energies[2:],
+        },
+    ]
+    relative_x, relative_energy = _frame_sample_plot_data(points, "relative")
+    absolute_x, absolute_energy = _frame_sample_plot_data(points, "absolute")
+
+    assert relative_x == [-10.0, -10.0, 10.0]
+    assert absolute_x == [20.0, 20.0, 40.0]
+    assert relative_energy == pytest.approx(energies)
+    assert absolute_energy == pytest.approx(energies)
+
+
 def test_rf_status_strip_prefers_single_line_horizontal_expansion(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     from PyQt5.QtWidgets import QApplication

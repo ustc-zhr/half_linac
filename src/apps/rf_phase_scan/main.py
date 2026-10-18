@@ -55,6 +55,36 @@ PALETTES = {
 }
 
 
+def _frame_energies_mev(energy_setpoint, frame_centers_mm, x_reference_mm, design_eta_m):
+    if not frame_centers_mm:
+        return []
+    setpoint = float(energy_setpoint)
+    reference = float(x_reference_mm)
+    eta = float(design_eta_m)
+    return [
+        float(setpoint * (1.0 + (float(center) - reference) * 1e-3 / eta))
+        for center in frame_centers_mm
+    ]
+
+
+def _frame_sample_plot_data(points, phase_mode):
+    x_values, energies = [], []
+    phase_key = (
+        "requested_phase_unwrapped_deg"
+        if phase_mode == "absolute"
+        else "offset_deg"
+    )
+    for point in points:
+        phase = point.get(phase_key)
+        if phase is None:
+            continue
+        for energy in point.get("frame_energies_mev") or ():
+            if np.isfinite(float(energy)):
+                x_values.append(float(phase))
+                energies.append(float(energy))
+    return x_values, energies
+
+
 def build_style(p):
     return f"""
 QMainWindow, QDialog, QWidget#centralwidget {{ background: {p['window']}; color: {p['text']}; font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif; }}
@@ -329,6 +359,12 @@ class ScanThread(QThread):
                 return EnergyMatchResult(False, "CANCELLED", message="Point measurement cancelled.")
             if measurement is None:
                 diagnostic = dict(self.acquisition.last_diagnostic or {})
+                frame_energies_mev = _frame_energies_mev(
+                    best,
+                    diagnostic.get("frame_centers_mm"),
+                    scan.get("x_reference_mm", 0.0),
+                    scan["design_eta_m"],
+                )
                 return EnergyMatchResult(
                     False, "MEASUREMENT_FAILED",
                     energy_setpoint_mev=float(best),
@@ -341,6 +377,7 @@ class ScanThread(QThread):
                     invalid_frames=diagnostic.get("invalid_frames"),
                     center_spread_mm=diagnostic.get("center_spread_mm"),
                     frame_centers_mm=diagnostic.get("frame_centers_mm"),
+                    frame_energies_mev=frame_energies_mev,
                     frame_rejection_reasons=diagnostic.get("frame_rejection_reasons"),
                     frame_fit_methods=diagnostic.get("frame_fit_methods"),
                     fallback_reasons=diagnostic.get("fallback_reasons"),
@@ -348,6 +385,12 @@ class ScanThread(QThread):
                     centroid_frames=diagnostic.get("centroid_frames"),
                 )
             energy_setpoint = float(best)
+            frame_energies_mev = _frame_energies_mev(
+                energy_setpoint,
+                measurement.get("frame_centers_mm"),
+                scan.get("x_reference_mm", 0.0),
+                scan["design_eta_m"],
+            )
             center_offset_mm = (
                 float(measurement["center_mm"])
                 - float(scan.get("x_reference_mm", 0.0))
@@ -388,6 +431,7 @@ class ScanThread(QThread):
                 fit_r_squared=measurement["fit_r_squared"],
                 center_spread_mm=measurement.get("center_spread_mm"),
                 frame_centers_mm=measurement.get("frame_centers_mm"),
+                frame_energies_mev=frame_energies_mev,
                 frame_rejection_reasons=measurement.get("frame_rejection_reasons"),
                 frame_fit_methods=measurement.get("frame_fit_methods"),
                 fallback_reasons=measurement.get("fallback_reasons"),
@@ -1555,6 +1599,14 @@ class RFPhaseScanWindow(QMainWindow):
             point for point in self.points_data
             if point.get("matched_energy_mev") is not None
         ]
+        frame_x, frame_energy = _frame_sample_plot_data(
+            self.points_data, self.active_phase_mode
+        )
+        if frame_energy:
+            axes.scatter(
+                frame_x, frame_energy, s=18, color=palette["muted"], alpha=0.35,
+                edgecolors="none", zorder=1,
+            )
         if valid:
             x_values = [
                 point["requested_phase_unwrapped_deg"]

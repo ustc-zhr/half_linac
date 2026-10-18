@@ -77,6 +77,7 @@ class EnergyMatchResult:
     fit_r_squared: float | None = None
     center_spread_mm: float | None = None
     frame_centers_mm: list[float] | None = None
+    frame_energies_mev: list[float] | None = None
     frame_rejection_reasons: dict[str, int] | None = None
     frame_fit_methods: list[str] | None = None
     fallback_reasons: dict[str, int] | None = None
@@ -114,6 +115,7 @@ class PhaseScanPoint:
     fit_r_squared: float | None = None
     center_spread_mm: float | None = None
     frame_centers_mm: list[float] | None = None
+    frame_energies_mev: list[float] | None = None
     frame_rejection_reasons: dict[str, int] | None = None
     frame_fit_methods: list[str] | None = None
     fallback_reasons: dict[str, int] | None = None
@@ -457,6 +459,7 @@ class PhaseEnergyScanner:
                     fit_r_squared=match.fit_r_squared,
                     center_spread_mm=match.center_spread_mm,
                     frame_centers_mm=match.frame_centers_mm,
+                    frame_energies_mev=match.frame_energies_mev,
                     frame_rejection_reasons=match.frame_rejection_reasons,
                     frame_fit_methods=match.frame_fit_methods,
                     fallback_reasons=match.fallback_reasons,

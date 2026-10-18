@@ -48,6 +48,7 @@ class PhaseEnergyScanLog:
         "fit_r_squared",
         "center_spread_mm",
         "frame_centers_mm",
+        "frame_energies_mev",
         "frame_rejection_reasons",
         "frame_fit_methods",
         "fallback_reasons",
