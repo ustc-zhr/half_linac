@@ -466,3 +466,112 @@ def test_center_lock_trigger_runs_lock_outside_threshold():
 
     assert matched == 2195.0
     assert calls == [(seed, 2150.0, 2250.0)]
+
+
+def test_center_lock_stage_measures_current_energy_before_trigger():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.initial_energy = 2200.0
+    matcher._pipeline_seed = None
+    matcher.center_lock_trigger_mm = 15.0
+    matcher.design_eta_m = 0.75
+    matcher.progress_callback = None
+    matcher.center_lock_result = None
+    matcher.last_message = None
+    measurements = []
+    seed = {
+        "energy": 2200.0,
+        "offset_mm": 3.0,
+        "brightness": 42.0,
+        "valid_frames": 3,
+        "fit_method": "Gauss fit",
+        "fit_r_squared": 0.98,
+    }
+    matcher._measure = lambda energy, stage: (
+        measurements.append((energy, stage)) or seed
+    )
+    matcher._at = lambda _energy, _stage: pytest.fail(
+        "Energy must not be written before evaluating the center-lock trigger."
+    )
+    matcher._track_center = lambda _seed, _low, _high: pytest.fail(
+        "Center lock should not run inside the trigger threshold."
+    )
+
+    result = matcher._run_center_lock_stage(
+        2210.0,
+        2150.0,
+        2250.0,
+        {"strategy": "secant_dispersion"},
+    )
+
+    assert result.ok
+    assert result.actuator_value == 2200.0
+    assert measurements == [(2200.0, "track")]
+    assert result.diagnostics["center_lock_applied"] is False
+    assert result.diagnostics["measurement_mode"] == "position_inference"
+
+
+def test_center_lock_stage_enters_lock_after_current_offset_exceeds_trigger():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.initial_energy = 2200.0
+    matcher._pipeline_seed = None
+    matcher.center_lock_trigger_mm = 15.0
+    matcher.last_message = None
+    seed = {
+        "energy": 2200.0,
+        "offset_mm": 15.1,
+        "brightness": 42.0,
+        "valid_frames": 3,
+        "fit_method": "Gauss fit",
+        "fit_r_squared": 0.98,
+    }
+    matcher._measure = lambda energy, stage: seed
+    calls = []
+    matcher._track_center = lambda measured, low, high: (
+        calls.append((measured, low, high)) or 2205.0
+    )
+    matcher.center_lock_result = {
+        "center_lock_applied": True,
+        "measurement_mode": "center_lock",
+    }
+
+    result = matcher._run_center_lock_stage(
+        2210.0,
+        2150.0,
+        2250.0,
+        {"strategy": "secant_dispersion"},
+    )
+
+    assert result.ok
+    assert result.actuator_value == 2205.0
+    assert calls == [(seed, 2150.0, 2250.0)]
+
+
+def test_center_lock_stage_repositions_after_brightness_search():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.initial_energy = 2200.0
+    matcher.center_lock_trigger_mm = 15.0
+    matcher.design_eta_m = 0.75
+    matcher.progress_callback = None
+    matcher.center_lock_result = None
+    matcher.last_message = None
+    seed = {
+        "energy": 2190.0,
+        "offset_mm": 3.0,
+        "brightness": 42.0,
+        "valid_frames": 3,
+        "fit_method": "Gauss fit",
+        "fit_r_squared": 0.98,
+    }
+    matcher._pipeline_seed = seed
+    writes = []
+    matcher._at = lambda energy, stage: writes.append((energy, stage)) or seed
+
+    result = matcher._run_center_lock_stage(
+        2190.0,
+        2100.0,
+        2300.0,
+        {"strategy": "secant_dispersion"},
+    )
+
+    assert result.ok
+    assert writes == [(2190.0, "track")]

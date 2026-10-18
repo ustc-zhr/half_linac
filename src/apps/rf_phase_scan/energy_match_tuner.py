@@ -410,7 +410,11 @@ class RFPhaseEnergyMatcher:
                 f"Unsupported RF center-lock strategy: {strategy!r}.",
             )
         seed = self._pipeline_seed
-        if seed is None or abs(float(seed["energy"]) - float(seed_energy)) > 1e-9:
+        if seed is None:
+            seed = self._measure(float(self.initial_energy), "track")
+        else:
+            # Brightness search moves the actuator across its full candidate range;
+            # return to the selected seed before applying the trigger decision.
             seed = self._at(float(seed_energy), "track")
         if seed is None:
             return StageResult(
