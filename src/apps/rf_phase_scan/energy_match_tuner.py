@@ -153,6 +153,7 @@ class RFPhaseEnergyMatcher:
         self._pipeline_seed = None
         self.last_message = None
         self.status = "IDLE"
+        self._current_measurement_failed = False
 
     def _cancelled(self):
         return self.cancel_requested is not None and self.cancel_requested()
@@ -198,7 +199,7 @@ class RFPhaseEnergyMatcher:
                 interval_s=self.frame_interval_s,
                 fit_method=self.profile_fit_method,
                 cancel_requested=self._cancelled,
-                allow_direct_fallback=False,
+                allow_direct_fallback=True,
                 min_fit_r_squared=self.min_fit_r_squared,
             )
         except InterruptedError as exc:
@@ -229,6 +230,10 @@ class RFPhaseEnergyMatcher:
             invalid_frames=result.get("invalid_frames"),
             frame_centers_mm=result.get("frame_centers_mm"),
             frame_rejection_reasons=result.get("frame_rejection_reasons"),
+            frame_fit_methods=result.get("frame_fit_methods"),
+            fallback_reasons=result.get("fallback_reasons"),
+            gaussian_frames=result.get("gaussian_frames"),
+            centroid_frames=result.get("centroid_frames"),
             beam_threshold=result.get("beam_threshold"),
             beam_area_px=result.get("beam_area_px"),
             beam_major_axis_px=result.get("beam_major_axis_px"),
@@ -416,13 +421,16 @@ class RFPhaseEnergyMatcher:
                 f"Unsupported RF center-lock strategy: {strategy!r}.",
             )
         seed = self._pipeline_seed
-        if seed is None:
+        measuring_current = seed is None
+        if measuring_current:
             seed = self._measure(float(self.initial_energy), "track")
         else:
             # Brightness search moves the actuator across its full candidate range;
             # return to the selected seed before applying the trigger decision.
             seed = self._at(float(seed_energy), "track")
         if seed is None:
+            if measuring_current:
+                self._current_measurement_failed = True
             return StageResult(
                 False,
                 None,
@@ -468,6 +476,7 @@ class RFPhaseEnergyMatcher:
         self.center_lock_result = None
         self.pipeline_result = None
         self._pipeline_seed = None
+        self._current_measurement_failed = False
         initial = caget(self.bend_pv)
         if initial is None or not np.isfinite(float(initial)):
             self.status = "FAILED"
@@ -480,7 +489,9 @@ class RFPhaseEnergyMatcher:
                 if pipeline_has(self.pipeline, BRIGHTNESS_PEAK):
                     seed = self._reacquire(low, high, center, reacquire_points)
                 else:
-                    seed = self._at(center, "track")
+                    seed = self._measure(float(self.initial_energy), "track")
+                    if seed is None:
+                        self._current_measurement_failed = True
                 if seed is None and pipeline_has(self.pipeline, BRIGHTNESS_PEAK):
                     seed = self._reacquire(low, high, center, reacquire_points)
                 if seed is None:
@@ -520,8 +531,10 @@ class RFPhaseEnergyMatcher:
                 self._restore()
             return None
         except RuntimeError:
-            self.status = "FAILED"
-            if self.restore_initial_on_failure:
+            self.status = (
+                "MEASUREMENT_FAILED" if self._current_measurement_failed else "FAILED"
+            )
+            if self.restore_initial_on_failure and not self._current_measurement_failed:
                 self._restore()
             return None
         except Exception:

@@ -130,6 +130,7 @@ class RFPhaseStatusStrip(QWidget):
         container.setObjectName("statusItem")
         container.setProperty("tone", "subtle")
         container.setMinimumWidth(112)
+        container.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         inner = QVBoxLayout(container)
         inner.setContentsMargins(8, 0, 6, 0)
         inner.setSpacing(2)
@@ -138,11 +139,13 @@ class RFPhaseStatusStrip(QWidget):
         value_label = QLabel(value, container)
         value_label.setProperty("role", "value")
         value_label.setProperty("tone", "subtle")
-        value_label.setWordWrap(True)
+        value_label.setWordWrap(False)
+        value_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         inner.addWidget(title_label)
         inner.addWidget(value_label)
         self._layout.addWidget(container)
         self._items[key] = (container, value_label)
+        self._sync_item_width(container, value_label)
 
     def finish(self):
         self._layout.addStretch(1)
@@ -150,6 +153,7 @@ class RFPhaseStatusStrip(QWidget):
     def apply_theme(self, palette):
         self.setStyleSheet(build_status_strip_style(palette))
         for container, value_label in self._items.values():
+            self._sync_item_width(container, value_label)
             self._refresh_tone(container, value_label)
 
     def set_item(self, key, text, tone="subtle", tooltip=None):
@@ -160,9 +164,18 @@ class RFPhaseStatusStrip(QWidget):
         container.setProperty("tone", tone)
         value_label.setProperty("tone", tone)
         value_label.setText(text)
+        self._sync_item_width(container, value_label)
         container.setToolTip(tooltip or "")
         value_label.setToolTip(tooltip or "")
         self._refresh_tone(container, value_label)
+
+    @staticmethod
+    def _sync_item_width(container, value_label):
+        value_label.setMinimumWidth(0)
+        value_label.updateGeometry()
+        value_label.setMinimumWidth(value_label.sizeHint().width())
+        value_label.updateGeometry()
+        container.updateGeometry()
 
     @staticmethod
     def _refresh_tone(container, value_label):
@@ -309,7 +322,7 @@ class ScanThread(QThread):
                     interval_s=interval_s,
                     fit_method=str(scan.get("profile_fit_method", "Gauss fit")),
                     cancel_requested=self.isInterruptionRequested,
-                    allow_direct_fallback=False,
+                    allow_direct_fallback=True,
                     min_fit_r_squared=float(scan.get("min_fit_r_squared", 0.7)),
                 )
             except InterruptedError:
@@ -329,6 +342,10 @@ class ScanThread(QThread):
                     center_spread_mm=diagnostic.get("center_spread_mm"),
                     frame_centers_mm=diagnostic.get("frame_centers_mm"),
                     frame_rejection_reasons=diagnostic.get("frame_rejection_reasons"),
+                    frame_fit_methods=diagnostic.get("frame_fit_methods"),
+                    fallback_reasons=diagnostic.get("fallback_reasons"),
+                    gaussian_frames=diagnostic.get("gaussian_frames"),
+                    centroid_frames=diagnostic.get("centroid_frames"),
                 )
             energy_setpoint = float(best)
             center_offset_mm = (
@@ -372,6 +389,10 @@ class ScanThread(QThread):
                 center_spread_mm=measurement.get("center_spread_mm"),
                 frame_centers_mm=measurement.get("frame_centers_mm"),
                 frame_rejection_reasons=measurement.get("frame_rejection_reasons"),
+                frame_fit_methods=measurement.get("frame_fit_methods"),
+                fallback_reasons=measurement.get("fallback_reasons"),
+                gaussian_frames=measurement.get("gaussian_frames"),
+                centroid_frames=measurement.get("centroid_frames"),
                 beam_threshold=measurement.get("beam_threshold"),
                 beam_area_px=measurement.get("beam_area_px"),
                 beam_major_axis_px=measurement.get("beam_major_axis_px"),
@@ -379,7 +400,7 @@ class ScanThread(QThread):
                 beam_aspect_ratio=measurement.get("beam_aspect_ratio"),
                 beam_orientation_rad=measurement.get("beam_orientation_rad"),
             )
-        diagnostic = dict(self.acquisition.last_diagnostic or {})
+        diagnostic = dict(tuner.acquisition.last_diagnostic or {})
         return EnergyMatchResult(
             ok=best is not None, status=tuner.get_last_status(),
             energy_mev=None if best is None else float(best), message=tuner.get_last_message(),
@@ -392,6 +413,10 @@ class ScanThread(QThread):
             center_spread_mm=diagnostic.get("center_spread_mm"),
             frame_centers_mm=diagnostic.get("frame_centers_mm"),
             frame_rejection_reasons=diagnostic.get("frame_rejection_reasons"),
+            frame_fit_methods=diagnostic.get("frame_fit_methods"),
+            fallback_reasons=diagnostic.get("fallback_reasons"),
+            gaussian_frames=diagnostic.get("gaussian_frames"),
+            centroid_frames=diagnostic.get("centroid_frames"),
         )
 
     def _match_progress(self, payload):
@@ -1414,12 +1439,15 @@ class RFPhaseScanWindow(QMainWindow):
                 projection.x_mm,
                 projection.density_x,
                 "Gauss fit",
-                allow_direct_fallback=False,
+                allow_direct_fallback=True,
                 min_r_squared=self.min_fit_r_squared,
             )
             if (
-                profile_fit.r_squared is None
-                or profile_fit.r_squared < self.min_fit_r_squared
+                profile_fit.method == "Gauss fit"
+                and (
+                    profile_fit.r_squared is None
+                    or profile_fit.r_squared < self.min_fit_r_squared
+                )
             ):
                 raise SpectrumProfileError(
                     f"Gaussian fit R2 {profile_fit.r_squared!r} is below "

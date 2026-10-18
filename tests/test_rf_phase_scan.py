@@ -317,6 +317,68 @@ def test_rf_image_acquisition_rejects_low_quality_gaussian_frames(monkeypatch):
     ) is None
 
 
+def test_rf_image_acquisition_accepts_centroid_fallback_and_reports_methods(monkeypatch):
+    frames = [np.full((5, 6), value) for value in (1.0, 2.0, 3.0)]
+    acquisition = RFImageAcquisition(_ImageSequencePV(frames), (6, 5), 0.1)
+    fits = [
+        ProfileFit(
+            center_mm=-0.2, sigma_mm=0.1,
+            normalized_density=np.ones(4), fitted_density=np.ones(4),
+            method="Projection RMS", r_squared=None,
+            fallback_error="Gaussian fit R2 0.10 is below 0.700.",
+        ),
+        ProfileFit(
+            center_mm=0.0, sigma_mm=0.1,
+            normalized_density=np.ones(4), fitted_density=np.ones(4),
+            method="Gauss fit", r_squared=0.95,
+        ),
+        ProfileFit(
+            center_mm=0.3, sigma_mm=0.1,
+            normalized_density=np.ones(4), fitted_density=np.ones(4),
+            method="Projection RMS", r_squared=None,
+            fallback_error="Gaussian fit R2 0.10 is below 0.700.",
+        ),
+    ]
+    fallback_flags = []
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.image_acquisition.detect_beam_presence",
+        lambda image, **_kwargs: _BeamPresence(np.mean(image)),
+    )
+
+    def mixed_fit(_x_mm, _density_x, _method, **kwargs):
+        fallback_flags.append(kwargs["allow_direct_fallback"])
+        return fits.pop(0)
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.image_acquisition.fit_projection_profile",
+        mixed_fit,
+    )
+
+    result = acquisition.sample_profile(
+        samples=3,
+        min_valid=2,
+        interval_s=0,
+        fit_method="Gauss fit",
+        allow_direct_fallback=True,
+        min_fit_r_squared=0.7,
+    )
+
+    assert result is not None
+    assert result["center_mm"] == pytest.approx(0.0)
+    np.testing.assert_array_equal(result["raw_image"], frames[1])
+    assert fallback_flags == [True, True, True]
+    assert result["fit_method"] == "Projection RMS / Gauss fit"
+    assert result["frame_fit_methods"] == [
+        "Projection RMS", "Gauss fit", "Projection RMS",
+    ]
+    assert result["gaussian_frames"] == 1
+    assert result["centroid_frames"] == 2
+    assert result["fallback_reasons"] == {
+        "Gaussian fit R2 0.10 is below 0.700.": 2
+    }
+
+
 def test_rf_image_acquisition_uses_configured_gaussian_r_squared(monkeypatch):
     raw = np.arange(30, dtype=float).reshape(5, 6)
     acquisition = RFImageAcquisition(_ImagePV(raw), (6, 5), 0.1)
@@ -445,6 +507,30 @@ def test_rf_projection_preserves_established_edge_crop():
     projection = project_image_profiles(image, 0.1)
 
     np.testing.assert_array_equal(projection.image, image[1:-1, 1:-1])
+
+
+def test_rf_status_strip_prefers_single_line_horizontal_expansion(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PyQt5.QtWidgets import QApplication
+    from half_linac.src.apps.rf_phase_scan.main import RFPhaseStatusStrip
+
+    app = QApplication.instance() or QApplication([])
+    strip = RFPhaseStatusStrip()
+    strip.add_item("scan", "Scan", "Ready")
+    _container, value_label = strip._items["scan"]
+    short_width = value_label.minimumWidth()
+
+    status = "Energy Match: Brightness Peak"
+    strip.set_item("scan", status)
+    app.processEvents()
+
+    assert not value_label.wordWrap()
+    assert value_label.minimumWidth() > short_width
+    assert value_label.minimumWidth() >= value_label.fontMetrics().horizontalAdvance(status)
+
+    strip.set_item("scan", "Done")
+    app.processEvents()
+    assert value_label.minimumWidth() < short_width
 
 
 def test_reacquire_grid_is_ordered_from_center_outward():
@@ -648,3 +734,32 @@ def test_center_lock_stage_repositions_after_brightness_search():
 
     assert result.ok
     assert writes == [(2190.0, "track")]
+
+
+def test_invalid_current_measurement_does_not_write_energy_or_retry_restore(monkeypatch):
+    matcher = RFPhaseEnergyMatcher(
+        flag_pv_obj=_ImagePV(np.ones((5, 6))),
+        flag_pixel=(6, 5),
+        bend_pv="TEST:ENERGY",
+        design_eta_m=0.75,
+        pixel_width_mm=0.1,
+        pipeline=["center_lock"],
+    )
+    measurements = []
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.energy_match_tuner.caget",
+        lambda _pv: 2200.0,
+    )
+    matcher._measure = lambda energy, stage: (
+        measurements.append((energy, stage)) or None
+    )
+    matcher._set_energy = lambda *_args, **_kwargs: pytest.fail(
+        "An invalid current measurement must not write the energy PV."
+    )
+
+    result = matcher.run(2150.0, 2250.0, start_energy=2210.0)
+
+    assert result is None
+    assert matcher.get_last_status() == "MEASUREMENT_FAILED"
+    assert measurements == [(2200.0, "track")]

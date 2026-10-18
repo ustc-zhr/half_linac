@@ -78,6 +78,10 @@ class EnergyMatchResult:
     center_spread_mm: float | None = None
     frame_centers_mm: list[float] | None = None
     frame_rejection_reasons: dict[str, int] | None = None
+    frame_fit_methods: list[str] | None = None
+    fallback_reasons: dict[str, int] | None = None
+    gaussian_frames: int | None = None
+    centroid_frames: int | None = None
     beam_threshold: float | None = None
     beam_area_px: int | None = None
     beam_major_axis_px: float | None = None
@@ -111,6 +115,10 @@ class PhaseScanPoint:
     center_spread_mm: float | None = None
     frame_centers_mm: list[float] | None = None
     frame_rejection_reasons: dict[str, int] | None = None
+    frame_fit_methods: list[str] | None = None
+    fallback_reasons: dict[str, int] | None = None
+    gaussian_frames: int | None = None
+    centroid_frames: int | None = None
     beam_threshold: float | None = None
     beam_area_px: int | None = None
     beam_major_axis_px: float | None = None
@@ -450,6 +458,10 @@ class PhaseEnergyScanner:
                     center_spread_mm=match.center_spread_mm,
                     frame_centers_mm=match.frame_centers_mm,
                     frame_rejection_reasons=match.frame_rejection_reasons,
+                    frame_fit_methods=match.frame_fit_methods,
+                    fallback_reasons=match.fallback_reasons,
+                    gaussian_frames=match.gaussian_frames,
+                    centroid_frames=match.centroid_frames,
                     beam_threshold=match.beam_threshold,
                     beam_area_px=match.beam_area_px,
                     beam_major_axis_px=match.beam_major_axis_px,

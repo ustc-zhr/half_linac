@@ -106,8 +106,11 @@ class RFImageAcquisition:
                     min_r_squared=min_fit_r_squared,
                 )
                 if (
-                    profile.r_squared is None
-                    or profile.r_squared < float(min_fit_r_squared)
+                    profile.method == "Gauss fit"
+                    and (
+                        profile.r_squared is None
+                        or profile.r_squared < float(min_fit_r_squared)
+                    )
                 ):
                     raise SpectrumProfileError(
                         f"Gaussian fit R2 {profile.r_squared!r} is below "
@@ -128,6 +131,14 @@ class RFImageAcquisition:
                     time.sleep(min(0.05, max(deadline - time.monotonic(), 0)))
         centers = np.asarray([float(item.center_mm) for item in fits], dtype=float)
         frame_centers_mm = [float(value) for value in centers]
+        frame_fit_methods = [str(item.method) for item in fits]
+        fallback_reasons = Counter(
+            str(item.fallback_error)
+            for item in fits
+            if item.fallback_error
+        )
+        gaussian_frames = sum(method == "Gauss fit" for method in frame_fit_methods)
+        centroid_frames = sum(method == "Projection RMS" for method in frame_fit_methods)
         diagnostic = {
             "valid_frames": len(fits),
             "invalid_frames": int(samples) - len(fits),
@@ -136,6 +147,10 @@ class RFImageAcquisition:
             "frame_centers_mm": frame_centers_mm,
             "center_spread_mm": (float(np.ptp(centers)) if len(centers) else None),
             "frame_rejection_reasons": dict(rejection_reasons),
+            "frame_fit_methods": frame_fit_methods,
+            "fallback_reasons": dict(fallback_reasons),
+            "gaussian_frames": gaussian_frames,
+            "centroid_frames": centroid_frames,
         }
         if len(fits) < int(min_valid):
             reason_summary = "; ".join(
@@ -164,7 +179,7 @@ class RFImageAcquisition:
             "raw_image": raw_images[representative_index],
             "center_mm": center_mm,
             "brightness": float(np.median(strengths)),
-            "fit_method": fits[0].method,
+            "fit_method": " / ".join(dict.fromkeys(frame_fit_methods)),
             "fit_r_squared": (float(np.median([item.r_squared for item in fits if item.r_squared is not None])) if any(item.r_squared is not None for item in fits) else None),
             "valid_frames": len(fits),
             "invalid_frames": int(samples) - len(fits),
@@ -172,5 +187,9 @@ class RFImageAcquisition:
             "center_spread_mm": center_spread_mm,
             "frame_centers_mm": frame_centers_mm,
             "frame_rejection_reasons": dict(rejection_reasons),
+            "frame_fit_methods": frame_fit_methods,
+            "fallback_reasons": dict(fallback_reasons),
+            "gaussian_frames": gaussian_frames,
+            "centroid_frames": centroid_frames,
             **presence_diagnostics,
         }
