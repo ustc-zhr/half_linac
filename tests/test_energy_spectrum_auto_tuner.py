@@ -222,7 +222,7 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertEqual(fallback.method, "Projection RMS")
         self.assertIsNotNone(fallback.fallback_error)
 
-    def test_poor_fit_can_be_displayed_but_remains_rejected_by_default(self):
+    def test_poor_fit_uses_configured_r_squared_threshold(self):
         from unittest.mock import patch
 
         x = np.linspace(-22.0, 22.0, 1000)
@@ -232,9 +232,13 @@ class ESAAutoTunerTests(unittest.TestCase):
             return_value=(np.array([0.2, -1.7, 11.0, 0.0]), np.eye(4)),
         ):
             with self.assertRaisesRegex(SpectrumProfileError, "Poor Gaussian fit"):
-                fit_projection_profile(x, density, "Gauss fit", allow_direct_fallback=False)
+                fit_projection_profile(
+                    x, density, "Gauss fit",
+                    allow_direct_fallback=False, min_r_squared=0.7,
+                )
             fit = fit_projection_profile(
-                x, density, "Gauss fit", allow_direct_fallback=False, reject_poor_fit=False,
+                x, density, "Gauss fit", allow_direct_fallback=False,
+                reject_poor_fit=False, min_r_squared=0.7,
             )
             self.assertEqual(fit.method, "Gauss fit")
             self.assertEqual(fit.center_mm, -1.7)

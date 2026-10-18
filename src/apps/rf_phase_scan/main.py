@@ -315,11 +315,20 @@ class ScanThread(QThread):
             except InterruptedError:
                 return EnergyMatchResult(False, "CANCELLED", message="Point measurement cancelled.")
             if measurement is None:
+                diagnostic = dict(self.acquisition.last_diagnostic or {})
                 return EnergyMatchResult(
                     False, "MEASUREMENT_FAILED",
                     energy_setpoint_mev=float(best),
-                    message=f"Point measurement did not retain the required {min_valid}/{samples} valid frames.",
-                    valid_frames=0,
+                    message=diagnostic.get("message") or (
+                        f"Point measurement did not retain the required "
+                        f"{min_valid}/{samples} valid frames."
+                    ),
+                    valid_frames=diagnostic.get("valid_frames", 0),
+                    total_frames=diagnostic.get("total_frames", samples),
+                    invalid_frames=diagnostic.get("invalid_frames"),
+                    center_spread_mm=diagnostic.get("center_spread_mm"),
+                    frame_centers_mm=diagnostic.get("frame_centers_mm"),
+                    frame_rejection_reasons=diagnostic.get("frame_rejection_reasons"),
                 )
             energy_setpoint = float(best)
             center_offset_mm = (
@@ -356,9 +365,13 @@ class ScanThread(QThread):
                 center_offset_mm=center_offset_mm,
                 brightness=float(measurement["brightness"]),
                 valid_frames=int(measurement["valid_frames"]),
+                total_frames=int(measurement["total_frames"]),
+                invalid_frames=int(measurement["invalid_frames"]),
                 fit_method=str(measurement["fit_method"]),
                 fit_r_squared=measurement["fit_r_squared"],
                 center_spread_mm=measurement.get("center_spread_mm"),
+                frame_centers_mm=measurement.get("frame_centers_mm"),
+                frame_rejection_reasons=measurement.get("frame_rejection_reasons"),
                 beam_threshold=measurement.get("beam_threshold"),
                 beam_area_px=measurement.get("beam_area_px"),
                 beam_major_axis_px=measurement.get("beam_major_axis_px"),
@@ -366,12 +379,20 @@ class ScanThread(QThread):
                 beam_aspect_ratio=measurement.get("beam_aspect_ratio"),
                 beam_orientation_rad=measurement.get("beam_orientation_rad"),
             )
+        diagnostic = dict(self.acquisition.last_diagnostic or {})
         return EnergyMatchResult(
             ok=best is not None, status=tuner.get_last_status(),
             energy_mev=None if best is None else float(best), message=tuner.get_last_message(),
             center_offset_mm=info.get("final_offset_mm"), brightness=info.get("brightness"),
-            valid_frames=info.get("valid_frames"), fit_method=info.get("fit_method"),
-            fit_r_squared=info.get("fit_r_squared"))
+            valid_frames=diagnostic.get("valid_frames", info.get("valid_frames")),
+            total_frames=diagnostic.get("total_frames"),
+            invalid_frames=diagnostic.get("invalid_frames"),
+            fit_method=info.get("fit_method"),
+            fit_r_squared=info.get("fit_r_squared"),
+            center_spread_mm=diagnostic.get("center_spread_mm"),
+            frame_centers_mm=diagnostic.get("frame_centers_mm"),
+            frame_rejection_reasons=diagnostic.get("frame_rejection_reasons"),
+        )
 
     def _match_progress(self, payload):
         update = dict(payload)
@@ -1394,6 +1415,7 @@ class RFPhaseScanWindow(QMainWindow):
                 projection.density_x,
                 "Gauss fit",
                 allow_direct_fallback=False,
+                min_r_squared=self.min_fit_r_squared,
             )
             if (
                 profile_fit.r_squared is None

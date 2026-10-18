@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import time
 
 import numpy as np
@@ -11,8 +12,6 @@ from .spectrum_profile import SpectrumProfileError, fit_projection_profile, proj
 
 class RFImageAcquisition:
     """RF scan-local FLAG image reader used by tuning, point samples, and backgrounds."""
-
-    MAX_CENTER_SPREAD_MM = 0.5
 
     def __init__(
         self,
@@ -41,6 +40,7 @@ class RFImageAcquisition:
             raise ValueError("Beam-presence sigma threshold must be positive and finite.")
         if self.beam_presence_min_area_px < 1:
             raise ValueError("Beam-presence minimum area must be at least one pixel.")
+        self.last_diagnostic = None
 
     def read_raw(self):
         raw = self.image_pv.get()
@@ -72,6 +72,7 @@ class RFImageAcquisition:
         min_fit_r_squared=0.0,
     ):
         raw_images, fits, strengths, presence_results = [], [], [], []
+        rejection_reasons = Counter()
         for index in range(int(samples)):
             if cancel_requested and cancel_requested():
                 raise InterruptedError("Image sampling stopped by operator.")
@@ -102,6 +103,7 @@ class RFImageAcquisition:
                     projection.density_x,
                     fit_method,
                     allow_direct_fallback=allow_direct_fallback,
+                    min_r_squared=min_fit_r_squared,
                 )
                 if (
                     profile.r_squared is None
@@ -111,8 +113,8 @@ class RFImageAcquisition:
                         f"Gaussian fit R2 {profile.r_squared!r} is below "
                         f"{float(min_fit_r_squared):.3f}."
                     )
-            except SpectrumProfileError:
-                pass
+            except SpectrumProfileError as exc:
+                rejection_reasons[str(exc)] += 1
             else:
                 raw_images.append(raw)
                 fits.append(profile)
@@ -124,13 +126,38 @@ class RFImageAcquisition:
                     if cancel_requested and cancel_requested():
                         raise InterruptedError("Image sampling stopped by operator.")
                     time.sleep(min(0.05, max(deadline - time.monotonic(), 0)))
-        if len(fits) < int(min_valid):
-            return None
         centers = np.asarray([float(item.center_mm) for item in fits], dtype=float)
+        frame_centers_mm = [float(value) for value in centers]
+        diagnostic = {
+            "valid_frames": len(fits),
+            "invalid_frames": int(samples) - len(fits),
+            "total_frames": int(samples),
+            "min_valid_frames": int(min_valid),
+            "frame_centers_mm": frame_centers_mm,
+            "center_spread_mm": (float(np.ptp(centers)) if len(centers) else None),
+            "frame_rejection_reasons": dict(rejection_reasons),
+        }
+        if len(fits) < int(min_valid):
+            reason_summary = "; ".join(
+                f"{count}× {reason}" for reason, count in rejection_reasons.items()
+            ) or "no fitted frame was retained"
+            diagnostic.update(
+                status="insufficient_valid_frames",
+                message=(
+                    f"Retained {len(fits)}/{int(samples)} valid frames; "
+                    f"required {int(min_valid)}. Rejected: {reason_summary}."
+                ),
+            )
+            self.last_diagnostic = diagnostic
+            return None
         center_mm = float(np.median(centers))
         center_spread_mm = float(np.ptp(centers))
-        if center_spread_mm > self.MAX_CENTER_SPREAD_MM:
-            return None
+        diagnostic.update(
+            status="ok",
+            message=None,
+            center_spread_mm=center_spread_mm,
+        )
+        self.last_diagnostic = diagnostic
         representative_index = int(np.argmin(np.abs(centers - center_mm)))
         presence_diagnostics = presence_results[representative_index].diagnostics()
         return {
@@ -140,6 +167,10 @@ class RFImageAcquisition:
             "fit_method": fits[0].method,
             "fit_r_squared": (float(np.median([item.r_squared for item in fits if item.r_squared is not None])) if any(item.r_squared is not None for item in fits) else None),
             "valid_frames": len(fits),
+            "invalid_frames": int(samples) - len(fits),
+            "total_frames": int(samples),
             "center_spread_mm": center_spread_mm,
+            "frame_centers_mm": frame_centers_mm,
+            "frame_rejection_reasons": dict(rejection_reasons),
             **presence_diagnostics,
         }

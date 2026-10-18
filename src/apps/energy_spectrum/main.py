@@ -4456,7 +4456,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # Use one shared center definition for the GUI and Auto Find center lock.
         try:
             profile_fit = fit_projection_profile(
-                x, denx0, fit_method, allow_direct_fallback=False, reject_poor_fit=False
+                x, denx0, fit_method,
+                allow_direct_fallback=False,
+                reject_poor_fit=False,
+                min_r_squared=float(self.bend_scan.get("min_fit_r_squared", 0.3)),
             )
         except SpectrumProfileError as exc:
             self.sigx = None

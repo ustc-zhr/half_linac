@@ -286,6 +286,11 @@ def test_rf_image_acquisition_rejects_low_quality_gaussian_frames(monkeypatch):
     raw = np.arange(30, dtype=float).reshape(5, 6)
     acquisition = RFImageAcquisition(_ImagePV(raw), (6, 5), 0.1)
 
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.image_acquisition.detect_beam_presence",
+        lambda image, **_kwargs: _BeamPresence(np.mean(image)),
+    )
+
     def low_quality_fit(x_mm, density_x, method, **_kwargs):
         normalized = np.asarray(density_x, dtype=float)
         normalized /= np.max(normalized)
@@ -312,6 +317,46 @@ def test_rf_image_acquisition_rejects_low_quality_gaussian_frames(monkeypatch):
     ) is None
 
 
+def test_rf_image_acquisition_uses_configured_gaussian_r_squared(monkeypatch):
+    raw = np.arange(30, dtype=float).reshape(5, 6)
+    acquisition = RFImageAcquisition(_ImagePV(raw), (6, 5), 0.1)
+    received_thresholds = []
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.image_acquisition.detect_beam_presence",
+        lambda image, **_kwargs: _BeamPresence(np.mean(image)),
+    )
+
+    def configured_fit(x_mm, density_x, method, **kwargs):
+        received_thresholds.append(kwargs["min_r_squared"])
+        normalized = np.asarray(density_x, dtype=float)
+        normalized /= np.max(normalized)
+        return ProfileFit(
+            center_mm=float(x_mm[len(x_mm) // 2]),
+            sigma_mm=0.1,
+            normalized_density=normalized,
+            fitted_density=normalized,
+            method="Gauss fit",
+            r_squared=0.4,
+        )
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.image_acquisition.fit_projection_profile",
+        configured_fit,
+    )
+
+    result = acquisition.sample_profile(
+        samples=3,
+        min_valid=2,
+        interval_s=0,
+        fit_method="Gauss fit",
+        min_fit_r_squared=0.3,
+    )
+
+    assert result is not None
+    assert received_thresholds == [0.3, 0.3, 0.3]
+
+
 def test_rf_image_acquisition_tolerates_one_empty_frame(monkeypatch):
     first = np.full((5, 6), 1.0)
     second = np.full((5, 6), 2.0)
@@ -334,6 +379,29 @@ def test_rf_image_acquisition_tolerates_one_empty_frame(monkeypatch):
     assert result["valid_frames"] == 2
 
 
+def test_rf_image_acquisition_reports_frame_rejection_reasons():
+    acquisition = RFImageAcquisition(
+        _ImageSequencePV([None, None, None]),
+        (6, 5),
+        0.1,
+    )
+
+    assert acquisition.sample_profile(
+        samples=3,
+        min_valid=2,
+        interval_s=0,
+        fit_method="Gauss fit",
+        min_fit_r_squared=0.3,
+    ) is None
+    assert acquisition.last_diagnostic["valid_frames"] == 0
+    assert acquisition.last_diagnostic["invalid_frames"] == 3
+    assert acquisition.last_diagnostic["frame_centers_mm"] == []
+    assert acquisition.last_diagnostic["frame_rejection_reasons"] == {
+        "Flag image PV returned no data.": 3
+    }
+    assert "Retained 0/3 valid frames" in acquisition.last_diagnostic["message"]
+
+
 def test_rf_image_acquisition_uses_representative_frame(monkeypatch):
     frames = [np.full((5, 6), value) for value in (1.0, 2.0, 3.0)]
     acquisition = RFImageAcquisition(_ImageSequencePV(frames), (6, 5), 0.1)
@@ -353,18 +421,23 @@ def test_rf_image_acquisition_uses_representative_frame(monkeypatch):
     assert result["beam_area_px"] == 2
 
 
-def test_rf_image_acquisition_rejects_mixed_position_frames(monkeypatch):
+def test_rf_image_acquisition_reports_center_jitter_without_rejecting(monkeypatch):
     frames = [np.full((5, 6), value) for value in (1.0, 2.0, 3.0)]
     acquisition = RFImageAcquisition(_ImageSequencePV(frames), (6, 5), 0.1)
     _patch_profile_samples(monkeypatch, [-5.0, -5.0, 10.0])
 
-    assert acquisition.sample_profile(
+    result = acquisition.sample_profile(
         samples=3,
         min_valid=2,
         interval_s=0,
         fit_method="Gauss fit",
         min_fit_r_squared=0.7,
-    ) is None
+    )
+
+    assert result is not None
+    assert result["center_mm"] == pytest.approx(-5.0)
+    assert result["center_spread_mm"] == pytest.approx(15.0)
+    assert result["frame_centers_mm"] == [-5.0, -5.0, 10.0]
 
 
 def test_rf_projection_preserves_established_edge_crop():

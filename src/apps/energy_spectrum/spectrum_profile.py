@@ -109,13 +109,14 @@ def fit_projection_profile(
     *,
     allow_direct_fallback=True,
     reject_poor_fit=True,
+    min_r_squared=None,
 ):
     """Measure the Gaussian center, whole-profile mean, or raw projection peak.
 
     Peak uses the maximum sampled bin for energy and the whole-profile RMS
     about the weighted mean for width, just like Projection RMS.
-    Set reject_poor_fit=False to display converged fits with quality warnings;
-    automated center locking keeps the default rejection behavior.
+    Set reject_poor_fit=False to display converged fits with quality warnings.
+    Callers control the R² quality threshold with min_r_squared.
     """
     x_mm = np.asarray(x_mm, dtype=float)
     density_x = np.asarray(density_x, dtype=float)
@@ -182,8 +183,14 @@ def fit_projection_profile(
         r_squared = 1.0 - residual_sum / centered_sum if centered_sum > 0 else 0.0
         # Convergence alone can accept a broad pedestal while missing the beam.
         quality_warnings = []
-        if not np.isfinite(r_squared) or r_squared < 0.7:
-            quality_warnings.append(f"Poor Gaussian fit: R²={r_squared:.3f} < 0.700.")
+        if min_r_squared is not None:
+            min_r_squared = float(min_r_squared)
+            if not np.isfinite(min_r_squared) or not 0 <= min_r_squared <= 1:
+                raise ValueError("Minimum Gaussian fit R² must be in [0, 1].")
+            if not np.isfinite(r_squared) or r_squared < min_r_squared:
+                quality_warnings.append(
+                    f"Poor Gaussian fit: R²={r_squared:.3f} < {min_r_squared:.3f}."
+                )
         if abs(float(fitted[peak_index] - normalized[peak_index])) > 0.25 * amplitude:
             quality_warnings.append("Gaussian fit misses the projection peak by more than 25% of its height.")
         quality_warning = " ".join(quality_warnings) or None

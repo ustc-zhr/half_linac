@@ -204,8 +204,11 @@ class RFPhaseEnergyMatcher:
         except InterruptedError as exc:
             raise EnergyMatchCancelled(str(exc)) from exc
         if result is None:
-            self._report(stage, energy, False, valid_frames=0, total_frames=samples)
+            diagnostic = dict(self.acquisition.last_diagnostic or {})
+            self.last_message = diagnostic.get("message") or "Beam profile measurement failed."
+            self._report(stage, energy, False, **diagnostic)
             return None
+        self.last_message = None
         result.update(
             energy=float(energy),
             offset_mm=float(result["center_mm"] - self.x_reference_mm),
@@ -223,6 +226,9 @@ class RFPhaseEnergyMatcher:
             fit_method=result["fit_method"],
             fit_r_squared=result["fit_r_squared"],
             center_spread_mm=result.get("center_spread_mm"),
+            invalid_frames=result.get("invalid_frames"),
+            frame_centers_mm=result.get("frame_centers_mm"),
+            frame_rejection_reasons=result.get("frame_rejection_reasons"),
             beam_threshold=result.get("beam_threshold"),
             beam_area_px=result.get("beam_area_px"),
             beam_major_axis_px=result.get("beam_major_axis_px"),

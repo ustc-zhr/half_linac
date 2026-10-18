@@ -796,6 +796,7 @@ class ESA_AutoTuner:
                     projection.density_x,
                     self.profile_fit_method,
                     allow_direct_fallback=self.allow_direct_fallback,
+                    min_r_squared=self.min_profile_fit_r_squared,
                 )
                 if (
                     self.min_profile_fit_r_squared is not None
