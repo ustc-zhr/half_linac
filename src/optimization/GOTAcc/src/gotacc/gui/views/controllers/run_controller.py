@@ -292,15 +292,19 @@ class RunController:
             )
             current_identity = None
         if current_identity != state.latest_task_identity:
-            QMessageBox.warning(
-                self.window,
-                action_title,
-                "The current task configuration has changed since this result was produced. "
-                "Restore the original configuration or run the task again before writing setpoints.",
-            )
             self.view.log_warning(
                 f"{action_title} blocked: current task does not match the run snapshot."
             )
+            choice = self._prompt_task_configuration_mismatch(action_title)
+            if choice == "restore":
+                self._restore_run_configuration(action_title)
+            elif choice == "keep":
+                self.view.log_event(
+                    f"{action_title}: current task configuration kept; "
+                    "result setpoint writing remains blocked."
+                )
+            else:
+                self.view.log_event(f"{action_title} cancelled by operator.")
             return None
 
         task = copy.deepcopy(state.latest_task_snapshot)
@@ -422,6 +426,71 @@ class RunController:
                 except Exception:
                     pass
         return True
+
+    def _prompt_task_configuration_mismatch(self, action_title: str) -> str:
+        dialog = QMessageBox(self.window)
+        dialog.setIcon(QMessageBox.Warning)
+        dialog.setWindowTitle(action_title)
+        dialog.setText(
+            "The current task configuration has changed since this result was produced."
+        )
+        dialog.setInformativeText(
+            "Restore the configuration saved with this run, or keep the current configuration "
+            "and run the task again. Restoring only updates the task editor; no setpoints will "
+            "be written until you review the task and request the write again."
+        )
+        restore_button = dialog.addButton(
+            "Restore Run Configuration",
+            QMessageBox.AcceptRole,
+        )
+        keep_button = dialog.addButton(
+            "Keep Current Configuration",
+            QMessageBox.ActionRole,
+        )
+        cancel_button = dialog.addButton(QMessageBox.Cancel)
+        dialog.setDefaultButton(restore_button)
+        dialog.setEscapeButton(cancel_button)
+        dialog.exec_()
+
+        clicked = dialog.clickedButton()
+        if clicked is restore_button:
+            return "restore"
+        if clicked is keep_button:
+            return "keep"
+        return "cancel"
+
+    @staticmethod
+    def _task_draft_from_run_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+        task = copy.deepcopy(dict(snapshot))
+        project_workdir = str(task.pop("project_workdir", "") or "").strip()
+        task.pop("run_archive_dir", None)
+        task.pop("run_id", None)
+        if project_workdir:
+            task["workdir"] = project_workdir
+        return task
+
+    def _restore_run_configuration(self, action_title: str) -> None:
+        task = self._task_draft_from_run_snapshot(self.window.state.latest_task_snapshot)
+        try:
+            self.window.task_builder_controller.apply_task_payload(
+                task,
+                source_label=(
+                    "Configuration restored from the loaded run. "
+                    "Review it before writing setpoints."
+                ),
+                goto_builder=True,
+            )
+        except Exception as exc:
+            self.view.log_warning(f"{action_title}: run configuration restore failed: {exc}")
+            QMessageBox.critical(
+                self.window,
+                "Restore Run Configuration Failed",
+                str(exc),
+            )
+            return
+        self.view.log_event(
+            f"{action_title}: restored the loaded run configuration; no setpoints were written."
+        )
 
     def on_session_log(self, message: str) -> None:
         self.view.log_event(message)

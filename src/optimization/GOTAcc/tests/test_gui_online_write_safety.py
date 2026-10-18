@@ -304,8 +304,6 @@ def test_offline_start_does_not_request_machine_write_authorization(tmp_path, mo
 
 @pytest.mark.parametrize("action", ["restore", "best", "evaluation", "pareto"])
 def test_changed_pv_blocks_all_result_writes_before_backend_creation(tmp_path, monkeypatch, action):
-    import gotacc.gui.views.controllers.run_controller as run_controller_module
-
     run_task = _online_task(tmp_path)
     current_task = _online_task(tmp_path, setpoint_pv="TEST:Q9:SET")
     window, logs = _controller_window(current_task)
@@ -329,8 +327,12 @@ def test_changed_pv_blocks_all_result_writes_before_backend_creation(tmp_path, m
     window.results_controller.evaluation_is_feasible = lambda record: bool(
         record.get("feasible", True)
     )
-    warnings = []
-    monkeypatch.setattr(run_controller_module.QMessageBox, "warning", lambda *_args: warnings.append(_args[-1]))
+    prompts = []
+    monkeypatch.setattr(
+        RunController,
+        "_prompt_task_configuration_mismatch",
+        lambda _self, title: prompts.append(title) or "keep",
+    )
 
     backend_calls = []
     monkeypatch.setattr("gotacc.interfaces.factory.build_backend", lambda _cfg: backend_calls.append(_cfg))
@@ -344,8 +346,58 @@ def test_changed_pv_blocks_all_result_writes_before_backend_creation(tmp_path, m
     }[action]()
 
     assert backend_calls == []
-    assert warnings and "configuration has changed" in warnings[0]
+    assert len(prompts) == 1
     assert any("does not match the run snapshot" in message for message in logs)
+    assert any("result setpoint writing remains blocked" in message for message in logs)
+
+
+def test_changed_task_can_restore_run_configuration_without_writing(tmp_path, monkeypatch):
+    project_dir = tmp_path / "project"
+    archive_dir = project_dir / "online_safety_test" / "20261018_120000_000000"
+    run_task = _online_task(project_dir)
+    run_task.update(
+        {
+            "project_workdir": str(project_dir),
+            "run_archive_dir": str(archive_dir),
+            "run_id": archive_dir.name,
+            "workdir": str(archive_dir),
+        }
+    )
+    current_task = _online_task(project_dir, setpoint_pv="TEST:Q9:SET")
+    window, logs = _controller_window(current_task)
+    window.state.latest_task_snapshot = copy.deepcopy(run_task)
+    window.state.latest_task_identity = TaskService.normalized_task_identity(run_task)
+
+    restored = []
+    window.task_builder_controller = SimpleNamespace(
+        apply_task_payload=lambda task, **kwargs: restored.append((task, kwargs))
+    )
+    monkeypatch.setattr(
+        RunController,
+        "_prompt_task_configuration_mismatch",
+        lambda _self, _title: "restore",
+    )
+
+    prepared = RunController(window)._prepare_snapshot_write(
+        action_title="Set Pareto Point",
+        values={"Q1": 1.0},
+    )
+
+    assert prepared is None
+    assert len(restored) == 1
+    restored_task, kwargs = restored[0]
+    assert restored_task["workdir"] == str(project_dir)
+    assert "project_workdir" not in restored_task
+    assert "run_archive_dir" not in restored_task
+    assert "run_id" not in restored_task
+    assert TaskService.normalized_task_identity(restored_task) == window.state.latest_task_identity
+    assert kwargs == {
+        "source_label": (
+            "Configuration restored from the loaded run. Review it before writing setpoints."
+        ),
+        "goto_builder": True,
+    }
+    assert any("no setpoints were written" in message for message in logs)
 
 
 class _FakeBackend:
