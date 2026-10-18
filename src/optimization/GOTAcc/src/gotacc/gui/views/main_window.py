@@ -162,6 +162,13 @@ class SimpleMatplotlibCanvas(FigureCanvas):
             # Matplotlib can raise when Qt briefly reports invalid intermediate sizes.
             event.accept()
 
+    def reset_navigation_history(self) -> None:
+        toolbar = getattr(self, "navigation_toolbar", None)
+        if toolbar is None:
+            return
+        toolbar.update()
+        toolbar.push_current()
+
     def clear_with_message(self, title: str, message: str) -> None:
         self.figure.clear()
         ax = self.figure.add_subplot(111)
@@ -170,6 +177,7 @@ class SimpleMatplotlibCanvas(FigureCanvas):
         ax.set_xticks([])
         ax.set_yticks([])
         self.apply_theme_to_axes(ax)
+        self.reset_navigation_history()
         self.draw_idle()
 
     def apply_theme_to_axes(self, ax) -> None:

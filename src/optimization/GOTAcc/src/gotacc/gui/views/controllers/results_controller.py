@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from PyQt5.QtCore import QUrl, Qt
+from PyQt5.QtCore import QSize, QUrl, Qt
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStyle,
     QTableWidget,
@@ -25,6 +26,8 @@ from PyQt5.QtWidgets import (
     QTreeWidgetItem,
     QVBoxLayout,
 )
+
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..main_window import MainWindow
@@ -40,6 +43,23 @@ except ImportError:  # pragma: no cover - local script fallback
         if str(path) not in sys.path:
             sys.path.insert(0, str(path))
     from task_service import TaskService
+
+
+class CompactPlotToolbar(NavigationToolbar2QT):
+    toolitems = (
+        ("Reset", "Reset to the latest full view", "home", "home"),
+        ("Pan", "Pan with the left mouse button; click again to exit", "move", "pan"),
+        ("Zoom", "Drag a rectangle to zoom; click again to exit", "zoom_to_rect", "zoom"),
+    )
+
+    def __init__(self, canvas, parent=None) -> None:
+        super().__init__(canvas, parent, coordinates=False)
+        self.setObjectName("plotNavigationToolbar")
+        self.setProperty("compact", True)
+        self.setIconSize(QSize(16, 16))
+        self.setFixedHeight(28)
+        self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.setToolButtonStyle(Qt.ToolButtonIconOnly)
 
 
 class ResultsController:
@@ -210,8 +230,19 @@ class ResultsController:
                 if child is not None:
                     child.deleteLater()
         canvas = self.canvas_class(frame)
-        layout.addWidget(canvas)
+        toolbar = CompactPlotToolbar(canvas, frame)
+        layout.setSpacing(2)
+        layout.addWidget(toolbar, 0, Qt.AlignRight)
+        layout.addWidget(canvas, 1)
+        canvas.navigation_toolbar = toolbar
         return canvas
+
+    @staticmethod
+    def _draw_canvas(canvas) -> None:
+        reset_navigation = getattr(canvas, "reset_navigation_history", None)
+        if callable(reset_navigation):
+            reset_navigation()
+        canvas.draw_idle()
 
     def _ensure_pareto_solution_controls(self) -> None:
         if hasattr(self.window.ui, "tableWidget_paretoSolutions"):
@@ -366,7 +397,7 @@ class ResultsController:
                     wrap=True,
                 )
             canvas.apply_theme_to_axes(ax)
-            canvas.draw_idle()
+            self._draw_canvas(canvas)
             return
         if not state.objective_history:
             canvas.clear_with_message(title, "No evaluations yet.")
@@ -389,7 +420,7 @@ class ResultsController:
         ax.grid(True, alpha=0.3)
         ax.legend()
         canvas.apply_theme_to_axes(ax)
-        canvas.draw_idle()
+        self._draw_canvas(canvas)
 
     def draw_pareto_plot(self, canvas, *, title: str) -> None:
         state = self.window.state
@@ -444,7 +475,7 @@ class ResultsController:
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
         canvas.apply_theme_to_axes(ax)
-        canvas.draw_idle()
+        self._draw_canvas(canvas)
 
     def draw_constraint_history(self, canvas) -> None:
         series: list[list[float]] = []
@@ -471,7 +502,7 @@ class ResultsController:
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
         canvas.apply_theme_to_axes(ax)
-        canvas.draw_idle()
+        self._draw_canvas(canvas)
 
     def _constraint_values(self, value: Any) -> list[float]:
         if isinstance(value, dict):
@@ -810,7 +841,7 @@ class ResultsController:
                 )
             canvas.apply_theme_to_axes(ax)
             canvas.figure.subplots_adjust(left=0.12, right=0.98, top=0.88, bottom=0.16)
-            canvas.draw_idle()
+            self._draw_canvas(canvas)
 
     def _current_variable_names(self, count: int) -> list[str]:
         task = self.window.state.latest_task_snapshot or self.view.current_task()

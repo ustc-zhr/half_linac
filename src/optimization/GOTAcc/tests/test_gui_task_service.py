@@ -1109,6 +1109,30 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         window.results_controller.set_variable_trajectory_mode("raw")
         assert window.run_ui.frame_obj.property("plotHost") is True
         assert window.run_ui.frame_obj.frameShape() == window.run_ui.frame_obj.NoFrame
+        plot_canvases = (
+            window.obj_canvas,
+            window.pareto_canvas,
+            window.run_var_canvas,
+            window.run_constraints_canvas,
+            window.results_conv_canvas,
+            window.results_pareto_canvas,
+            window.var_canvas,
+        )
+        for canvas in plot_canvases:
+            toolbar = canvas.navigation_toolbar
+            actions = [action for action in toolbar.actions() if not action.isSeparator()]
+            assert toolbar.objectName() == "plotNavigationToolbar"
+            assert toolbar.property("compact") is True
+            assert toolbar.minimumHeight() == toolbar.maximumHeight() == 28
+            assert toolbar.toolButtonStyle() == Qt.ToolButtonIconOnly
+            assert [action.text() for action in actions] == ["Reset", "Pan", "Zoom"]
+            assert all(not action.icon().isNull() for action in actions)
+        toolbar = window.obj_canvas.navigation_toolbar
+        initial_mode = toolbar.mode
+        toolbar.actions()[1].trigger()
+        assert toolbar.mode != initial_mode
+        toolbar.actions()[1].trigger()
+        assert toolbar.mode == initial_mode
         assert window.run_ui.verticalLayout_main.indexOf(window.run_ui.groupBox_runtime) == 1
         assert window.run_ui.verticalLayout_main.indexOf(window.run_ui.groupBox_actions) == -1
         assert not window.ui.splitter_resultsMain.childrenCollapsible()
