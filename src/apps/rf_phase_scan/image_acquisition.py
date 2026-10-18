@@ -12,6 +12,8 @@ from .spectrum_profile import SpectrumProfileError, fit_projection_profile, proj
 class RFImageAcquisition:
     """RF scan-local FLAG image reader used by tuning, point samples, and backgrounds."""
 
+    MAX_CENTER_SPREAD_MM = 0.5
+
     def __init__(
         self,
         image_pv,
@@ -73,8 +75,8 @@ class RFImageAcquisition:
         for index in range(int(samples)):
             if cancel_requested and cancel_requested():
                 raise InterruptedError("Image sampling stopped by operator.")
-            raw = self.read_raw()
             try:
+                raw = self.read_raw()
                 analysis_image = (
                     np.maximum(raw - self.background, 0)
                     if self.background is not None
@@ -124,12 +126,16 @@ class RFImageAcquisition:
                     time.sleep(min(0.05, max(deadline - time.monotonic(), 0)))
         if len(fits) < int(min_valid):
             return None
-        centers = [float(item.center_mm) for item in fits]
+        centers = np.asarray([float(item.center_mm) for item in fits], dtype=float)
+        center_mm = float(np.median(centers))
         center_spread_mm = float(np.ptp(centers))
-        presence_diagnostics = presence_results[-1].diagnostics()
+        if center_spread_mm > self.MAX_CENTER_SPREAD_MM:
+            return None
+        representative_index = int(np.argmin(np.abs(centers - center_mm)))
+        presence_diagnostics = presence_results[representative_index].diagnostics()
         return {
-            "raw_image": np.mean(raw_images, axis=0),
-            "center_mm": float(np.median(centers)),
+            "raw_image": raw_images[representative_index],
+            "center_mm": center_mm,
             "brightness": float(np.median(strengths)),
             "fit_method": fits[0].method,
             "fit_r_squared": (float(np.median([item.r_squared for item in fits if item.r_squared is not None])) if any(item.r_squared is not None for item in fits) else None),

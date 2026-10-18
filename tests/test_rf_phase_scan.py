@@ -211,6 +211,52 @@ class _ImagePV:
         return self.image.ravel()
 
 
+class _ImageSequencePV:
+    def __init__(self, images):
+        self.images = iter(images)
+
+    def get(self):
+        image = next(self.images)
+        return None if image is None else np.asarray(image).ravel()
+
+
+class _BeamPresence:
+    has_beam = True
+
+    def __init__(self, brightness):
+        self.brightness = float(brightness)
+
+    def diagnostics(self):
+        return {"beam_area_px": int(self.brightness)}
+
+
+def _patch_profile_samples(monkeypatch, centers):
+    centers = iter(centers)
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.image_acquisition.detect_beam_presence",
+        lambda image, **_kwargs: _BeamPresence(np.mean(image)),
+    )
+
+    def fitted_profile(x_mm, density_x, method, **_kwargs):
+        normalized = np.asarray(density_x, dtype=float)
+        normalized /= np.max(normalized)
+        center_mm = float(next(centers))
+        return ProfileFit(
+            center_mm=center_mm,
+            sigma_mm=0.1,
+            normalized_density=normalized,
+            fitted_density=normalized,
+            method="Gauss fit",
+            r_squared=0.99,
+        )
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.image_acquisition.fit_projection_profile",
+        fitted_profile,
+    )
+
+
 def test_rf_image_acquisition_keeps_raw_image_and_subtracts_background_for_analysis():
     raw = np.full((5, 6), 10.0)
     acquisition = RFImageAcquisition(
@@ -256,6 +302,61 @@ def test_rf_image_acquisition_rejects_low_quality_gaussian_frames(monkeypatch):
         "half_linac.src.apps.rf_phase_scan.image_acquisition.fit_projection_profile",
         low_quality_fit,
     )
+
+    assert acquisition.sample_profile(
+        samples=3,
+        min_valid=2,
+        interval_s=0,
+        fit_method="Gauss fit",
+        min_fit_r_squared=0.7,
+    ) is None
+
+
+def test_rf_image_acquisition_tolerates_one_empty_frame(monkeypatch):
+    first = np.full((5, 6), 1.0)
+    second = np.full((5, 6), 2.0)
+    acquisition = RFImageAcquisition(
+        _ImageSequencePV([None, first, second]),
+        (6, 5),
+        0.1,
+    )
+    _patch_profile_samples(monkeypatch, [0.0, 0.1])
+
+    result = acquisition.sample_profile(
+        samples=3,
+        min_valid=2,
+        interval_s=0,
+        fit_method="Gauss fit",
+        min_fit_r_squared=0.7,
+    )
+
+    assert result is not None
+    assert result["valid_frames"] == 2
+
+
+def test_rf_image_acquisition_uses_representative_frame(monkeypatch):
+    frames = [np.full((5, 6), value) for value in (1.0, 2.0, 3.0)]
+    acquisition = RFImageAcquisition(_ImageSequencePV(frames), (6, 5), 0.1)
+    _patch_profile_samples(monkeypatch, [-0.1, 0.0, 0.1])
+
+    result = acquisition.sample_profile(
+        samples=3,
+        min_valid=2,
+        interval_s=0,
+        fit_method="Gauss fit",
+        min_fit_r_squared=0.7,
+    )
+
+    assert result is not None
+    assert result["center_mm"] == pytest.approx(0.0)
+    np.testing.assert_array_equal(result["raw_image"], frames[1])
+    assert result["beam_area_px"] == 2
+
+
+def test_rf_image_acquisition_rejects_mixed_position_frames(monkeypatch):
+    frames = [np.full((5, 6), value) for value in (1.0, 2.0, 3.0)]
+    acquisition = RFImageAcquisition(_ImageSequencePV(frames), (6, 5), 0.1)
+    _patch_profile_samples(monkeypatch, [-5.0, -5.0, 10.0])
 
     assert acquisition.sample_profile(
         samples=3,
