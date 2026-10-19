@@ -1448,6 +1448,7 @@ class MainWindow(QMainWindow):
         self.ui.label_cardModeTitle.setText("Run Plan")
         self.ui.label_cardAlgorithmTitle.setText("Backend Readiness")
         self.ui.label_cardStatusTitle.setText("Last Outcome")
+        self.ui.label_readinessTestReadTitle.setText("EPICS Preflight")
         self.ui.label_recentActivityHint.setVisible(False)
         self.ui.label_readinessHint.setVisible(False)
         self.ui.label_recentActivityEmpty.setText("No recent activity.")
@@ -2525,8 +2526,11 @@ class MainWindow(QMainWindow):
             backend_tone = "success"
         else:
             test_status = self.state.last_test_read_status or "Not checked"
-            backend_text = f"PV Check {test_status}"
-            backend_tooltip = self.state.last_test_read_detail or "Run PV Check before an Online start."
+            backend_text = f"EPICS Preflight {test_status}"
+            backend_tooltip = (
+                self.state.last_test_read_detail
+                or "A read-only EPICS preflight runs automatically before online actions."
+            )
             readiness_text = test_status.lower()
             if "failed" in readiness_text or "error" in readiness_text:
                 backend_tone = "danger"
@@ -2997,7 +3001,7 @@ class MainWindow(QMainWindow):
             f"GUI: {self.ui.label_readinessGuiValue.text()}\n"
             f"pyepics: {self.ui.label_readinessEpicsValue.text()}\n"
             f"Machine: {self.ui.label_readinessMachineValue.text()}\n"
-            f"Last Test Read: {self.ui.label_readinessTestReadValue.text()}"
+            f"EPICS Preflight: {self.ui.label_readinessTestReadValue.text()}"
         )
         self._append_overview_activity("Check", status="Refreshed run readiness.")
         self._log_console("Run readiness refreshed.")

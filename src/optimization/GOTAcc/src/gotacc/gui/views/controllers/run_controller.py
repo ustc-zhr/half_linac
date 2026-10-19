@@ -56,10 +56,14 @@ class RunController:
 
         self.window.run_session.cleanup_if_idle()
         if not self.view.ensure_machine_ready_for_online(task):
+            detail = (
+                self.window.state.last_test_read_detail
+                or "The configured EPICS PVs could not be read."
+            )
             QMessageBox.warning(
                 self.window,
                 "Cannot Start",
-                "Run PV Check for the current Online EPICS task before starting.",
+                f"Automatic EPICS preflight failed. The online run was not started.\n\n{detail}",
             )
             return
 
@@ -365,10 +369,14 @@ class RunController:
             return None
 
         if not self.view.ensure_machine_ready_for_online(task):
+            detail = (
+                state.last_test_read_detail
+                or "The configured EPICS PVs could not be read."
+            )
             QMessageBox.warning(
                 self.window,
                 action_title,
-                "Connect the machine before writing setpoints.",
+                f"Automatic EPICS preflight failed. No setpoints were written.\n\n{detail}",
             )
             return None
 

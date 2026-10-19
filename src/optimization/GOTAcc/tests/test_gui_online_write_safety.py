@@ -123,6 +123,7 @@ def test_machine_write_dialog_shows_online_write_contract(tmp_path, qapp):
         assert dialog.accept_button.text() == "Start Online Run"
         assert dialog.accept_button.property("primary") is True
         assert not dialog.accept_button.isDefault()
+        assert "read-only EPICS preflight passed" in dialog.label_notice.text()
         assert "up to 5" in dialog.label_notice.text()
         assert "Always enabled" in {
             label.text() for label in dialog.findChildren(type(dialog.label_notice))
@@ -264,6 +265,40 @@ def test_online_start_cancel_has_no_run_side_effects(tmp_path, monkeypatch):
     assert window.run_session.started == []
     assert "presenter" not in logs
     assert _FakeDialog.tasks[0] is not task
+
+
+def test_online_start_preflight_failure_blocks_authorization(tmp_path, monkeypatch):
+    import gotacc.gui.views.controllers.run_controller as run_controller_module
+
+    task = _online_task(tmp_path)
+    window, _logs = _controller_window(task)
+    window.state.last_test_read_detail = "EPICS preflight failed: TEST:Q1:SET returned None"
+    preflight_tasks = []
+    window.view_adapter.ensure_machine_ready_for_online = (
+        lambda candidate: preflight_tasks.append(candidate) or False
+    )
+
+    class UnexpectedDialog:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("Authorization must not open after a failed EPICS preflight.")
+
+    warnings = []
+    monkeypatch.setattr(run_controller_module, "MachineWriteConfirmationDialog", UnexpectedDialog)
+    monkeypatch.setattr(
+        run_controller_module.QMessageBox,
+        "warning",
+        lambda *_args: warnings.append(_args[-1]),
+    )
+
+    RunController(window).start_run()
+
+    assert len(preflight_tasks) == 1
+    assert preflight_tasks[0] == task
+    assert preflight_tasks[0] is not task
+    assert window.run_session.started == []
+    assert window.state.latest_task_snapshot == {}
+    assert warnings and "online run was not started" in warnings[0]
+    assert "TEST:Q1:SET returned None" in warnings[0]
 
 
 def test_online_start_accepts_and_passes_the_confirmed_snapshot(tmp_path, monkeypatch):

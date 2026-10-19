@@ -240,14 +240,18 @@ def test_mapping_sync_preserves_parameters_by_name_and_can_undo(
     assert not window.machine_ui.pushButton_undoMappingSync.isEnabled()
 
 
-def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, monkeypatch):
+def test_automatic_epics_preflight_covers_current_contract_and_becomes_stale(
+    tmp_path,
+    window,
+    monkeypatch,
+):
     task = _online_task(tmp_path)
     window._apply_task_payload(task, goto_builder=False)
     window.go_to_page(window.PAGE_MACHINE)
     monkeypatch.setattr(QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.Yes)
     window.machine_controller.apply_selected_pv_library_entries()
     assert window.ui.tabWidget_configure.currentIndex() == window.CONFIGURE_TAB_MACHINE
-    assert window.machine_ui.pushButton_test.isEnabled()
+    assert window.machine_ui.pushButton_test.isHidden()
     reads = []
 
     def fake_caget(pvname, *, timeout):
@@ -256,8 +260,7 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
 
     monkeypatch.setattr(window.machine_controller, "_prepare_epics_caget", lambda: fake_caget)
 
-    assert window.machine_controller.check_machine_pv(show_dialog=False)
-    assert {pv for pv, _timeout in reads} == {
+    expected_pvs = {
         "TEST:Q1:SET",
         "TEST:Q1:RB",
         "TEST:Q2:SET",
@@ -266,14 +269,26 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
     }
     current = window._current_task()
     assert window.machine_controller.ensure_machine_ready_for_online(current)
+    assert {pv for pv, _timeout in reads} == expected_pvs
     assert window.machine_ui.label_statusValue.text() == "Passed"
+
+    reads.clear()
+    offline = copy.deepcopy(current)
+    offline["mode"] = "Offline"
+    assert window.machine_controller.ensure_machine_ready_for_online(offline)
+    assert reads == []
+
+    assert window.machine_controller.ensure_machine_ready_for_online(current)
+    assert {pv for pv, _timeout in reads} == expected_pvs
 
     window.task_ui.comboBox_algorithm.setCurrentText("TuRBO")
     QApplication.processEvents()
 
+    reads.clear()
     assert window.machine_ui.label_statusValue.text() == "Passed"
     assert window.state.machine_check_identity
     assert window.machine_controller.ensure_machine_ready_for_online(window._current_task())
+    assert {pv for pv, _timeout in reads} == expected_pvs
 
     non_connection_change = copy.deepcopy(current)
     non_connection_change["mode"] = "Offline"
@@ -324,12 +339,19 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
     assert window.machine_ui.label_statusValue.text() == "Stale"
     assert window.state.last_test_read_status == "Stale"
     assert not window.state.machine_check_identity
+    monkeypatch.setattr(
+        window.machine_controller,
+        "_prepare_epics_caget",
+        lambda: lambda _pvname, **_kwargs: None,
+    )
     assert not window.machine_controller.ensure_machine_ready_for_online(window._current_task())
+    assert window.machine_ui.label_statusValue.text() == "Failed"
+    assert "returned None" in window.state.last_test_read_detail
 
     window.machine_ui.tableWidget_mapping.setRowCount(0)
     window.machine_ui.tableWidget_writeLinks.setRowCount(0)
     window.machine_controller.refresh_machine_summary()
-    assert not window.machine_ui.pushButton_test.isEnabled()
+    assert window.machine_ui.pushButton_test.isHidden()
 
 
 

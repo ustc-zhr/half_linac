@@ -142,10 +142,12 @@ class MachineWriteConfirmationDialog(QDialog):
         self.label_notice.setWordWrap(True)
         if mode == self.ONLINE_START:
             self.label_notice.setText(
+                "The read-only EPICS preflight passed. "
                 f"The optimizer may perform up to {budget} automatic setpoint writes during this run."
             )
         else:
             self.label_notice.setText(
+                "The read-only EPICS preflight passed. "
                 "The values shown above will be written once after confirmation."
             )
         root.addWidget(self.label_notice)

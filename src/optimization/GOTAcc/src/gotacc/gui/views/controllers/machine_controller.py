@@ -95,18 +95,15 @@ class MachineController:
         ui.checkBox_autoConnect.setVisible(False)
         ui.pushButton_connect.setVisible(False)
         ui.pushButton_disconnect.setVisible(False)
-        ui.pushButton_test.setText("EPICS Check")
-        ui.pushButton_test.setToolTip("Read the first configured EPICS PV for the current online task.")
-        ui.pushButton_test.setProperty("inlineAction", True)
-        ui.pushButton_test.setFixedHeight(24)
-        ui.pushButton_test.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        ui.pushButton_test.setVisible(False)
         ui.label_statusValue.setProperty("role", "statusPill")
         ui.label_statusValue.setProperty("tone", "warning")
         ui.label_statusValue.setMinimumWidth(92)
         ui.label_statusValue.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         ui.label_timeout.setToolTip("Maximum wait time for GUI EPICS PV reads.")
         ui.doubleSpinBox_timeout.setToolTip(
-            "Used by EPICS Check, current-knob reads and PV Monitor; it does not control PV writes."
+            "Used by automatic EPICS preflight, current-knob reads and PV Monitor; "
+            "it does not control PV writes."
         )
         ui.doubleSpinBox_timeout.setMaximumWidth(160)
 
@@ -119,13 +116,11 @@ class MachineController:
         for widget in (
             ui.label_machineTitle,
             ui.label_statusValue,
-            ui.pushButton_test,
         ):
             widget.setParent(ui.frame_machineHero)
         header_row.addWidget(ui.label_machineTitle)
         header_row.addSpacing(10)
         header_row.addWidget(ui.label_statusValue, 0, Qt.AlignVCenter)
-        header_row.addWidget(ui.pushButton_test, 0, Qt.AlignVCenter)
         header_row.addStretch(1)
         ui.verticalLayout_machineHero.insertLayout(0, header_row)
 
@@ -147,8 +142,6 @@ class MachineController:
 
         ui.groupBox_connection.hide()
         ui.splitter_top.hide()
-        ui.pushButton_test.style().unpolish(ui.pushButton_test)
-        ui.pushButton_test.style().polish(ui.pushButton_test)
 
     def _configure_pv_mapping_actions(self) -> None:
         ui = self.window.machine_ui
@@ -687,7 +680,8 @@ class MachineController:
         self.window.state.last_test_read_status = "Stale"
         self.window.state.last_test_read_detail = (
             "Configured PVs, readback links, write targets, or CA address changed "
-            "after the most recent check. Run PV Check again."
+            "after the most recent preflight. A fresh check will run before the next "
+            "online action."
         )
         self.set_machine_status("Stale")
         return True
@@ -1586,19 +1580,9 @@ class MachineController:
         )
         set_interval = f"set {self.window.machine_ui.doubleSpinBox_setInterval.value():g}s"
         sample_interval = f"sample {self.window.machine_ui.doubleSpinBox_sampleInterval.value():g}s"
-        task = self.view.current_task()
-        check_pvnames = self.configured_epics_pvnames(task)
-        online = self.is_online_task(task)
-        self.window.machine_ui.pushButton_test.setEnabled(online and bool(check_pvnames))
-        if not online:
-            check_tooltip = "PV Check is available for Online EPICS tasks."
-        elif not check_pvnames:
-            check_tooltip = "Configure at least one PV Mapping entry before running PV Check."
-        else:
-            check_tooltip = f"Read {len(check_pvnames)} configured EPICS PV(s)."
-        self.window.machine_ui.pushButton_test.setToolTip(check_tooltip)
         self.window.machine_ui.label_statusValue.setToolTip(
-            self.window.state.last_test_read_detail or "No PV Check has been run for the current mapping."
+            self.window.state.last_test_read_detail
+            or "Automatic EPICS preflight runs before online starts and setpoint writes."
         )
         self.window.machine_ui.label_machineSummary.setText(
             f"write policy {write_policy} · objective policies {objective_policy_summary} · "
@@ -1637,16 +1621,7 @@ class MachineController:
     def ensure_machine_ready_for_online(self, task: dict) -> bool:
         if not self.is_online_task(task):
             return True
-        status = self.window.machine_ui.label_statusValue.text().strip().lower()
-        current_identity = self.machine_check_identity(task)
-        if (
-            status == "passed"
-            and self.window.state.machine_check_identity == current_identity
-        ):
-            return True
-        if self.window.machine_ui.checkBox_autoConnect.isChecked():
-            return self.check_machine_pv(show_dialog=False)
-        return False
+        return self.check_machine_pv(show_dialog=False, task=task)
 
     def _prepare_epics_caget(self):
         try:
@@ -1675,7 +1650,9 @@ class MachineController:
             QMessageBox.critical(self.window, "EPICS Unavailable", str(exc))
             return
         self.set_machine_status("Not checked")
-        self.view.log_console("EPICS module is available. Use Check PV to verify a configured PV.")
+        self.view.log_console(
+            "EPICS module is available. A read-only preflight will run before online actions."
+        )
         self.view.append_overview_activity("Machine", status="EPICS backend available.")
 
     def disconnect_machine(self) -> None:
@@ -1683,19 +1660,24 @@ class MachineController:
         self.window.state.last_test_read_status = "Not checked"
         self.window.state.last_test_read_detail = ""
         self.set_machine_status("Not checked")
-        self.view.log_console("PV Check state cleared.")
-        self.view.append_overview_activity("Machine", status="PV Check cleared.")
+        self.view.log_console("EPICS preflight state cleared.")
+        self.view.append_overview_activity("Machine", status="EPICS preflight cleared.")
 
     def test_machine_read(self) -> None:
         self.check_machine_pv(show_dialog=True)
 
-    def check_machine_pv(self, *, show_dialog: bool = True) -> bool:
-        task = self.view.current_task()
+    def check_machine_pv(
+        self,
+        *,
+        show_dialog: bool = True,
+        task: dict | None = None,
+    ) -> bool:
+        task = task if task is not None else self.view.current_task()
         if not self.is_online_task(task):
             if show_dialog:
                 QMessageBox.information(
                     self.window,
-                    "Check PV",
+                    "EPICS Preflight",
                     "Current task is not an online EPICS task.",
                 )
             return False
@@ -1718,13 +1700,13 @@ class MachineController:
         except Exception as exc:
             self.window.state.machine_check_identity.clear()
             self.window.state.last_test_read_status = "Failed"
-            self.window.state.last_test_read_detail = f"Last PV check failed: {exc}"
+            self.window.state.last_test_read_detail = f"EPICS preflight failed: {exc}"
             self.set_machine_status("Failed")
             self.view.refresh_overview_readiness()
-            self.view.append_overview_activity("Machine", status="PV check failed.")
-            self.view.log_warning(f"EPICS PV check failed: {exc}")
+            self.view.append_overview_activity("Machine", status="EPICS preflight failed.")
+            self.view.log_warning(f"EPICS preflight failed: {exc}")
             if show_dialog:
-                QMessageBox.critical(self.window, "PV Check Failed", str(exc))
+                QMessageBox.critical(self.window, "EPICS Preflight Failed", str(exc))
             return False
 
         self.window.state.machine_check_identity = self.machine_check_identity(task)
@@ -1738,15 +1720,15 @@ class MachineController:
         self.set_machine_status("Passed")
         self.view.refresh_overview_readiness()
         self.view.append_overview_activity(
-            "Machine", status=f"PV check passed for {len(checked_values)} required PV(s)."
+            "Machine", status=f"EPICS preflight passed for {len(checked_values)} required PV(s)."
         )
         for pvname, value in checked_values:
-            self.view.log_pv(f"PV check: {pvname} -> {value}")
-        self.view.log_console("EPICS PV check completed.")
+            self.view.log_pv(f"EPICS preflight read: {pvname} -> {value}")
+        self.view.log_console("EPICS preflight completed.")
         if show_dialog:
             QMessageBox.information(
                 self.window,
-                "Check PV",
+                "EPICS Preflight",
                 f"PV read succeeded for {len(checked_values)} required PV(s).",
             )
         return True

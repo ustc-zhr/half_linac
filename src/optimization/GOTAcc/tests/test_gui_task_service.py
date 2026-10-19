@@ -835,22 +835,23 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.machine_ui.label_status.isHidden()
         assert window.machine_ui.label_statusValue.parent() is window.machine_ui.frame_machineHero
         assert window.machine_ui.label_statusValue.text() == "Not checked"
-        assert window.machine_ui.pushButton_test.parent() is window.machine_ui.frame_machineHero
+        assert window.machine_ui.pushButton_test.isHidden()
+        assert window.machine_ui.horizontalLayout_machineHeader.indexOf(
+            window.machine_ui.pushButton_test
+        ) == -1
         assert not window.machine_ui.label_caAddress.isVisible()
         assert not window.machine_ui.lineEdit_caAddress.isVisible()
         assert not window.machine_ui.checkBox_autoConnect.isVisible()
         assert not window.machine_ui.pushButton_connect.isVisible()
         assert not window.machine_ui.pushButton_disconnect.isVisible()
-        assert window.machine_ui.pushButton_test.text() == "EPICS Check"
         assert window.machine_ui.label_timeout.text() == "PV Read Timeout [s]"
         assert window.machine_ui.label_timeout.parent() is window.machine_ui.groupBox_guard
         assert window.machine_ui.doubleSpinBox_timeout.parent() is window.machine_ui.groupBox_guard
         assert not hasattr(window.machine_ui, "checkBox_confirm")
         assert "confirm_before_write" not in window._current_task()["machine"]
         assert "profile" not in window._current_task()["machine"]
-        assert window.machine_ui.pushButton_test.property("inlineAction") is True
-        assert not window.machine_ui.pushButton_test.isEnabled()
         assert window.machine_ui.label_statusValue.property("role") == "statusPill"
+        assert window.ui.label_readinessTestReadTitle.text() == "EPICS Preflight"
         assert window.machine_ui.frame_pvPresetLibrary.maximumHeight() == 40
         assert window.machine_ui.pushButton_selectPvs.text() == "Select PVs"
         assert window.machine_ui.pushButton_applySelectedPvLibrary.text() == "Sync To Task"
