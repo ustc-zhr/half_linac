@@ -2739,14 +2739,24 @@ class MachineProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(MachineProfileError, "center_lock_trigger_mm"):
             _validate_basic_app_support(profile, "rf_phase_scan", "real")
 
-    def test_half_rf_phase_scan_rejects_invalid_tracking_windows(self):
+    def test_half_rf_phase_scan_rejects_invalid_tracking_window(self):
         profile = load_profile("half")
         workflow = deepcopy(get_workflow(profile, "rf_phase_scan"))
-        workflow["scan"]["energy_tracking"]["tracking_half_window_mev"] = 120
-        workflow["scan"]["energy_tracking"]["fallback_half_window_mev"] = 100
+        workflow["scan"]["energy_tracking"]["tracking_half_window_mev"] = 0
         profile.workflows["rf_phase_scan"] = workflow
 
-        with self.assertRaisesRegex(MachineProfileError, "energy tracking windows"):
+        with self.assertRaisesRegex(MachineProfileError, "tracking window"):
+            _validate_basic_app_support(profile, "rf_phase_scan", "real")
+
+    def test_half_rf_phase_scan_rejects_invalid_relative_brightness(self):
+        profile = load_profile("half")
+        workflow = deepcopy(get_workflow(profile, "rf_phase_scan"))
+        workflow["scan"]["point_measurement"][
+            "fit_min_relative_brightness"
+        ] = 1.1
+        profile.workflows["rf_phase_scan"] = workflow
+
+        with self.assertRaisesRegex(MachineProfileError, "relative brightness"):
             _validate_basic_app_support(profile, "rf_phase_scan", "real")
 
     def test_half_rf_phase_scan_supports_vm_preview_without_write_channels(self):

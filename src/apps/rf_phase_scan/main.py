@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sys
+from dataclasses import asdict
 import time
 from datetime import datetime
 from pathlib import Path
@@ -17,8 +19,9 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox,
-    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QProgressBar, QPushButton,
-    QSizePolicy, QSpinBox, QToolBar, QToolButton, QVBoxLayout, QWidget,
+    QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
+    QMessageBox, QProgressBar, QPushButton, QSizePolicy, QSpinBox, QSplitter,
+    QTableWidget, QTableWidgetItem, QToolBar, QToolButton, QVBoxLayout, QWidget,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
 
@@ -85,6 +88,25 @@ def _frame_sample_plot_data(points, phase_mode):
     return x_values, energies
 
 
+def _excluded_frame_sample_plot_data(points, phase_mode):
+    x_values, energies = [], []
+    phase_key = (
+        "requested_phase_unwrapped_deg"
+        if phase_mode == "absolute" else "offset_deg"
+    )
+    for point in points:
+        phase = point.get(phase_key)
+        if phase is None:
+            continue
+        frame_energies = list(point.get("frame_energies_mev") or ())
+        frame_use = list(point.get("frame_use") or [True] * len(frame_energies))
+        for energy, use in zip(frame_energies, frame_use):
+            if not use and np.isfinite(float(energy)):
+                x_values.append(float(phase))
+                energies.append(float(energy))
+    return x_values, energies
+
+
 def build_style(p):
     return f"""
 QMainWindow, QDialog, QWidget#centralwidget {{ background: {p['window']}; color: {p['text']}; font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif; }}
@@ -117,6 +139,8 @@ QPushButton#stopButton {{ border-color: {p['warning']}; }}
 QToolButton#themeToggleButton {{ background: {p['button']}; border: 1px solid {p['border']}; border-radius: 11px; color: {p['text']}; font-size: 14px; font-weight: 700; }}
 QToolButton#themeToggleButton:hover {{ background: {p['button_hover']}; }}
 QToolButton#themeToggleButton:pressed {{ background: {p['input']}; }}
+QTableWidget {{ background: {p['input']}; color: {p['text']}; border: 1px solid {p['border']}; gridline-color: {p['border']}; selection-background-color: {p['button_hover']}; }}
+QHeaderView::section {{ background: {p['summary']}; color: {p['text']}; border: none; border-right: 1px solid {p['border']}; border-bottom: 1px solid {p['border']}; padding: 5px; font-weight: 700; }}
 QCheckBox {{ color: {p['text']}; font-size: 12px; font-weight: 600; spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {p['border']}; border-radius: 4px; background-color: {p['input']}; }}
 QCheckBox::indicator:checked {{ background-color: {p['accent']}; border: 2px solid {p['text']}; }}
@@ -214,8 +238,8 @@ class RFPhaseStatusStrip(QWidget):
             widget.style().polish(widget)
             widget.update()
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import (
-    EnergyMatchResult, PhaseEnergyScanner, PhaseScanSettings,
-    wait_for_phase_readback,
+    EnergyMatchResult, PhaseEnergyScanner, PhaseScanPoint, PhaseScanSettings,
+    aggregate_frame_energies, fit_phase_energy_curve, wait_for_phase_readback,
 )
 from half_linac.src.apps.rf_phase_scan.phase_scan_log import PhaseEnergyScanLog
 from half_linac.src.shared.machine_profile.app_runtime import resolve_app_runtime_paths
@@ -239,8 +263,6 @@ def _factory(*, image_pv, image_shape, pixel_width_mm, bend_pv, scan, progress, 
         restore_initial_on_cancel=True,
         frame_samples=int(scan.get("frame_samples", 3)),
         min_valid_frames=int(scan.get("min_valid_frames", 2)),
-        verification_frame_samples=int(scan.get("verification_frame_samples", 5)),
-        verification_min_valid_frames=int(scan.get("verification_min_valid_frames", 3)),
         frame_interval_s=float(scan.get("frame_interval_s", 0.2)),
         pixel_width_mm=float(pixel_width_mm),
         profile_fit_method=str(scan.get("profile_fit_method", "Gauss fit")),
@@ -298,10 +320,11 @@ class ScanThread(QThread):
     def _match(self, center, low, high, attempt):
         scan = dict(self.scan)
         scan.update(min=float(low), max=float(high), start_energy=float(center))
+        scan["frame_samples"] = int(self.point_measurement["samples"])
+        scan["min_valid_frames"] = int(self.point_measurement["min_valid_samples"])
+        scan["frame_interval_s"] = float(self.point_measurement["interval_s"])
         if self._match_count == 0:
             pipeline_name = "initial"
-        elif int(attempt) > 1:
-            pipeline_name = "fallback"
         else:
             pipeline_name = "tracking"
         configured_pipelines = self.scan.get("pipelines", {})
@@ -332,59 +355,14 @@ class ScanThread(QThread):
             B_min=float(low),
             B_max=float(high),
             start_energy=float(center),
-            reacquire_points=int(scan.get("reacquire_points", 9)),
-            brightness_peak_config=dict(
-                scan.get("stages", {}).get("brightness_peak", scan.get("brightness_peak", {}))
-            ),
             center_lock_config=dict(
                 scan.get("stages", {}).get("center_lock", scan.get("center_lock", {}))
             ),
         )
         info = tuner.center_lock_result or {}
-        if best is not None:
-            samples = int(self.point_measurement["samples"])
-            interval_s = float(self.point_measurement["interval_s"])
-            min_valid = int(self.point_measurement["min_valid_samples"])
-            try:
-                measurement = self.acquisition.sample_profile(
-                    samples=samples,
-                    min_valid=min_valid,
-                    interval_s=interval_s,
-                    fit_method=str(scan.get("profile_fit_method", "Gauss fit")),
-                    cancel_requested=self.isInterruptionRequested,
-                    allow_direct_fallback=True,
-                    min_fit_r_squared=float(scan.get("min_fit_r_squared", 0.7)),
-                )
-            except InterruptedError:
-                return EnergyMatchResult(False, "CANCELLED", message="Point measurement cancelled.")
-            if measurement is None:
-                diagnostic = dict(self.acquisition.last_diagnostic or {})
-                frame_energies_mev = _frame_energies_mev(
-                    best,
-                    diagnostic.get("frame_centers_mm"),
-                    scan.get("x_reference_mm", 0.0),
-                    scan["design_eta_m"],
-                )
-                return EnergyMatchResult(
-                    False, "MEASUREMENT_FAILED",
-                    energy_setpoint_mev=float(best),
-                    message=diagnostic.get("message") or (
-                        f"Point measurement did not retain the required "
-                        f"{min_valid}/{samples} valid frames."
-                    ),
-                    valid_frames=diagnostic.get("valid_frames", 0),
-                    total_frames=diagnostic.get("total_frames", samples),
-                    invalid_frames=diagnostic.get("invalid_frames"),
-                    center_spread_mm=diagnostic.get("center_spread_mm"),
-                    frame_centers_mm=diagnostic.get("frame_centers_mm"),
-                    frame_energies_mev=frame_energies_mev,
-                    frame_rejection_reasons=diagnostic.get("frame_rejection_reasons"),
-                    frame_fit_methods=diagnostic.get("frame_fit_methods"),
-                    fallback_reasons=diagnostic.get("fallback_reasons"),
-                    gaussian_frames=diagnostic.get("gaussian_frames"),
-                    centroid_frames=diagnostic.get("centroid_frames"),
-                )
-            energy_setpoint = float(best)
+        measurement = tuner.result_measurement
+        if best is not None and measurement is not None:
+            energy_setpoint = float(measurement["energy"])
             frame_energies_mev = _frame_energies_mev(
                 energy_setpoint,
                 measurement.get("frame_centers_mm"),
@@ -395,9 +373,15 @@ class ScanThread(QThread):
                 float(measurement["center_mm"])
                 - float(scan.get("x_reference_mm", 0.0))
             )
-            beam_energy = tuner.beam_energy_from_offset(
-                energy_setpoint, center_offset_mm
+            energy_statistics = aggregate_frame_energies(
+                frame_energies_mev, min_frames=1
             )
+            if energy_statistics is None:
+                return EnergyMatchResult(
+                    False, "MEASUREMENT_FAILED",
+                    message="No finite per-frame energy remained after measurement.",
+                )
+            beam_energy = energy_statistics["mean_mev"]
             residual_energy = beam_energy - energy_setpoint
             measurement_mode = str(
                 info.get("measurement_mode", "position_inference")
@@ -408,9 +392,12 @@ class ScanThread(QThread):
                 energy_setpoint,
                 {
                     "valid_frames": int(measurement["valid_frames"]),
-                    "total_frames": samples,
+                    "total_frames": int(measurement["total_frames"]),
                     "fit_r_squared": measurement["fit_r_squared"],
                     "beam_energy_mev": beam_energy,
+                    "energy_standard_deviation_mev": energy_statistics[
+                        "standard_deviation_mev"
+                    ],
                     "measurement_mode": measurement_mode,
                     "center_lock_applied": center_lock_applied,
                 },
@@ -419,6 +406,12 @@ class ScanThread(QThread):
                 ok=True, status=tuner.get_last_status(), energy_mev=beam_energy,
                 energy_setpoint_mev=energy_setpoint,
                 residual_energy_mev=residual_energy,
+                energy_standard_deviation_mev=energy_statistics[
+                    "standard_deviation_mev"
+                ],
+                energy_standard_error_mev=energy_statistics[
+                    "standard_error_mev"
+                ],
                 measurement_mode=measurement_mode,
                 center_lock_applied=center_lock_applied,
                 message=tuner.get_last_message(),
@@ -434,6 +427,8 @@ class ScanThread(QThread):
                 frame_energies_mev=frame_energies_mev,
                 frame_rejection_reasons=measurement.get("frame_rejection_reasons"),
                 frame_fit_methods=measurement.get("frame_fit_methods"),
+                frame_fit_r_squared=measurement.get("frame_fit_r_squared"),
+                frame_brightness=measurement.get("frame_brightness"),
                 fallback_reasons=measurement.get("fallback_reasons"),
                 gaussian_frames=measurement.get("gaussian_frames"),
                 centroid_frames=measurement.get("centroid_frames"),
@@ -446,9 +441,10 @@ class ScanThread(QThread):
             )
         diagnostic = dict(tuner.acquisition.last_diagnostic or {})
         return EnergyMatchResult(
-            ok=best is not None, status=tuner.get_last_status(),
-            energy_mev=None if best is None else float(best), message=tuner.get_last_message(),
-            center_offset_mm=info.get("final_offset_mm"), brightness=info.get("brightness"),
+            ok=False, status=tuner.get_last_status(),
+            message=tuner.get_last_message(),
+            center_offset_mm=info.get("final_offset_mm"),
+            brightness=info.get("brightness"),
             valid_frames=diagnostic.get("valid_frames", info.get("valid_frames")),
             total_frames=diagnostic.get("total_frames"),
             invalid_frames=diagnostic.get("invalid_frames"),
@@ -458,6 +454,8 @@ class ScanThread(QThread):
             frame_centers_mm=diagnostic.get("frame_centers_mm"),
             frame_rejection_reasons=diagnostic.get("frame_rejection_reasons"),
             frame_fit_methods=diagnostic.get("frame_fit_methods"),
+            frame_fit_r_squared=diagnostic.get("frame_fit_r_squared"),
+            frame_brightness=diagnostic.get("frame_brightness"),
             fallback_reasons=diagnostic.get("fallback_reasons"),
             gaussian_frames=diagnostic.get("gaussian_frames"),
             centroid_frames=diagnostic.get("centroid_frames"),
@@ -632,7 +630,6 @@ class RFPhaseScanWindow(QMainWindow):
         self.points.setValue(int(phase_config.get("steps", 13)))
         self.settle = self._spin(float(phase_config.get("settle_time_s", 1)), 0, 60)
         self.tracking = self._spin(float(tracking_config.get("tracking_half_window_mev", 25)), 0.01, 1000)
-        self.fallback = self._spin(float(tracking_config.get("fallback_half_window_mev", 100)), 0.01, 2000)
         self.measurement_samples = QSpinBox()
         self.measurement_samples.setRange(1, 100)
         self.measurement_samples.setValue(int(sampling_config.get("samples_per_point", 5)))
@@ -643,85 +640,22 @@ class RFPhaseScanWindow(QMainWindow):
         if not self.auto_tune_stages:
             self.auto_tune_stages = {
                 name: dict(self.auto_tune_defaults.get(name, {}))
-                for name in ("brightness_peak", "center_lock")
+                for name in ("center_lock",)
                 if self.auto_tune_defaults.get(name) is not None
             }
-        self.auto_tune_pipelines = dict(
-            self.auto_tune_config.get("pipelines", {})
-        )
-        for name in ("initial", "tracking", "fallback"):
-            self.auto_tune_pipelines.setdefault(
-                name, self.auto_tune_config.get(f"{name}_pipeline")
-            )
         auto_scan = dict(self.auto_tune_config["range"])
+        self.auto_tune_settle = self._spin(
+            float(auto_scan["settle_time_s"]), 0, 60
+        )
         auto_center_lock = dict(self.auto_tune_stages.get("center_lock", {}))
         auto_center_lock.update(self.auto_tune_config.get("center_lock", {}))
         auto_measurement = dict(self.auto_tune_defaults.get("measurement", {}))
         auto_measurement.update(self.auto_tune_config.get("measurement", {}))
-        auto_brightness_peak = dict(self.auto_tune_stages.get("brightness_peak", {}))
-        auto_brightness_peak.update(self.auto_tune_config.get("brightness_peak", {}))
         beam_presence = dict(auto_measurement.get("beam_presence", {}))
         self.beam_presence_sigma = float(beam_presence.get("sigma_threshold", 6.0))
         self.beam_presence_min_area_px = int(beam_presence.get("min_area_px", 50))
-        self.initial_brightness_search = QCheckBox("Use on first phase point")
-        self.initial_brightness_search.setChecked(
-            bool(self.auto_tune_config.get("initial_brightness_search", False))
-        )
-        self.initial_brightness_search.setToolTip(
-            "When disabled, the first point tries center lock directly and uses "
-            "Brightness Peak only if that attempt fails."
-        )
         self.min_fit_r_squared = float(
             auto_measurement.get("min_fit_r_squared", auto_center_lock.get("min_fit_r_squared", 0.7))
-        )
-        self.auto_tune_coarse_steps = QSpinBox()
-        self.auto_tune_coarse_steps.setRange(2, 2000)
-        self.auto_tune_coarse_steps.setValue(
-            int(
-                auto_brightness_peak.get(
-                    "points",
-                    auto_brightness_peak.get("reacquire_points", 16),
-                )
-            )
-        )
-        self.auto_tune_settle = self._spin(float(auto_scan["settle_time_s"]), 0, 60)
-        self.auto_tune_frame_samples = QSpinBox()
-        self.auto_tune_min_valid_frames = QSpinBox()
-        self.auto_tune_verification_samples = QSpinBox()
-        self.auto_tune_verification_min_valid = QSpinBox()
-        for spin in (
-            self.auto_tune_frame_samples,
-            self.auto_tune_min_valid_frames,
-            self.auto_tune_verification_samples,
-            self.auto_tune_verification_min_valid,
-        ):
-            spin.setRange(1, 100)
-        self.auto_tune_frame_samples.setValue(
-            int(auto_measurement.get("frame_samples", auto_center_lock.get("frame_samples", 3)))
-        )
-        self.auto_tune_min_valid_frames.setValue(
-            int(auto_measurement.get("min_valid_frames", auto_center_lock.get("min_valid_frames", 2)))
-        )
-        self.auto_tune_verification_samples.setValue(
-            int(
-                auto_measurement.get(
-                    "verification_frame_samples",
-                    auto_center_lock.get("verification_frame_samples", 5),
-                )
-            )
-        )
-        self.auto_tune_verification_min_valid.setValue(
-            int(
-                auto_measurement.get(
-                    "verification_min_valid_frames",
-                    auto_center_lock.get("verification_min_valid_frames", 3),
-                )
-            )
-        )
-        self.auto_tune_frame_interval = self._spin(
-            float(auto_measurement.get("frame_interval_s", auto_center_lock.get("frame_interval_s", 0.2))),
-            0,
-            10,
         )
         self.auto_tune_min_fit_r_squared = QDoubleSpinBox()
         self.auto_tune_min_fit_r_squared.setRange(0.0, 1.0)
@@ -818,6 +752,8 @@ class RFPhaseScanWindow(QMainWindow):
         self.start = QPushButton("Start scan")
         self.start.setObjectName("startButton")
         self.stop = QPushButton("Stop")
+        self.review_button = QPushButton("Review data...")
+        self.review_button.setEnabled(False)
         self.stop.setObjectName("stopButton")
         self.stop.setEnabled(False)
         self.start.clicked.connect(self.start_scan)
@@ -912,8 +848,7 @@ class RFPhaseScanWindow(QMainWindow):
 
         energy_form = QFormLayout()
         energy_form.setSpacing(7)
-        energy_form.addRow("Tracking window", self.tracking)
-        energy_form.addRow("Fallback window", self.fallback)
+        energy_form.addRow("Correction window", self.tracking)
         parameter_card("Energy tracking", energy_form)
 
         auto_tune_header = QHBoxLayout()
@@ -946,7 +881,11 @@ class RFPhaseScanWindow(QMainWindow):
         plot_layout = QVBoxLayout(plot_card)
         plot_layout.setContentsMargins(14, 13, 14, 12)
         plot_layout.setSpacing(8)
-        plot_layout.addWidget(self._section_title("Phase-Energy"))
+        phase_plot_header = QHBoxLayout()
+        phase_plot_header.addWidget(self._section_title("Phase-Energy"))
+        phase_plot_header.addStretch(1)
+        phase_plot_header.addWidget(self.review_button)
+        plot_layout.addLayout(phase_plot_header)
         plot_layout.addWidget(self.plot, 2)
         diagnostic_header = QHBoxLayout()
         diagnostic_header.setContentsMargins(0, 0, 0, 0)
@@ -977,6 +916,11 @@ class RFPhaseScanWindow(QMainWindow):
         self.setCentralWidget(body)
         self.thread = None
         self.points_data = []
+        self.last_result = {}
+        self.last_review_path = None
+        self.review_dirty = False
+        self._build_data_review_dialog()
+        self.review_button.clicked.connect(self._show_data_review)
         self.combo.currentTextChanged.connect(
             lambda text: self.status_panel.set_item("device", text or "No LLRF")
         )
@@ -997,11 +941,9 @@ class RFPhaseScanWindow(QMainWindow):
         self.measurement_interval.setSuffix(" s")
         self.auto_tune_max_offset.setSuffix(" MeV")
         self.auto_tune_settle.setSuffix(" s")
-        self.auto_tune_frame_interval.setSuffix(" s")
         self.auto_tune_lock_trigger.setSuffix(" mm")
         self.auto_tune_center_tolerance.setSuffix(" mm")
-        for widget in (self.tracking, self.fallback):
-            widget.setSuffix(" MeV")
+        self.tracking.setSuffix(" MeV")
 
     @staticmethod
     def _spin(value, low, high):
@@ -1029,12 +971,337 @@ class RFPhaseScanWindow(QMainWindow):
         self.low_label.setText("Low offset" if relative else "Start phase")
         self.high_label.setText("High offset" if relative else "Stop phase")
 
+    def _build_data_review_dialog(self):
+        self.review_dialog = QDialog(self)
+        self.review_dialog.setObjectName("energySpectrumDialog")
+        self.review_dialog.setWindowTitle("Phase-Energy Data Review")
+        self.review_dialog.setModal(False)
+        self.review_dialog.resize(1120, 650)
+        layout = QVBoxLayout(self.review_dialog)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(9)
+        self.review_summary = QLabel(
+            "Automatic selection · final point energy is the mean of selected frames.",
+            self.review_dialog,
+        )
+        self.review_summary.setProperty("role", "muted")
+        layout.addWidget(self.review_summary)
+
+        splitter = QSplitter(Qt.Horizontal, self.review_dialog)
+        self.phase_review_table = QTableWidget(0, 7, splitter)
+        self.phase_review_table.setHorizontalHeaderLabels(
+            ("Use", "Phase", "Mean E", "sigma E", "Frames", "Brightness", "Status")
+        )
+        self.frame_review_table = QTableWidget(0, 7, splitter)
+        self.frame_review_table.setHorizontalHeaderLabels(
+            ("Use", "Frame", "Energy", "Center", "Method", "R2", "Brightness")
+        )
+        for table in (self.phase_review_table, self.frame_review_table):
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+            table.setAlternatingRowColors(True)
+            table.verticalHeader().hide()
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+            table.horizontalHeader().setStretchLastSection(True)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        layout.addWidget(splitter, 1)
+
+        actions = QHBoxLayout()
+        self.review_exclude_button = QPushButton("Exclude selected", self.review_dialog)
+        self.review_use_all_button = QPushButton("Use all valid", self.review_dialog)
+        self.review_reset_button = QPushButton("Reset automatic", self.review_dialog)
+        self.review_recalculate_button = QPushButton("Recalculate", self.review_dialog)
+        for button in (
+            self.review_exclude_button, self.review_use_all_button,
+            self.review_reset_button, self.review_recalculate_button,
+        ):
+            button.setProperty("compact", True)
+            actions.addWidget(button)
+        actions.addStretch(1)
+        close_buttons = QDialogButtonBox(QDialogButtonBox.Close, self.review_dialog)
+        close_buttons.rejected.connect(self.review_dialog.hide)
+        actions.addWidget(close_buttons)
+        layout.addLayout(actions)
+
+        self.phase_review_table.currentCellChanged.connect(
+            self._review_phase_changed
+        )
+        self._review_active_table = self.phase_review_table
+        self.phase_review_table.itemSelectionChanged.connect(
+            lambda: self._set_review_active_table(self.phase_review_table)
+        )
+        self.frame_review_table.itemSelectionChanged.connect(
+            lambda: self._set_review_active_table(self.frame_review_table)
+        )
+        self.phase_review_table.itemChanged.connect(
+            self._review_phase_use_changed
+        )
+        self.frame_review_table.itemChanged.connect(
+            self._review_frame_use_changed
+        )
+        self.review_exclude_button.clicked.connect(self._exclude_review_selected)
+        self.review_use_all_button.clicked.connect(self._use_all_review_samples)
+        self.review_reset_button.clicked.connect(self._reset_automatic_review)
+        self.review_recalculate_button.clicked.connect(self._recalculate_review)
+
+    def _prepare_review_point(self, point):
+        energies = list(point.get("frame_energies_mev") or ())
+        frame_use = list(point.get("frame_use") or ())
+        if len(frame_use) != len(energies):
+            frame_use = [True] * len(energies)
+        point["frame_use"] = frame_use
+        if point.get("use_in_fit") is None:
+            point["use_in_fit"] = point.get("status") == "ok"
+        point.setdefault("_automatic_use_in_fit", bool(point["use_in_fit"]))
+
+    def _review_point(self, index):
+        for point in self.points_data:
+            if int(point.get("index", -1)) == int(index):
+                return point
+        return None
+
+    def _current_review_point(self):
+        row = self.phase_review_table.currentRow()
+        item = self.phase_review_table.item(row, 0) if row >= 0 else None
+        return None if item is None else self._review_point(item.data(Qt.UserRole))
+
+
+
+    @staticmethod
+    def _table_text(value, precision=3):
+        if value is None:
+            return "--"
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        return "--" if not np.isfinite(number) else f"{number:.{precision}f}"
+
+    def _populate_review_tables(self, selected_index=None):
+        if selected_index is None:
+            current = self._current_review_point()
+            selected_index = None if current is None else current.get("index")
+        self.phase_review_table.blockSignals(True)
+        self.phase_review_table.setRowCount(len(self.points_data))
+        selected_row = -1
+        phase_key = (
+            "requested_phase_unwrapped_deg"
+            if self.active_phase_mode == "absolute" else "offset_deg"
+        )
+        for row, point in enumerate(self.points_data):
+            self._prepare_review_point(point)
+            use = QTableWidgetItem("")
+            use.setData(Qt.UserRole, int(point.get("index", row)))
+            usable = bool(point.get("frame_energies_mev"))
+            flags = Qt.ItemIsSelectable
+            if usable:
+                flags |= Qt.ItemIsEnabled | Qt.ItemIsUserCheckable
+            use.setFlags(flags)
+            use.setCheckState(
+                Qt.Checked if point.get("use_in_fit") and usable else Qt.Unchecked
+            )
+            self.phase_review_table.setItem(row, 0, use)
+            values = (
+                self._table_text(point.get(phase_key), 2),
+                self._table_text(point.get("matched_energy_mev"), 3),
+                self._table_text(point.get("energy_standard_deviation_mev"), 3),
+                f"{sum(point['frame_use'])}/{len(point['frame_use'])}",
+                self._table_text(point.get("brightness"), 0),
+                str(point.get("status", "--")),
+            )
+            for column, value in enumerate(values, start=1):
+                item = QTableWidgetItem(value)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.phase_review_table.setItem(row, column, item)
+            if selected_index is not None and int(point.get("index", -1)) == int(selected_index):
+                selected_row = row
+        self.phase_review_table.blockSignals(False)
+        if selected_row < 0 and self.points_data:
+            selected_row = 0
+        if selected_row >= 0:
+            self.phase_review_table.selectRow(selected_row)
+            self._populate_review_frames(self.points_data[selected_row])
+        else:
+            self.frame_review_table.setRowCount(0)
+
+    def _populate_review_frames(self, point):
+        energies = list(point.get("frame_energies_mev") or ())
+        centers = list(point.get("frame_centers_mm") or ())
+        methods = list(point.get("frame_fit_methods") or ())
+        r_squared = list(point.get("frame_fit_r_squared") or ())
+        brightness = list(point.get("frame_brightness") or ())
+        frame_use = list(point.get("frame_use") or [True] * len(energies))
+        self.frame_review_table.blockSignals(True)
+        self.frame_review_table.setRowCount(len(energies))
+        for row, energy in enumerate(energies):
+            use = QTableWidgetItem("")
+            use.setData(Qt.UserRole, row)
+            use.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
+            use.setCheckState(Qt.Checked if frame_use[row] else Qt.Unchecked)
+            self.frame_review_table.setItem(row, 0, use)
+            values = (
+                str(row + 1),
+                self._table_text(energy, 4),
+                self._table_text(centers[row] if row < len(centers) else None, 4),
+                str(methods[row]) if row < len(methods) else "--",
+                self._table_text(r_squared[row] if row < len(r_squared) else None, 3),
+                self._table_text(brightness[row] if row < len(brightness) else None, 0),
+            )
+            for column, value in enumerate(values, start=1):
+                item = QTableWidgetItem(value)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.frame_review_table.setItem(row, column, item)
+        self.frame_review_table.blockSignals(False)
+
+    def _review_phase_changed(self, current_row, _current_column, _previous_row, _previous_column):
+        item = self.phase_review_table.item(current_row, 0)
+        point = None if item is None else self._review_point(item.data(Qt.UserRole))
+        self._populate_review_frames(point or {})
+
+    def _review_phase_use_changed(self, item):
+        if item.column() != 0:
+            return
+        point = self._review_point(item.data(Qt.UserRole))
+        if point is not None:
+            point["use_in_fit"] = item.checkState() == Qt.Checked
+            self._review_selection_changed()
+
+    def _review_frame_use_changed(self, item):
+        if item.column() != 0:
+            return
+        point = self._current_review_point()
+        if point is None:
+            return
+        frame = int(item.data(Qt.UserRole))
+        point["frame_use"][frame] = item.checkState() == Qt.Checked
+        self._review_selection_changed()
+
+    def _review_selection_changed(self):
+        self.review_dirty = True
+        self.review_summary.setText(
+            "Selection changed · click Recalculate; no PV will be written."
+        )
+
+    def _set_review_active_table(self, table):
+        self._review_active_table = table
+
+    def _exclude_review_selected(self):
+        table = self._review_active_table
+        for row in {index.row() for index in table.selectionModel().selectedRows()}:
+            item = table.item(row, 0)
+            if item is not None and item.flags() & Qt.ItemIsUserCheckable:
+                item.setCheckState(Qt.Unchecked)
+
+    def _use_all_review_samples(self):
+        for point in self.points_data:
+            energies = list(point.get("frame_energies_mev") or ())
+            point["frame_use"] = [True] * len(energies)
+            point["use_in_fit"] = len(energies) >= 2
+        self._populate_review_tables()
+        self._review_selection_changed()
+
+    def _reset_automatic_review(self):
+        for point in self.points_data:
+            energies = list(point.get("frame_energies_mev") or ())
+            point["frame_use"] = [True] * len(energies)
+            point["use_in_fit"] = bool(point.get("_automatic_use_in_fit", False))
+        self._populate_review_tables()
+        self._review_selection_changed()
+
+    def _fit_review_points(self):
+        names = PhaseScanPoint.__dataclass_fields__
+        return [
+            PhaseScanPoint(**{name: point[name] for name in names if name in point})
+            for point in self.points_data
+        ]
+
+    def _save_review(self, fit):
+        source = self.last_result.get("json_path")
+        if not source:
+            return None
+        source_path = Path(source)
+        review_path = source_path.with_name(source_path.stem + "_review.json")
+        review_points = []
+        for point in self.points_data:
+            review_points.append({
+                "index": point.get("index"),
+                "offset_deg": point.get("offset_deg"),
+                "requested_phase_unwrapped_deg": point.get("requested_phase_unwrapped_deg"),
+                "status": point.get("status"),
+                "use_in_fit": bool(point.get("use_in_fit")),
+                "frame_use": list(point.get("frame_use") or ()),
+                "matched_energy_mev": point.get("matched_energy_mev"),
+                "energy_standard_deviation_mev": point.get("energy_standard_deviation_mev"),
+                "energy_standard_error_mev": point.get("energy_standard_error_mev"),
+            })
+        payload = {
+            "schema_version": "phase_energy_review_v1",
+            "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "source_json_path": str(source_path),
+            "aggregation": "arithmetic_mean_of_selected_frame_energies",
+            "minimum_selected_frames": 2,
+            "points": review_points,
+            "fit": None if fit is None else asdict(fit),
+        }
+        review_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        self.last_review_path = review_path
+        return review_path
+
+    def _recalculate_review(self):
+        if self.thread is not None:
+            return
+        for point in self.points_data:
+            statistics = aggregate_frame_energies(
+                point.get("frame_energies_mev"),
+                point.get("frame_use"),
+                min_frames=2,
+            )
+            if statistics is None:
+                point["use_in_fit"] = False
+                continue
+            point["matched_energy_mev"] = statistics["mean_mev"]
+            point["energy_standard_deviation_mev"] = statistics[
+                "standard_deviation_mev"
+            ]
+            point["energy_standard_error_mev"] = statistics[
+                "standard_error_mev"
+            ]
+            if point.get("energy_setpoint_mev") is not None:
+                point["residual_energy_mev"] = (
+                    statistics["mean_mev"] - float(point["energy_setpoint_mev"])
+                )
+        fit = fit_phase_energy_curve(self._fit_review_points())
+        self.last_fit = None if fit is None else asdict(fit)
+        try:
+            review_path = self._save_review(fit)
+            saved = "" if review_path is None else f" · saved {review_path.name}"
+        except OSError as exc:
+            saved = f" · save failed: {exc}"
+        self.review_dirty = False
+        used = sum(bool(point.get("use_in_fit")) for point in self.points_data)
+        self.review_summary.setText(
+            f"Manual review · {used}/{len(self.points_data)} phase points used{saved}"
+        )
+        self._populate_review_tables()
+        self._redraw_plot(self.last_fit, self.last_initial_phase)
+        self._update_result_summary(reviewed=True)
+
+    def _show_data_review(self):
+        self._populate_review_tables()
+        self.review_dialog.show()
+        self.review_dialog.raise_()
+        self.review_dialog.activateWindow()
+
     def _build_auto_tune_dialog(self):
         self.auto_tune_settings_dialog = QDialog(self)
         self.auto_tune_settings_dialog.setObjectName("energySpectrumDialog")
         self.auto_tune_settings_dialog.setWindowTitle("Energy Match Settings")
         self.auto_tune_settings_dialog.setModal(True)
-        self.auto_tune_settings_dialog.resize(560, 680)
+        self.auto_tune_settings_dialog.resize(560, 520)
         layout = QVBoxLayout(self.auto_tune_settings_dialog)
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
@@ -1056,26 +1323,14 @@ class RFPhaseScanWindow(QMainWindow):
             layout.addWidget(group)
 
         add_group(
-            "Brightness Peak / Reacquisition",
-            (
-                ("First phase point", self.initial_brightness_search),
-                ("Candidate points", self.auto_tune_coarse_steps),
-            ),
-        )
-        add_group(
             "Timing",
             (
                 ("After energy change", self.auto_tune_settle),
-                ("Between frames", self.auto_tune_frame_interval),
             ),
         )
         add_group(
             "Sampling",
             (
-                ("Measurement frames", self.auto_tune_frame_samples),
-                ("Minimum valid frames", self.auto_tune_min_valid_frames),
-                ("Verification frames", self.auto_tune_verification_samples),
-                ("Verification minimum", self.auto_tune_verification_min_valid),
                 ("Minimum fit R²", self.auto_tune_min_fit_r_squared),
             ),
         )
@@ -1103,15 +1358,8 @@ class RFPhaseScanWindow(QMainWindow):
 
     def _auto_tune_settings_values(self):
         return {
-            "initial_brightness_search": self.initial_brightness_search.isChecked(),
-            "reacquire_points": self.auto_tune_coarse_steps.value(),
             "max_iterations": self.auto_tune_fine_steps.value(),
             "settle_time_s": self.auto_tune_settle.value(),
-            "frame_samples": self.auto_tune_frame_samples.value(),
-            "min_valid_frames": self.auto_tune_min_valid_frames.value(),
-            "verification_frame_samples": self.auto_tune_verification_samples.value(),
-            "verification_min_valid_frames": self.auto_tune_verification_min_valid.value(),
-            "frame_interval_s": self.auto_tune_frame_interval.value(),
             "min_fit_r_squared": self.auto_tune_min_fit_r_squared.value(),
             "center_lock_trigger_mm": self.auto_tune_lock_trigger.value(),
             "center_tolerance_mm": self.auto_tune_center_tolerance.value(),
@@ -1120,18 +1368,9 @@ class RFPhaseScanWindow(QMainWindow):
         }
 
     def _set_auto_tune_settings_values(self, values):
-        self.initial_brightness_search.setChecked(
-            bool(values["initial_brightness_search"])
-        )
         controls = (
-            (self.auto_tune_coarse_steps, "reacquire_points"),
             (self.auto_tune_fine_steps, "max_iterations"),
             (self.auto_tune_settle, "settle_time_s"),
-            (self.auto_tune_frame_samples, "frame_samples"),
-            (self.auto_tune_min_valid_frames, "min_valid_frames"),
-            (self.auto_tune_verification_samples, "verification_frame_samples"),
-            (self.auto_tune_verification_min_valid, "verification_min_valid_frames"),
-            (self.auto_tune_frame_interval, "frame_interval_s"),
             (self.auto_tune_min_fit_r_squared, "min_fit_r_squared"),
             (self.auto_tune_lock_trigger, "center_lock_trigger_mm"),
             (self.auto_tune_center_tolerance, "center_tolerance_mm"),
@@ -1149,10 +1388,6 @@ class RFPhaseScanWindow(QMainWindow):
 
     def _validate_auto_tune_settings(self):
         values = self._auto_tune_settings_values()
-        if values["min_valid_frames"] > values["frame_samples"]:
-            raise ValueError("Minimum valid frames cannot exceed Fine/center frames.")
-        if values["verification_min_valid_frames"] > values["verification_frame_samples"]:
-            raise ValueError("Verification minimum cannot exceed verification frames.")
         if values["center_lock_trigger_mm"] < values["center_tolerance_mm"]:
             raise ValueError(
                 "Center-lock trigger cannot be smaller than final lock tolerance."
@@ -1178,13 +1413,9 @@ class RFPhaseScanWindow(QMainWindow):
         self._update_auto_tune_settings_summary()
 
     def _update_auto_tune_settings_summary(self):
-        pipeline_label = (
-            "brightness peak first · infer position or center lock"
-            if self.initial_brightness_search.isChecked()
-            else "position inference · center lock on trigger · brightness fallback"
-        )
         self.auto_tune_settings_summary.setText(
-            f"{pipeline_label} · {self.auto_tune_coarse_steps.value()} candidate energy pts · "
+            "single measurement · center lock only on trigger · "
+            "best approximate result on incomplete lock · "
             f"step <= {self.auto_tune_max_offset.value():g} MeV · "
             f"trigger {self.auto_tune_lock_trigger.value():g} mm · "
             f"final tol {self.auto_tune_center_tolerance.value():g} mm · "
@@ -1206,42 +1437,21 @@ class RFPhaseScanWindow(QMainWindow):
         scan["min_fit_r_squared"] = self.min_fit_r_squared
         scan["beam_presence_sigma"] = self.beam_presence_sigma
         scan["beam_presence_min_area_px"] = self.beam_presence_min_area_px
-        for key in ("initial", "tracking", "fallback"):
-            configured = self.auto_tune_pipelines.get(key)
-            if configured is not None:
-                scan.setdefault("pipelines", {})[key] = list(configured)
-        configured_initial = list(
-            scan.get("pipelines", {}).get("initial", ["center_lock"])
-        )
-        initial_without_search = [
-            stage for stage in configured_initial if stage != "brightness_peak"
-        ] or ["center_lock"]
-        initial_pipeline = (
-            ["brightness_peak", *initial_without_search]
-            if self.initial_brightness_search.isChecked()
-            else initial_without_search
-        )
-        scan.setdefault("pipelines", {})["initial"] = list(initial_pipeline)
+        scan["pipelines"] = {
+            "initial": ["center_lock"],
+            "tracking": ["center_lock"],
+        }
         scan["stages"] = {
-            "brightness_peak": {
-            "strategy": str(
-                dict(self.auto_tune_stages.get("brightness_peak", {}), **self.auto_tune_config.get("brightness_peak", {})).get(
-                    "strategy", "center_outward"
-                )
-            ),
-            "points": int(self.auto_tune_coarse_steps.value()),
-            },
             "center_lock": {
-            "strategy": str(
-                dict(self.auto_tune_stages.get("center_lock", {}), **self.auto_tune_config.get("center_lock", {})).get(
-                    "strategy", "secant_dispersion"
+                "strategy": str(
+                    dict(
+                        self.auto_tune_stages.get("center_lock", {}),
+                        **self.auto_tune_config.get("center_lock", {}),
+                    ).get("strategy", "secant_dispersion")
                 )
-            )
             },
         }
-        scan["brightness_peak"] = scan["stages"]["brightness_peak"]
         scan["center_lock"] = scan["stages"]["center_lock"]
-        scan["reacquire_points"] = int(self.auto_tune_coarse_steps.value())
         scan["max_iterations"] = int(self.auto_tune_fine_steps.value())
         scan["target_x_pixel"] = reference_x_pixel(
             scan["x_reference_mm"], geometry.shape[0], geometry.pixel_width_mm
@@ -1267,13 +1477,16 @@ class RFPhaseScanWindow(QMainWindow):
 
     def _set_scan_status(self, text, tooltip=None):
         normalized = str(text).strip().lower()
-        if normalized in {"running", "preparing", "done", "success"} or normalized.startswith("point "):
-            tone = "success"
-        elif any(
+        if any(
             marker in normalized
-            for marker in ("fail", "invalid", "stopping", "restoring", "cancel", "unavailable")
+            for marker in (
+                "fail", "invalid", "stopping", "restoring", "cancel",
+                "unavailable", "low_signal", "low signal", "approximate",
+            )
         ):
             tone = "warning"
+        elif normalized in {"running", "preparing", "done", "success"} or normalized.startswith("point "):
+            tone = "success"
         else:
             tone = "subtle"
         self.status_panel.set_item("scan", str(text), tone, tooltip)
@@ -1597,7 +1810,8 @@ class RFPhaseScanWindow(QMainWindow):
         axes.clear()
         valid = [
             point for point in self.points_data
-            if point.get("matched_energy_mev") is not None
+            if point.get("use_in_fit", point.get("status") == "ok")
+            and point.get("matched_energy_mev") is not None
         ]
         frame_x, frame_energy = _frame_sample_plot_data(
             self.points_data, self.active_phase_mode
@@ -1605,7 +1819,16 @@ class RFPhaseScanWindow(QMainWindow):
         if frame_energy:
             axes.scatter(
                 frame_x, frame_energy, s=18, color=palette["muted"], alpha=0.35,
-                edgecolors="none", zorder=1,
+                edgecolors="none", zorder=1, label="frame samples",
+            )
+        excluded_frame_x, excluded_frame_energy = _excluded_frame_sample_plot_data(
+            self.points_data, self.active_phase_mode
+        )
+        if excluded_frame_energy:
+            axes.scatter(
+                excluded_frame_x, excluded_frame_energy, s=28,
+                color=palette["muted"], marker="x", alpha=0.9, zorder=2,
+                label="excluded frames",
             )
         if valid:
             x_values = [
@@ -1614,10 +1837,56 @@ class RFPhaseScanWindow(QMainWindow):
                 else point["offset_deg"]
                 for point in valid
             ]
+            valid_energies = [point["matched_energy_mev"] for point in valid]
             axes.plot(
-                x_values,
-                [point["matched_energy_mev"] for point in valid],
+                x_values, valid_energies,
                 "o-", color=palette["trace"], linewidth=1.6, markersize=5,
+                label="phase mean",
+            )
+            deviations = [
+                float(point.get("energy_standard_deviation_mev") or 0.0)
+                for point in valid
+            ]
+            if any(value > 0 for value in deviations):
+                axes.errorbar(
+                    x_values, valid_energies, yerr=deviations, fmt="none",
+                    ecolor=palette["trace"], alpha=0.65, capsize=3, zorder=2,
+                )
+        low_signal = [
+            point for point in self.points_data
+            if point.get("status") == "low_signal"
+            and not point.get("use_in_fit", False)
+            and point.get("matched_energy_mev") is not None
+        ]
+        if low_signal:
+            x_low_signal = [
+                point["requested_phase_unwrapped_deg"]
+                if self.active_phase_mode == "absolute"
+                else point["offset_deg"]
+                for point in low_signal
+            ]
+            axes.plot(
+                x_low_signal,
+                [point["matched_energy_mev"] for point in low_signal],
+                "x", color=palette["warning"], markersize=7,
+                markeredgewidth=1.5, label="low signal",
+            )
+        excluded = [
+            point for point in self.points_data
+            if point.get("status") not in {"failed", "low_signal"}
+            and not point.get("use_in_fit", point.get("status") == "ok")
+            and point.get("matched_energy_mev") is not None
+        ]
+        if excluded:
+            x_excluded = [
+                point["requested_phase_unwrapped_deg"]
+                if self.active_phase_mode == "absolute" else point["offset_deg"]
+                for point in excluded
+            ]
+            axes.plot(
+                x_excluded, [point["matched_energy_mev"] for point in excluded],
+                "x", color=palette["muted"], markersize=7,
+                markeredgewidth=1.5, label="excluded phase",
             )
         failed = [point for point in self.points_data if point.get("status") == "failed"]
         if failed:
@@ -1666,7 +1935,7 @@ class RFPhaseScanWindow(QMainWindow):
         )
         axes.set_ylabel("Measured beam energy (MeV)")
         axes.grid(True, color=palette["grid"], linewidth=0.7, alpha=0.7)
-        if failed:
+        if frame_energy or valid or failed or low_signal or excluded or excluded_frame_energy:
             legend = axes.legend(frameon=False, fontsize=8, loc="best")
             for text in legend.get_texts():
                 text.set_color(palette["text"])
@@ -1873,9 +2142,6 @@ class RFPhaseScanWindow(QMainWindow):
         if self.low.value() >= self.high.value() or self.high.value() - self.low.value() > 360:
             self._set_scan_status("Invalid phase range")
             return
-        if self.fallback.value() < self.tracking.value():
-            self._set_scan_status("Invalid energy windows", "Fallback window must cover tracking window.")
-            return
         try:
             self._validate_auto_tune_settings()
         except ValueError as exc:
@@ -1922,13 +2188,11 @@ class RFPhaseScanWindow(QMainWindow):
             points=self.points.value(),
             phase_settle_time_s=float(self.settle.value()),
             tracking_half_window_mev=float(self.tracking.value()),
-            fallback_half_window_mev=float(self.fallback.value()),
-            max_consecutive_failures=int(tracking_config["max_consecutive_failures"]),
             energy_low_mev=energy_low,
             energy_high_mev=energy_high,
             phase_mode=str(self.phase_mode.currentData()),
-            retry_first_point_on_failure=not bool(
-                auto_tune_settings["initial_brightness_search"]
+            min_relative_brightness=float(
+                sampling_config.get("fit_min_relative_brightness", 0.05)
             ),
         )
         image_pv = PV(resolve_channel(
@@ -1952,6 +2216,16 @@ class RFPhaseScanWindow(QMainWindow):
             str(self.phase_verification["channel"]),
         )
         self.points_data = []
+        self.last_result = {}
+        self.last_review_path = None
+        self.review_dirty = False
+        self.review_button.setEnabled(False)
+        self.review_dialog.hide()
+        self.phase_review_table.setRowCount(0)
+        self.frame_review_table.setRowCount(0)
+        self.review_summary.setText(
+            "Automatic selection · final point energy is the mean of selected frames."
+        )
         self.active_phase_mode = phase.phase_mode
         self.last_fit = None
         self.last_initial_phase = None
@@ -1970,7 +2244,7 @@ class RFPhaseScanWindow(QMainWindow):
         background_metadata["roi_enabled"] = self.roi_control.use_roi.isChecked()
         background_metadata["roi"] = self.roi_control.roi().as_dict()
         self.thread = ScanThread(context=self.context, target=target, settings=phase, scan=auto_tune_settings, image_pv=image_pv, image_shape=geometry.shape, pixel_width_mm=geometry.pixel_width_mm, phase_pv=target.pv_name, phase_readback_pv=phase_readback_pv, phase_verification=self.phase_verification, energy_pv=energy_pv, remove_bg=self.use_background.isChecked() and self.background_image is not None, bg_image=self.background_image, background_metadata=background_metadata, point_measurement=point_measurement, roi=self.roi_control.active_roi())
-        for widget in (self.combo, self.phase_mode, self.low, self.high, self.points, self.settle, self.tracking, self.fallback, self.measurement_samples, self.measurement_interval, self.auto_tune_settings_button, self.use_background, self.background_settings_button, self.roi_button, self.preview_button):
+        for widget in (self.combo, self.phase_mode, self.low, self.high, self.points, self.settle, self.tracking, self.measurement_samples, self.measurement_interval, self.auto_tune_settings_button, self.use_background, self.background_settings_button, self.roi_button, self.preview_button):
             widget.setEnabled(False)
         self.thread.point.connect(self._point)
         self.thread.diagnostic.connect(self._update_diagnostics)
@@ -1984,6 +2258,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.stop.setEnabled(True)
 
     def _point(self, point):
+        self._prepare_review_point(point)
         self.points_data.append(point)
         self.points_data.sort(key=lambda item: int(item.get("index", 0)))
         self._redraw_plot()
@@ -2009,25 +2284,46 @@ class RFPhaseScanWindow(QMainWindow):
             self.thread.requestInterruption()
             self._set_scan_status("Stopping")
 
+    def _update_result_summary(self, *, reviewed=False):
+        result = self.last_result
+        fit = self.last_fit or {}
+        review_text = "  |  MANUAL REVIEW" if reviewed else ""
+        paths = ""
+        if result.get("csv_path") or result.get("json_path"):
+            paths = f"\nCSV: {result.get('csv_path')}\nJSON: {result.get('json_path')}"
+        if self.last_review_path is not None:
+            paths += f"\nReview: {self.last_review_path}"
+        self.result.setText(
+            f"Restore: phase {'OK' if result.get('phase_restored') else 'FAILED'}  |  "
+            f"energy {'OK' if result.get('energy_restored') else 'FAILED'}"
+            + review_text
+            + (
+                f"  |  Crest phase {float(fit['crest_phase_command_deg']):+.2f} deg  |  "
+                f"Energy gain {float(fit['amplitude_mev']):.2f} MeV  |  "
+                f"Baseline energy {float(fit['baseline_energy_mev']):.2f} MeV  |  "
+                f"RMSE {float(fit['rmse_mev']):.3f} MeV  |  "
+                f"R2 {float(fit['r_squared']):.3f}"
+                if fit else "  |  fit unavailable"
+            )
+            + paths
+        )
+
     def finished(self, result):
         self._set_scan_status(str(result.get("status", "FAILED")))
         self.stop.setEnabled(False); self.start.setEnabled(True); self.thread = None
         self.progress.setVisible(False)
+        self.last_result = dict(result)
+        if not self.points_data and result.get("points"):
+            self.points_data = [dict(point) for point in result["points"]]
+        for point in self.points_data:
+            self._prepare_review_point(point)
         fit = result.get("fit") or {}
         self.last_fit = fit or None
         self.last_initial_phase = result.get("initial_phase_deg")
+        self.review_button.setEnabled(bool(self.points_data))
+        self._populate_review_tables()
         self._redraw_plot(self.last_fit, self.last_initial_phase)
-        self.result.setText(
-            f"Restore: phase {'OK' if result.get('phase_restored') else 'FAILED'}  |  "
-            f"energy {'OK' if result.get('energy_restored') else 'FAILED'}"
-            + (f"  |  Crest phase {float(fit['crest_phase_command_deg']):+.2f} deg  |  "
-               f"Energy gain {float(fit['amplitude_mev']):.2f} MeV  |  "
-               f"Baseline energy {float(fit['baseline_energy_mev']):.2f} MeV  |  "
-               f"RMSE {float(fit['rmse_mev']):.3f} MeV  |  R2 {float(fit['r_squared']):.3f}"
-               if fit else "  |  fit unavailable")
-            + (f"\nCSV: {result.get('csv_path')}\nJSON: {result.get('json_path')}"
-               if result.get("csv_path") or result.get("json_path") else "")
-        )
+        self._update_result_summary()
         phase_restored = bool(result.get("phase_restored"))
         energy_restored = bool(result.get("energy_restored"))
         if phase_restored and energy_restored:
@@ -2036,7 +2332,7 @@ class RFPhaseScanWindow(QMainWindow):
             self.status_panel.set_item("restore", "Partial failure", "warning")
         else:
             self.status_panel.set_item("restore", "Failed", "warning")
-        for widget in (self.combo, self.phase_mode, self.low, self.high, self.points, self.settle, self.tracking, self.fallback, self.measurement_samples, self.measurement_interval, self.auto_tune_settings_button, self.use_background, self.background_settings_button, self.roi_button, self.preview_button):
+        for widget in (self.combo, self.phase_mode, self.low, self.high, self.points, self.settle, self.tracking, self.measurement_samples, self.measurement_interval, self.auto_tune_settings_button, self.use_background, self.background_settings_button, self.roi_button, self.preview_button):
             widget.setEnabled(True)
 
     def closeEvent(self, event):

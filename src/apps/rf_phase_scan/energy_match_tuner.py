@@ -62,8 +62,6 @@ class RFPhaseEnergyMatcher:
         restore_initial_on_cancel=True,
         frame_samples=3,
         min_valid_frames=2,
-        verification_frame_samples=5,
-        verification_min_valid_frames=3,
         frame_interval_s=0.2,
         pixel_width_mm=None,
         profile_fit_method="Gauss fit",
@@ -102,8 +100,6 @@ class RFPhaseEnergyMatcher:
         self.restore_initial_on_cancel = bool(restore_initial_on_cancel)
         self.frame_samples = int(frame_samples)
         self.min_valid_frames = int(min_valid_frames)
-        self.verification_frame_samples = int(verification_frame_samples)
-        self.verification_min_valid_frames = int(verification_min_valid_frames)
         self.frame_interval_s = float(frame_interval_s)
         self.profile_fit_method = str(profile_fit_method)
         self.min_fit_r_squared = float(min_fit_r_squared)
@@ -123,10 +119,6 @@ class RFPhaseEnergyMatcher:
             raise ValueError("Unsupported energy-match objective.")
         if not 1 <= self.min_valid_frames <= self.frame_samples:
             raise ValueError("min_valid_frames must be between 1 and frame_samples.")
-        if not 1 <= self.verification_min_valid_frames <= self.verification_frame_samples:
-            raise ValueError(
-                "verification_min_valid_frames must be between 1 and verification_frame_samples."
-            )
         if self.frame_interval_s < 0 or self.settle_time_s < 0:
             raise ValueError("Sampling and settle intervals must not be negative.")
         if self.center_tolerance_mm <= 0 or self.max_correction_step_mev <= 0:
@@ -150,6 +142,7 @@ class RFPhaseEnergyMatcher:
         self.best_energy = None
         self.center_lock_result = None
         self.pipeline_result = None
+        self.result_measurement = None
         self._pipeline_seed = None
         self.last_message = None
         self.status = "IDLE"
@@ -187,11 +180,9 @@ class RFPhaseEnergyMatcher:
                 {"stage": stage, "energy_mev": float(energy), "has_beam": bool(has_beam), **details}
             )
 
-    def _measure(self, energy, stage, *, verification=False):
-        samples = self.verification_frame_samples if verification else self.frame_samples
-        min_valid = (
-            self.verification_min_valid_frames if verification else self.min_valid_frames
-        )
+    def _measure(self, energy, stage):
+        samples = self.frame_samples
+        min_valid = self.min_valid_frames
         try:
             result = self.acquisition.sample_profile(
                 samples=samples,
@@ -243,9 +234,9 @@ class RFPhaseEnergyMatcher:
         )
         return result
 
-    def _at(self, energy, stage, *, verification=False):
+    def _at(self, energy, stage):
         self._set_energy(energy)
-        return self._measure(energy, stage, verification=verification)
+        return self._measure(energy, stage)
 
     @staticmethod
     def _secant_energy(first, second):
@@ -280,6 +271,7 @@ class RFPhaseEnergyMatcher:
         )
 
     def _accept_position_measurement(self, seed):
+        self.result_measurement = seed
         setpoint = float(seed["energy"])
         offset_mm = float(seed["offset_mm"])
         inferred_energy = self.beam_energy_from_offset(setpoint, offset_mm)
@@ -296,6 +288,8 @@ class RFPhaseEnergyMatcher:
             "fit_r_squared": seed["fit_r_squared"],
             "center_lock_applied": False,
             "measurement_mode": "position_inference",
+            "lock_converged": None,
+            "approximate": False,
         }
         self._report(
             "position_inference",
@@ -335,9 +329,41 @@ class RFPhaseEnergyMatcher:
             return max(candidates, key=lambda item: item["brightness"])
         return min(candidates, key=lambda item: abs(item["offset_mm"]))
 
+    def _accept_center_measurement(self, seed, measurement, count, *, converged, message=None):
+        setpoint = float(measurement["energy"])
+        offset_mm = float(measurement["offset_mm"])
+        inferred_energy = self.beam_energy_from_offset(setpoint, offset_mm)
+        self.result_measurement = measurement
+        self.last_message = message
+        self.center_lock_result = {
+            "seed_energy": float(seed["energy"]),
+            "final_energy": setpoint,
+            "inferred_energy_mev": inferred_energy,
+            "residual_energy_mev": inferred_energy - setpoint,
+            "final_offset_mm": offset_mm,
+            "brightness": float(measurement["brightness"]),
+            "valid_frames": int(measurement["valid_frames"]),
+            "measurements": int(count),
+            "fit_method": measurement["fit_method"],
+            "fit_r_squared": measurement["fit_r_squared"],
+            "center_lock_applied": True,
+            "measurement_mode": "center_lock" if converged else "approximate_lock",
+            "lock_converged": bool(converged),
+            "approximate": not converged,
+        }
+        self._report(
+            "center_lock" if converged else "approximate_lock",
+            setpoint,
+            True,
+            **self.center_lock_result,
+        )
+        return setpoint
+
     def _track_center(self, seed, low, high):
         measurements = [seed]
         current = seed
+        actuator_energy = float(seed["energy"])
+        failure_message = None
         for _iteration in range(self.max_iterations):
             if abs(current["offset_mm"]) <= self.center_tolerance_mm:
                 break
@@ -348,37 +374,30 @@ class RFPhaseEnergyMatcher:
                 candidate_energy = self._predicted_energy(current)
             candidate_energy = float(np.clip(candidate_energy, low, high))
             if abs(candidate_energy - current["energy"]) <= 1e-9:
+                failure_message = "Center correction reached its configured energy limit."
                 break
             candidate = self._at(candidate_energy, "correct")
+            actuator_energy = candidate_energy
             if candidate is None:
-                self.last_message = "Beam profile was lost during center correction."
-                return None
+                failure_message = "Beam profile was lost during center correction."
+                break
             measurements.append(candidate)
             current = candidate
-        if abs(current["offset_mm"]) > self.center_tolerance_mm:
-            best = min(measurements, key=lambda item: abs(item["offset_mm"]))
-            self.last_message = (
-                "Energy Match did not reach the center tolerance; "
-                f"best dx={best['offset_mm']:+.3f} mm."
+
+        best = min(measurements, key=lambda item: abs(item["offset_mm"]))
+        converged = abs(best["offset_mm"]) <= self.center_tolerance_mm
+        if not converged:
+            if abs(float(best["energy"]) - actuator_energy) > 1e-9:
+                self._set_energy(float(best["energy"]))
+            detail = "best dx={:+.3f} mm".format(float(best["offset_mm"]))
+            message = failure_message or "Center lock did not reach the final tolerance."
+            message = f"{message} Using approximate energy from {detail}."
+            return self._accept_center_measurement(
+                seed, best, len(measurements), converged=False, message=message
             )
-            return None
-        verified = self._at(current["energy"], "verify", verification=True)
-        if verified is None or abs(verified["offset_mm"]) > self.center_tolerance_mm:
-            self.last_message = "Final profile verification did not meet center tolerance."
-            return None
-        self.center_lock_result = {
-            "seed_energy": float(seed["energy"]),
-            "final_energy": float(verified["energy"]),
-            "final_offset_mm": float(verified["offset_mm"]),
-            "brightness": float(verified["brightness"]),
-            "valid_frames": int(verified["valid_frames"]),
-            "measurements": len(measurements),
-            "fit_method": verified["fit_method"],
-            "fit_r_squared": verified["fit_r_squared"],
-            "center_lock_applied": True,
-            "measurement_mode": "center_lock",
-        }
-        return float(verified["energy"])
+        return self._accept_center_measurement(
+            seed, best, len(measurements), converged=True
+        )
 
     def _run_brightness_peak_stage(self, low, high, config):
         points = int(config.get("points", config.get("reacquire_points", 9)))
@@ -412,6 +431,12 @@ class RFPhaseEnergyMatcher:
             },
         )
 
+    def _measure_current_with_retry(self):
+        seed = self._measure(float(self.initial_energy), "track")
+        if seed is None:
+            seed = self._measure(float(self.initial_energy), "track_retry")
+        return seed
+
     def _run_center_lock_stage(self, seed_energy, low, high, config):
         strategy = str(config.get("strategy", "secant_dispersion")).strip()
         if strategy != "secant_dispersion":
@@ -423,7 +448,7 @@ class RFPhaseEnergyMatcher:
         seed = self._pipeline_seed
         measuring_current = seed is None
         if measuring_current:
-            seed = self._measure(float(self.initial_energy), "track")
+            seed = self._measure_current_with_retry()
         else:
             # Brightness search moves the actuator across its full candidate range;
             # return to the selected seed before applying the trigger decision.
@@ -475,6 +500,7 @@ class RFPhaseEnergyMatcher:
         self.last_message = None
         self.center_lock_result = None
         self.pipeline_result = None
+        self.result_measurement = None
         self._pipeline_seed = None
         self._current_measurement_failed = False
         initial = caget(self.bend_pv)
@@ -489,7 +515,7 @@ class RFPhaseEnergyMatcher:
                 if pipeline_has(self.pipeline, BRIGHTNESS_PEAK):
                     seed = self._reacquire(low, high, center, reacquire_points)
                 else:
-                    seed = self._measure(float(self.initial_energy), "track")
+                    seed = self._measure_current_with_retry()
                     if seed is None:
                         self._current_measurement_failed = True
                 if seed is None and pipeline_has(self.pipeline, BRIGHTNESS_PEAK):

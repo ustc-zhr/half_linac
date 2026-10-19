@@ -1,7 +1,10 @@
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import (
     EnergyMatchResult,
     PhaseEnergyScanner,
+    PhaseScanPoint,
     PhaseScanSettings,
+    aggregate_frame_energies,
+    fit_phase_energy_curve,
     wait_for_phase_readback,
 )
 from half_linac.src.apps.rf_phase_scan.image_acquisition import RFImageAcquisition
@@ -18,22 +21,16 @@ import numpy as np
 import pytest
 
 
-def _settings(
-    *, mode="relative", start=-10.0, stop=10.0, points=3,
-    retry_first_point_on_failure=False,
-):
+def _settings(*, mode="relative", start=-10.0, stop=10.0, points=3):
     return PhaseScanSettings(
         low_offset_deg=start,
         high_offset_deg=stop,
         points=points,
         phase_settle_time_s=0.0,
         tracking_half_window_mev=25.0,
-        fallback_half_window_mev=100.0,
-        max_consecutive_failures=3,
         energy_low_mev=0.0,
         energy_high_mev=2450.0,
         phase_mode=mode,
-        retry_first_point_on_failure=retry_first_point_on_failure,
     )
 
 
@@ -111,18 +108,20 @@ def test_point_measurement_failure_does_not_retry_fallback_window():
     assert all(point.attempts == 1 for point in result.points)
 
 
-def test_first_point_can_retry_after_direct_match_failure():
+def test_failed_point_does_not_start_a_wide_fallback_scan():
     commands = []
     attempts = []
 
     def match(_center, low, high, attempt):
         attempts.append((low, high, attempt))
         if len(attempts) == 1:
-            return EnergyMatchResult(False, "FAILED", message="Direct center lock failed.")
-        return EnergyMatchResult(True, "DONE", energy_mev=2200.0)
+            return EnergyMatchResult(False, "FAILED", message="Center lock failed.")
+        return EnergyMatchResult(
+            True, "DONE", energy_mev=2200.0, brightness=1000.0
+        )
 
     scanner = _scanner(
-        _settings(retry_first_point_on_failure=True),
+        _settings(),
         initial_phase=0.0,
         commands=commands,
         match_energy=match,
@@ -131,11 +130,93 @@ def test_first_point_can_retry_after_direct_match_failure():
     result = scanner.run()
 
     assert result.status == "DONE"
-    assert result.points[0].attempts == 2
-    assert attempts[:2] == [
+    assert result.points[0].status == "failed"
+    assert all(point.attempts == 1 for point in result.points)
+    assert attempts == [
         (2175.0, 2225.0, 1),
-        (2100.0, 2300.0, 2),
+        (2175.0, 2225.0, 1),
+        (2175.0, 2225.0, 1),
     ]
+
+
+def test_low_brightness_point_is_displayed_but_excluded_from_curve_fit():
+    commands = []
+
+    def match(_center, _low, _high, _attempt):
+        phase = commands[-1]
+        energy = 2100.0 + 100.0 * np.cos(np.deg2rad(phase))
+        brightness = 1000.0
+        if phase == pytest.approx(50.0):
+            energy = 2300.0
+            brightness = 1.0
+        return EnergyMatchResult(
+            True, "DONE", energy_mev=energy, brightness=brightness
+        )
+
+    scanner = _scanner(
+        _settings(start=-50.0, stop=50.0, points=11),
+        initial_phase=0.0,
+        commands=commands,
+        match_energy=match,
+    )
+
+    result = scanner.run()
+
+    low_signal = [point for point in result.points if point.status == "low_signal"]
+    assert [point.offset_deg for point in low_signal] == [50.0]
+    assert low_signal[0].matched_energy_mev == 2300.0
+    assert "excluded from curve fit" in low_signal[0].message
+    assert result.fit is not None
+    assert result.fit.points_used == 10
+    assert result.fit.amplitude_mev == pytest.approx(100.0)
+    assert result.fit.r_squared == pytest.approx(1.0)
+
+
+def test_selected_frame_energies_use_arithmetic_mean_and_sample_spread():
+    statistics = aggregate_frame_energies(
+        [2190.0, 2200.0, 2300.0, None, np.nan],
+        [True, True, False, True, True],
+    )
+
+    assert statistics == pytest.approx({
+        "mean_mev": 2195.0,
+        "standard_deviation_mev": np.sqrt(50.0),
+        "standard_error_mev": 5.0,
+        "frames_used": 2,
+    })
+    assert aggregate_frame_energies([2190.0, 2200.0], [True, False]) is None
+    with pytest.raises(ValueError, match="selection length"):
+        aggregate_frame_energies([2190.0], [True, False])
+
+
+def test_phase_curve_fit_respects_manual_point_selection():
+    points = []
+    for index, phase in enumerate(np.linspace(-50.0, 50.0, 11)):
+        energy = 2100.0 + 100.0 * np.cos(np.deg2rad(phase))
+        use_in_fit = True
+        if phase == pytest.approx(50.0):
+            energy = 2300.0
+            use_in_fit = False
+        points.append(PhaseScanPoint(
+            index=index,
+            offset_deg=float(phase),
+            requested_phase_unwrapped_deg=float(phase),
+            command_phase_deg=float(phase),
+            status="ok",
+            attempts=1,
+            search_low_mev=2000.0,
+            search_high_mev=2400.0,
+            matched_energy_mev=float(energy),
+            use_in_fit=use_in_fit,
+        ))
+
+    fit = fit_phase_energy_curve(points)
+
+    assert fit is not None
+    assert fit.points_used == 10
+    assert fit.baseline_energy_mev == pytest.approx(2100.0)
+    assert fit.amplitude_mev == pytest.approx(100.0)
+    assert fit.r_squared == pytest.approx(1.0)
 
 
 def test_phase_readback_verification_polls_until_wrapped_target_arrives(monkeypatch):
@@ -186,8 +267,6 @@ def test_energy_match_progress_includes_the_measured_image():
     matcher.acquisition = Acquisition()
     matcher.frame_samples = 3
     matcher.min_valid_frames = 2
-    matcher.verification_frame_samples = 5
-    matcher.verification_min_valid_frames = 3
     matcher.frame_interval_s = 0.0
     matcher.profile_fit_method = "Gauss fit"
     matcher.min_fit_r_squared = 0.7
@@ -372,6 +451,8 @@ def test_rf_image_acquisition_accepts_centroid_fallback_and_reports_methods(monk
     assert result["frame_fit_methods"] == [
         "Projection RMS", "Gauss fit", "Projection RMS",
     ]
+    assert result["frame_fit_r_squared"] == [None, 0.95, None]
+    assert result["frame_brightness"] == [1.0, 2.0, 3.0]
     assert result["gaussian_frames"] == 1
     assert result["centroid_frames"] == 2
     assert result["fallback_reasons"] == {
@@ -511,7 +592,8 @@ def test_rf_projection_preserves_established_edge_crop():
 
 def test_frame_energy_samples_are_converted_and_grouped_by_phase():
     from half_linac.src.apps.rf_phase_scan.main import (
-        _frame_energies_mev, _frame_sample_plot_data,
+        _excluded_frame_sample_plot_data, _frame_energies_mev,
+        _frame_sample_plot_data,
     )
 
     energies = _frame_energies_mev(
@@ -524,20 +606,74 @@ def test_frame_energy_samples_are_converted_and_grouped_by_phase():
             "offset_deg": -10.0,
             "requested_phase_unwrapped_deg": 20.0,
             "frame_energies_mev": energies[:2],
+            "frame_use": [True, False],
         },
         {
             "offset_deg": 10.0,
             "requested_phase_unwrapped_deg": 40.0,
             "frame_energies_mev": energies[2:],
+            "frame_use": [False],
         },
     ]
     relative_x, relative_energy = _frame_sample_plot_data(points, "relative")
     absolute_x, absolute_energy = _frame_sample_plot_data(points, "absolute")
+    excluded_x, excluded_energy = _excluded_frame_sample_plot_data(
+        points, "relative"
+    )
 
     assert relative_x == [-10.0, -10.0, 10.0]
     assert absolute_x == [20.0, 20.0, 40.0]
     assert relative_energy == pytest.approx(energies)
     assert absolute_energy == pytest.approx(energies)
+    assert excluded_x == [-10.0, 10.0]
+    assert excluded_energy == pytest.approx([energies[1], energies[2]])
+
+
+def test_rf_phase_scan_window_starts_and_reviews_frame_selection(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("HALF_LINAC_MACHINE_ID", "half")
+    monkeypatch.setenv("HALF_LINAC_CONTROL_BACKEND", "vm")
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtWidgets import QApplication
+    from half_linac.src.apps.rf_phase_scan.main import RFPhaseScanWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = RFPhaseScanWindow()
+    window.points_data = [
+        dict(vars(PhaseScanPoint(
+            index=index,
+            offset_deg=float(index),
+            requested_phase_unwrapped_deg=float(index),
+            command_phase_deg=float(index),
+            status="ok",
+            attempts=1,
+            search_low_mev=2100.0,
+            search_high_mev=2300.0,
+            matched_energy_mev=2200.0 + index,
+            frame_energies_mev=[
+                2199.0 + index, 2200.0 + index, 2201.0 + index,
+            ],
+            frame_use=[True, True, True],
+            use_in_fit=True,
+        )))
+        for index in range(5)
+    ]
+
+    window._populate_review_tables()
+    window.frame_review_table.selectRow(0)
+    app.processEvents()
+    window._exclude_review_selected()
+
+    assert window.phase_review_table.rowCount() == 5
+    assert window.frame_review_table.rowCount() == 3
+    assert window.points_data[0]["frame_use"] == [False, True, True]
+    assert window.frame_review_table.item(0, 0).checkState() == Qt.Unchecked
+
+    window._recalculate_review()
+
+    assert window.points_data[0]["matched_energy_mev"] == pytest.approx(2200.5)
+    assert window.last_fit is not None
+    window.close()
 
 
 def test_rf_status_strip_prefers_single_line_horizontal_expansion(monkeypatch):
@@ -551,7 +687,7 @@ def test_rf_status_strip_prefers_single_line_horizontal_expansion(monkeypatch):
     _container, value_label = strip._items["scan"]
     short_width = value_label.minimumWidth()
 
-    status = "Energy Match: Brightness Peak"
+    status = "Energy Match: Approximate Lock"
     strip.set_item("scan", status)
     app.processEvents()
 
@@ -614,6 +750,120 @@ def test_dispersion_prediction_limits_single_correction_step():
     matcher.max_correction_step_mev = 5.0
 
     assert matcher._predicted_energy({"energy": 2200.0, "offset_mm": 30.0}) == 2205.0
+
+
+def test_center_lock_reuses_last_measurement_without_verification_sample():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.design_eta_m = 0.75
+    matcher.center_tolerance_mm = 0.5
+    matcher.max_iterations = 1
+    matcher.progress_callback = None
+    matcher.center_lock_result = None
+    matcher.result_measurement = None
+    matcher.last_message = None
+    matcher._predicted_energy = lambda _measurement: 2210.0
+    candidate = {
+        "energy": 2210.0,
+        "offset_mm": 0.1,
+        "brightness": 40.0,
+        "valid_frames": 5,
+        "fit_method": "Projection RMS",
+        "fit_r_squared": None,
+    }
+    calls = []
+    matcher._at = lambda energy, stage: (
+        calls.append((energy, stage)) or candidate
+    )
+    matcher._set_energy = lambda *_args, **_kwargs: pytest.fail(
+        "Converged measurement must not be repeated."
+    )
+    seed = {
+        "energy": 2200.0,
+        "offset_mm": 20.0,
+        "brightness": 42.0,
+        "valid_frames": 5,
+        "fit_method": "Gauss fit",
+        "fit_r_squared": 0.95,
+    }
+
+    result = matcher._track_center(seed, 2150.0, 2250.0)
+
+    assert result == 2210.0
+    assert calls == [(2210.0, "correct")]
+    assert matcher.result_measurement is candidate
+    assert matcher.center_lock_result["lock_converged"] is True
+    assert matcher.center_lock_result["measurement_mode"] == "center_lock"
+
+
+def test_incomplete_center_lock_keeps_best_approximate_measurement():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.design_eta_m = 0.75
+    matcher.center_tolerance_mm = 0.5
+    matcher.max_iterations = 1
+    matcher.progress_callback = None
+    matcher.center_lock_result = None
+    matcher.result_measurement = None
+    matcher.last_message = None
+    matcher._predicted_energy = lambda _measurement: 2210.0
+    candidate = {
+        "energy": 2210.0,
+        "offset_mm": 2.0,
+        "brightness": 40.0,
+        "valid_frames": 5,
+        "fit_method": "Projection RMS",
+        "fit_r_squared": None,
+    }
+    matcher._at = lambda _energy, _stage: candidate
+    matcher._set_energy = lambda *_args, **_kwargs: pytest.fail(
+        "Best measurement is already at the current setpoint."
+    )
+    seed = {
+        "energy": 2200.0,
+        "offset_mm": 20.0,
+        "brightness": 42.0,
+        "valid_frames": 5,
+        "fit_method": "Gauss fit",
+        "fit_r_squared": 0.95,
+    }
+
+    result = matcher._track_center(seed, 2150.0, 2250.0)
+
+    assert result == 2210.0
+    assert matcher.result_measurement is candidate
+    assert matcher.center_lock_result["lock_converged"] is False
+    assert matcher.center_lock_result["approximate"] is True
+    assert matcher.center_lock_result["measurement_mode"] == "approximate_lock"
+    assert "Using approximate energy" in matcher.last_message
+
+
+def test_incomplete_center_lock_restores_best_energy_after_lost_profile():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.design_eta_m = 0.75
+    matcher.center_tolerance_mm = 0.5
+    matcher.max_iterations = 1
+    matcher.progress_callback = None
+    matcher.center_lock_result = None
+    matcher.result_measurement = None
+    matcher.last_message = None
+    matcher._predicted_energy = lambda _measurement: 2210.0
+    writes = []
+    matcher._at = lambda energy, _stage: writes.append(energy)
+    matcher._set_energy = lambda energy: writes.append(energy)
+    seed = {
+        "energy": 2200.0,
+        "offset_mm": 20.0,
+        "brightness": 42.0,
+        "valid_frames": 5,
+        "fit_method": "Gauss fit",
+        "fit_r_squared": 0.95,
+    }
+
+    result = matcher._track_center(seed, 2150.0, 2250.0)
+
+    assert result == 2200.0
+    assert writes == [2210.0, 2200.0]
+    assert matcher.result_measurement is seed
+    assert matcher.center_lock_result["approximate"] is True
 
 
 def test_center_lock_trigger_uses_position_inference_inside_threshold():
@@ -793,4 +1043,7 @@ def test_invalid_current_measurement_does_not_write_energy_or_retry_restore(monk
 
     assert result is None
     assert matcher.get_last_status() == "MEASUREMENT_FAILED"
-    assert measurements == [(2200.0, "track")]
+    assert measurements == [
+        (2200.0, "track"),
+        (2200.0, "track_retry"),
+    ]

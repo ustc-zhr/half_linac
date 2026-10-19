@@ -1048,12 +1048,14 @@ def _validate_basic_app_support(
                 "workflows.rf_phase_scan phase readback verification values are invalid."
             )
         tracking = _expect_mapping(scan.get("energy_tracking"), "workflows.rf_phase_scan.scan.energy_tracking")
-        tracking_window = float(tracking.get("tracking_half_window_mev", 0))
-        fallback_window = float(tracking.get("fallback_half_window_mev", 0))
-        if tracking_window <= 0 or fallback_window < tracking_window:
-            raise MachineProfileError("workflows.rf_phase_scan energy tracking windows are invalid.")
-        if int(tracking.get("max_consecutive_failures", 0)) < 1:
-            raise MachineProfileError("workflows.rf_phase_scan.scan.energy_tracking.max_consecutive_failures must be at least 1.")
+        tracking_window = _expect_finite_number(
+            tracking.get("tracking_half_window_mev"),
+            "workflows.rf_phase_scan.scan.energy_tracking.tracking_half_window_mev",
+        )
+        if tracking_window <= 0:
+            raise MachineProfileError(
+                "workflows.rf_phase_scan energy tracking window must be positive."
+            )
         sampling = _expect_mapping(scan.get("point_measurement"), "workflows.rf_phase_scan.scan.point_measurement")
         samples = int(sampling.get("samples_per_point", 0))
         min_valid = int(sampling.get("min_valid_samples", 0))
@@ -1061,6 +1063,14 @@ def _validate_basic_app_support(
             raise MachineProfileError("workflows.rf_phase_scan point measurement sample counts are invalid.")
         if float(sampling.get("sample_interval_s", -1)) < 0:
             raise MachineProfileError("workflows.rf_phase_scan.scan.point_measurement.sample_interval_s must not be negative.")
+        relative_brightness = _expect_finite_number(
+            sampling.get("fit_min_relative_brightness", 0.05),
+            "workflows.rf_phase_scan.scan.point_measurement.fit_min_relative_brightness",
+        )
+        if not 0 <= relative_brightness <= 1:
+            raise MachineProfileError(
+                "workflows.rf_phase_scan minimum relative brightness must be in [0, 1]."
+            )
         energy_match = _expect_mapping(workflow.get("energy_match"), "workflows.rf_phase_scan.energy_match")
         if not isinstance(energy_match.get("initial_brightness_search", False), bool):
             raise MachineProfileError(
@@ -1172,26 +1182,6 @@ def _validate_basic_app_support(
                 f"{defaults_location}.measurement.profile_fit_method must be 'Gauss fit'."
             )
         center_lock = _expect_mapping(stage_config.get("center_lock"), f"{defaults_location}.stages.center_lock")
-        for samples_key, minimum_key in (
-            ("frame_samples", "min_valid_frames"),
-            ("verification_frame_samples", "verification_min_valid_frames"),
-        ):
-            sample_count = _expect_int(
-                measurement_defaults.get(samples_key, center_lock.get(samples_key)),
-                f"{defaults_location}.measurement.{samples_key}",
-            )
-            minimum_count = _expect_int(
-                measurement_defaults.get(minimum_key, center_lock.get(minimum_key)),
-                f"{defaults_location}.measurement.{minimum_key}",
-            )
-            if sample_count < 1 or minimum_count < 1 or minimum_count > sample_count:
-                raise MachineProfileError(f"{defaults_location}.center_lock {minimum_key} must be between 1 and {samples_key}.")
-        frame_interval_s = _expect_finite_number(
-            measurement_defaults.get("frame_interval_s", center_lock.get("frame_interval_s")),
-            f"{defaults_location}.measurement.frame_interval_s",
-        )
-        if frame_interval_s < 0:
-            raise MachineProfileError(f"{defaults_location}.measurement.frame_interval_s must not be negative.")
         min_fit_r_squared = _expect_finite_number(
             measurement_defaults.get("min_fit_r_squared", center_lock.get("min_fit_r_squared")),
             f"{defaults_location}.measurement.min_fit_r_squared",

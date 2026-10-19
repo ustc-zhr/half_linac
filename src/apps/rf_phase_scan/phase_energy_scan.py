@@ -19,12 +19,10 @@ class PhaseScanSettings:
     points: int
     phase_settle_time_s: float
     tracking_half_window_mev: float
-    fallback_half_window_mev: float
-    max_consecutive_failures: int
     energy_low_mev: float
     energy_high_mev: float
     phase_mode: str = "relative"
-    retry_first_point_on_failure: bool = False
+    min_relative_brightness: float = 0.05
 
     def __post_init__(self) -> None:
         finite_values = (
@@ -32,7 +30,6 @@ class PhaseScanSettings:
             self.high_offset_deg,
             self.phase_settle_time_s,
             self.tracking_half_window_mev,
-            self.fallback_half_window_mev,
             self.energy_low_mev,
             self.energy_high_mev,
         )
@@ -48,14 +45,12 @@ class PhaseScanSettings:
             raise ValueError("Phase settle time must not be negative.")
         if self.tracking_half_window_mev <= 0:
             raise ValueError("Tracking energy window must be positive.")
-        if self.fallback_half_window_mev < self.tracking_half_window_mev:
-            raise ValueError("Fallback energy window must cover the tracking window.")
-        if int(self.max_consecutive_failures) < 1:
-            raise ValueError("Maximum consecutive failures must be at least one.")
         if self.energy_low_mev >= self.energy_high_mev:
             raise ValueError("Energy limits must contain low < high.")
         if self.phase_mode not in {"relative", "absolute"}:
             raise ValueError("Phase scan mode must be 'relative' or 'absolute'.")
+        if not 0 <= float(self.min_relative_brightness) <= 1:
+            raise ValueError("Minimum relative brightness must be in [0, 1].")
 
 
 @dataclass(frozen=True)
@@ -65,6 +60,8 @@ class EnergyMatchResult:
     energy_mev: float | None = None
     energy_setpoint_mev: float | None = None
     residual_energy_mev: float | None = None
+    energy_standard_deviation_mev: float | None = None
+    energy_standard_error_mev: float | None = None
     measurement_mode: str | None = None
     center_lock_applied: bool | None = None
     message: str | None = None
@@ -80,6 +77,9 @@ class EnergyMatchResult:
     frame_energies_mev: list[float] | None = None
     frame_rejection_reasons: dict[str, int] | None = None
     frame_fit_methods: list[str] | None = None
+    frame_fit_r_squared: list[float | None] | None = None
+    frame_brightness: list[float] | None = None
+    frame_use: list[bool] | None = None
     fallback_reasons: dict[str, int] | None = None
     gaussian_frames: int | None = None
     centroid_frames: int | None = None
@@ -104,6 +104,8 @@ class PhaseScanPoint:
     matched_energy_mev: float | None = None
     energy_setpoint_mev: float | None = None
     residual_energy_mev: float | None = None
+    energy_standard_deviation_mev: float | None = None
+    energy_standard_error_mev: float | None = None
     measurement_mode: str | None = None
     center_lock_applied: bool | None = None
     center_offset_mm: float | None = None
@@ -118,6 +120,9 @@ class PhaseScanPoint:
     frame_energies_mev: list[float] | None = None
     frame_rejection_reasons: dict[str, int] | None = None
     frame_fit_methods: list[str] | None = None
+    frame_fit_r_squared: list[float | None] | None = None
+    frame_brightness: list[float] | None = None
+    frame_use: list[bool] | None = None
     fallback_reasons: dict[str, int] | None = None
     gaussian_frames: int | None = None
     centroid_frames: int | None = None
@@ -129,6 +134,7 @@ class PhaseScanPoint:
     beam_orientation_rad: float | None = None
     message: str | None = None
     acquisition_index: int = -1
+    use_in_fit: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -212,13 +218,47 @@ def wait_for_phase_readback(
         time.sleep(min(poll_interval, max(deadline - time.monotonic(), 0.0)))
 
 
+def aggregate_frame_energies(values, enabled=None, *, min_frames=2):
+    """Return arithmetic-mean energy statistics for selected finite frames."""
+    energies = list(values or ())
+    selected = [True] * len(energies) if enabled is None else list(enabled)
+    if len(selected) != len(energies):
+        raise ValueError("Frame selection length must match frame energy count.")
+    used_values = []
+    for value, use in zip(energies, selected):
+        if not use:
+            continue
+        try:
+            energy = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(energy):
+            used_values.append(energy)
+    used = np.asarray(used_values, dtype=float)
+    if len(used) < int(min_frames):
+        return None
+    standard_deviation = (
+        float(np.std(used, ddof=1)) if len(used) > 1 else 0.0
+    )
+    return {
+        "mean_mev": float(np.mean(used)),
+        "standard_deviation_mev": standard_deviation,
+        "standard_error_mev": standard_deviation / math.sqrt(len(used)),
+        "frames_used": int(len(used)),
+    }
+
+
 def fit_phase_energy_curve(
     points: tuple[PhaseScanPoint, ...] | list[PhaseScanPoint],
 ) -> PhaseEnergyFit | None:
     valid = [
         point
         for point in points
-        if point.status == "ok"
+        if (
+            point.use_in_fit
+            if point.use_in_fit is not None
+            else point.status == "ok"
+        )
         and point.matched_energy_mev is not None
         and math.isfinite(float(point.matched_energy_mev))
     ]
@@ -362,7 +402,7 @@ class PhaseEnergyScanner:
             )
             scan_targets = self._scan_targets(initial_phase)
             valid_matches: list[tuple[float, float]] = []
-            consecutive_failures = 0
+            reference_brightness = None
 
             for acquisition_index, (index, offset, requested_phase) in enumerate(scan_targets):
                 self._raise_if_cancelled()
@@ -378,19 +418,6 @@ class PhaseEnergyScanner:
                     command_phase_deg=command_phase,
                 )
 
-                if acquisition_index == 0:
-                    if self.settings.retry_first_point_on_failure:
-                        windows = (
-                            self.settings.tracking_half_window_mev,
-                            self.settings.fallback_half_window_mev,
-                        )
-                    else:
-                        windows = (self.settings.fallback_half_window_mev,)
-                else:
-                    windows = (
-                        self.settings.tracking_half_window_mev,
-                        self.settings.fallback_half_window_mev,
-                    )
                 if valid_matches:
                     search_center = min(
                         valid_matches,
@@ -398,37 +425,59 @@ class PhaseEnergyScanner:
                     )[1]
                 else:
                     search_center = initial_energy
-                match = None
-                final_low = final_high = search_center
-                for attempt, half_window in enumerate(windows, start=1):
-                    self._raise_if_cancelled()
-                    final_low, final_high = self._bounds(search_center, half_window)
-                    self._emit(
-                        "match_start",
-                        index=index,
-                        acquisition_index=acquisition_index,
-                        attempt=attempt,
-                        search_center_mev=search_center,
-                        search_low_mev=final_low,
-                        search_high_mev=final_high,
+                attempt = 1
+                final_low, final_high = self._bounds(
+                    search_center, self.settings.tracking_half_window_mev
+                )
+                self._emit(
+                    "match_start",
+                    index=index,
+                    acquisition_index=acquisition_index,
+                    attempt=attempt,
+                    search_center_mev=search_center,
+                    search_low_mev=final_low,
+                    search_high_mev=final_high,
+                )
+                match = self.match_energy(
+                    search_center, final_low, final_high, attempt
+                )
+                if str(match.status).upper() == "CANCELLED":
+                    raise PhaseEnergyScanCancelled(
+                        match.message or "Phase-energy scan stopped by operator."
                     )
-                    match = self.match_energy(search_center, final_low, final_high, attempt)
-                    if str(match.status).upper() == "CANCELLED":
-                        raise PhaseEnergyScanCancelled(
-                            match.message or "Phase-energy scan stopped by operator."
-                        )
-                    if str(match.status).upper() == "MEASUREMENT_FAILED":
-                        break
-                    if match.ok and match.energy_mev is not None:
-                        break
 
-                assert match is not None
+                point_message = match.message
                 if match.ok and match.energy_mev is not None:
-                    valid_matches.append((requested_phase, float(match.energy_mev)))
-                    consecutive_failures = 0
-                    point_status = "ok"
+                    brightness = match.brightness
+                    finite_brightness = (
+                        brightness is not None
+                        and math.isfinite(float(brightness))
+                        and float(brightness) > 0
+                    )
+                    if reference_brightness is None and finite_brightness:
+                        reference_brightness = float(brightness)
+                    low_signal = (
+                        finite_brightness
+                        and reference_brightness is not None
+                        and float(brightness)
+                        < reference_brightness * self.settings.min_relative_brightness
+                    )
+                    if low_signal:
+                        point_status = "low_signal"
+                        warning = (
+                            "Signal brightness is below "
+                            f"{self.settings.min_relative_brightness:.0%} of the "
+                            "reference point; excluded from curve fit."
+                        )
+                        point_message = (
+                            f"{point_message} {warning}" if point_message else warning
+                        )
+                    else:
+                        valid_matches.append(
+                            (requested_phase, float(match.energy_mev))
+                        )
+                        point_status = "ok"
                 else:
-                    consecutive_failures += 1
                     point_status = "failed"
 
                 point = PhaseScanPoint(
@@ -448,6 +497,8 @@ class PhaseEnergyScanner:
                     ),
                     energy_setpoint_mev=match.energy_setpoint_mev,
                     residual_energy_mev=match.residual_energy_mev,
+                    energy_standard_deviation_mev=match.energy_standard_deviation_mev,
+                    energy_standard_error_mev=match.energy_standard_error_mev,
                     measurement_mode=match.measurement_mode,
                     center_lock_applied=match.center_lock_applied,
                     center_offset_mm=match.center_offset_mm,
@@ -462,6 +513,9 @@ class PhaseEnergyScanner:
                     frame_energies_mev=match.frame_energies_mev,
                     frame_rejection_reasons=match.frame_rejection_reasons,
                     frame_fit_methods=match.frame_fit_methods,
+                    frame_fit_r_squared=match.frame_fit_r_squared,
+                    frame_brightness=match.frame_brightness,
+                    frame_use=[True] * len(match.frame_energies_mev or ()),
                     fallback_reasons=match.fallback_reasons,
                     gaussian_frames=match.gaussian_frames,
                     centroid_frames=match.centroid_frames,
@@ -471,15 +525,12 @@ class PhaseEnergyScanner:
                     beam_minor_axis_px=match.beam_minor_axis_px,
                     beam_aspect_ratio=match.beam_aspect_ratio,
                     beam_orientation_rad=match.beam_orientation_rad,
-                    message=match.message,
+                    message=point_message,
+                    use_in_fit=point_status == "ok",
                 )
                 points.append(point)
                 self._emit("point", point=asdict(point))
 
-                if consecutive_failures >= self.settings.max_consecutive_failures:
-                    raise RuntimeError(
-                        f"Energy matching failed at {consecutive_failures} consecutive phase points."
-                    )
 
             status = "DONE"
         except PhaseEnergyScanCancelled as exc:

@@ -19,14 +19,13 @@
       }
     },
     "energy_tracking": {
-      "tracking_half_window_mev": 50,
-      "fallback_half_window_mev": 100,
-      "max_consecutive_failures": 3
+      "tracking_half_window_mev": 50
     },
     "point_measurement": {
       "samples_per_point": 5,
       "sample_interval_s": 1,
-      "min_valid_samples": 2
+      "min_valid_samples": 2,
+      "fit_min_relative_brightness": 0.05
     }
   },
   "energy_element": "LINAC_ENERGY",
@@ -40,11 +39,6 @@
   "energy_match_defaults": {
     "profile_fit_method": "Gauss fit",
     "measurement": {
-      "frame_samples": 3,
-      "min_valid_frames": 2,
-      "verification_frame_samples": 3,
-      "verification_min_valid_frames": 2,
-      "frame_interval_s": 1,
       "profile_fit_method": "Gauss fit",
       "min_fit_r_squared": 0.3,
       "beam_presence": {
@@ -53,10 +47,6 @@
       }
     },
     "stages": {
-      "brightness_peak": {
-        "strategy": "center_outward",
-        "points": 10
-      },
       "center_lock": {
         "strategy": "secant_dispersion",
         "center_lock_trigger_mm": 10.0,
@@ -67,11 +57,9 @@
     }
   },
   "energy_match": {
-    "initial_brightness_search": false,
     "pipelines": {
       "initial": ["center_lock"],
-      "tracking": ["center_lock"],
-      "fallback": ["brightness_peak", "center_lock"]
+      "tracking": ["center_lock"]
     },
     "range": {
       "low": 0,

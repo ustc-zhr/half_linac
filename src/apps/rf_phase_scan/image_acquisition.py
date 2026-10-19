@@ -132,6 +132,11 @@ class RFImageAcquisition:
         centers = np.asarray([float(item.center_mm) for item in fits], dtype=float)
         frame_centers_mm = [float(value) for value in centers]
         frame_fit_methods = [str(item.method) for item in fits]
+        frame_fit_r_squared = [
+            None if item.r_squared is None else float(item.r_squared)
+            for item in fits
+        ]
+        frame_brightness = [float(value) for value in strengths]
         fallback_reasons = Counter(
             str(item.fallback_error)
             for item in fits
@@ -148,6 +153,8 @@ class RFImageAcquisition:
             "center_spread_mm": (float(np.ptp(centers)) if len(centers) else None),
             "frame_rejection_reasons": dict(rejection_reasons),
             "frame_fit_methods": frame_fit_methods,
+            "frame_fit_r_squared": frame_fit_r_squared,
+            "frame_brightness": frame_brightness,
             "fallback_reasons": dict(fallback_reasons),
             "gaussian_frames": gaussian_frames,
             "centroid_frames": centroid_frames,
@@ -188,6 +195,8 @@ class RFImageAcquisition:
             "frame_centers_mm": frame_centers_mm,
             "frame_rejection_reasons": dict(rejection_reasons),
             "frame_fit_methods": frame_fit_methods,
+            "frame_fit_r_squared": frame_fit_r_squared,
+            "frame_brightness": frame_brightness,
             "fallback_reasons": dict(fallback_reasons),
             "gaussian_frames": gaussian_frames,
             "centroid_frames": centroid_frames,
