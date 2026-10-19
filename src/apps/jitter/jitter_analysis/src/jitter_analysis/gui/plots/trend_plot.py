@@ -25,6 +25,9 @@ if QtWidgets is not None:
         class TrendAxisItem(pg.AxisItem):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args, **kwargs)
+                # Tick labels are formatted from the raw axis values below, so
+                # pyqtgraph must not add an independent SI/exponent scale.
+                self.enableAutoSIPrefix(False)
                 self._axis_mode = "sample_index"
 
             def set_axis_mode(self, axis_mode: str) -> None:
@@ -63,7 +66,10 @@ if QtWidgets is not None:
                     precision = 1
                 else:
                     precision = 0
-                return f"{value:.{precision}f}".rstrip("0").rstrip(".")
+                formatted = f"{value:.{precision}f}"
+                if precision == 0:
+                    return formatted
+                return formatted.rstrip("0").rstrip(".")
 
             @staticmethod
             def _format_clock_time(value: float, spacing: float) -> str:
