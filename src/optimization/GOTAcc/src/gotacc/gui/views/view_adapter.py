@@ -40,6 +40,15 @@ class GuiViewAdapter:
     def log_event(self, message: str) -> None:
         self.window._log_event(message)
 
+    def log_worker_output(self, message: str) -> None:
+        self.window._log_worker_output(message)
+
+    def log_run_warning(self, message: str) -> None:
+        self.window._log_run_warning(message)
+
+    def log_run_error(self, message: str) -> None:
+        self.window._log_run_error(message)
+
     def go_to_page(self, page_index: int) -> None:
         self.window.go_to_page(page_index)
 
@@ -92,9 +101,6 @@ class GuiViewAdapter:
         if self.qobj_alive(recent_table):
             recent_table.setRowCount(0)
         self.window.results_controller.on_history_selection_changed()
-
-    def clear_run_events(self) -> None:
-        self.window.run_ui.plainTextEdit_events.clear()
 
     def update_runtime_labels(self) -> None:
         self.window._update_runtime_labels()

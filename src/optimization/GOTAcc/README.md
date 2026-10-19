@@ -281,8 +281,8 @@ standalone `Custom Policy` entries.
 When one signal has multiple enabled policies, Policy Manager shows their
 top-to-bottom execution order and exposes `Move Up` / `Move Down` only for that
 case. The list order remains the canonical runtime order, so no extra priority
-field is serialized. A triggered sample policy writes one concise before/after
-message to the existing Run Events log without adding another diagnostics panel.
+field is serialized. A triggered sample policy writes one concise before/after message to the unified
+bottom `Log` without keeping a separate Events panel in Run Monitor.
 
 Policy validation stays in the normal workflow instead of adding another
 always-visible editor panel. PV Mapping marks assigned policies as `Ready`,

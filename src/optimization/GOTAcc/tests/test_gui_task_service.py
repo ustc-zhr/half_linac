@@ -1064,7 +1064,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.run_ui.label_evalValue.text() == "0/100"
         assert window.run_ui.frame_phase.isHidden()
         assert window.run_ui.splitter_main.orientation() == Qt.Vertical
-        assert window.run_ui.splitter_runRight.orientation() == Qt.Horizontal
+        assert window.run_ui.splitter_main.widget(1) is window.run_ui.groupBox_table
         assert not window.run_ui.splitter_main.childrenCollapsible()
         assert not window.run_ui.splitter_main.isCollapsible(0)
         assert window.run_ui.splitter_main.isCollapsible(1)
@@ -1072,7 +1072,6 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         app.processEvents()
         assert window.run_ui.splitter_main.sizes()[1] == 0
         window.run_ui.splitter_main.setSizes([430, 240])
-        assert not window.run_ui.splitter_runRight.childrenCollapsible()
         assert window.run_ui.tabWidget_plots.documentMode()
         run_mode_combo = window.run_ui.comboBox_variableTrajectoryMode
         results_mode_combo = window.ui.comboBox_variableTrajectoryMode

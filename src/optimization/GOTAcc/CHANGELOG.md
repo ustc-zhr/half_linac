@@ -5,6 +5,9 @@
 - Redesigned GOTAcc Studio around a compact half_linac-style control-room
   shell, including dark/light theme switching, a horizontal workspace status
   strip, simplified log panel, and tighter Run-page monitoring
+- Unified Run, Policy, Machine, Warning/Error, and Console activity in the
+  bottom Log; removed the fixed Run Events card so Evaluation History uses
+  the full live-workspace width and the header Log control remains the single entry point
 - Simplified GUI task entry points around `New Task`, `Open Project`,
   `Save Project`, and `Export TaskConfig`, with explicit Offline/Online task
   selection
@@ -98,7 +101,7 @@
   template saving is limited to Custom Policies under Advanced actions
 - Finished the compact Policy workflow with visible list-based execution order,
   conditional `Move Up` / `Move Down` actions, concise trigger messages in the
-  existing Run Events log, simplified Policies/Template navigation, and a
+  unified bottom Log, simplified Policies/Template navigation, and a
   documented deferred-work list instead of additional GUI complexity
 
 ## 1.2.0 - 2026-06-27

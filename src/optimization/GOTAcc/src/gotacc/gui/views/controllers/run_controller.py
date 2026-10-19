@@ -501,11 +501,10 @@ class RunController:
         )
 
     def on_session_log(self, message: str) -> None:
-        self.view.log_event(message)
+        self.view.log_worker_output(message)
 
     def on_session_warning(self, message: str) -> None:
-        self.view.log_warning(message)
-        self.view.log_event(message)
+        self.view.log_run_warning(message)
 
     def on_session_status(self, payload: dict) -> None:
         self.presenter.apply_status_payload(payload)
@@ -522,8 +521,7 @@ class RunController:
 
     def on_session_error(self, message: str) -> None:
         self.presenter.mark_error()
-        self.view.log_warning(f"Worker error: {message}")
-        self.view.log_event(f"Worker error: {message}")
+        self.view.log_run_error(f"Worker error: {message}")
         payload = {
             "state": "Error",
             "elapsed_seconds": self.window.state.run.elapsed_seconds,

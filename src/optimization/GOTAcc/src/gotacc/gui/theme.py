@@ -482,7 +482,6 @@ QGroupBox#groupBox_runtime {
 
 QGroupBox#groupBox_actions,
 QGroupBox#groupBox_livePlots,
-QGroupBox#groupBox_events,
 QGroupBox#groupBox_table,
 QGroupBox#groupBox_runList,
 QGroupBox#groupBox_recentEvaluations,

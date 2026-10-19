@@ -35,6 +35,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from gotacc.gui.log_events import GuiLogEvent
 from gotacc.interfaces.policies import POLICY_REGISTRY
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -268,6 +269,7 @@ class MainWindow(QMainWindow):
         self.ui.setupUi(self)
 
         self.session_state = GuiSessionState()
+        self._log_events: list[GuiLogEvent] = []
         self._close_when_run_finishes = False
         self.run_session = RunSession(self, on_idle=self._on_run_session_idle)
         self.view_adapter = GuiViewAdapter(self)
@@ -656,7 +658,6 @@ class MainWindow(QMainWindow):
         self.ui.plainTextEdit_consoleLog.setReadOnly(True)
         self.ui.plainTextEdit_warningError.setReadOnly(True)
         self.ui.plainTextEdit_pvLog.setReadOnly(True)
-        self.run_ui.plainTextEdit_events.setReadOnly(True)
 
         self._set_run_buttons_enabled(start=True, stop=False)
         self.state.last_test_read_status = "Not checked"
@@ -913,18 +914,11 @@ class MainWindow(QMainWindow):
         self.run_ui.splitter_main.setStretchFactor(0, 3)
         self.run_ui.splitter_main.setStretchFactor(1, 2)
 
-        self.run_ui.splitter_runRight.setOrientation(Qt.Horizontal)
-        self.run_ui.splitter_runRight.setChildrenCollapsible(False)
-        self.run_ui.splitter_runRight.setStretchFactor(0, 2)
-        self.run_ui.splitter_runRight.setStretchFactor(1, 5)
-
         self.run_ui.groupBox_livePlots.setMinimumHeight(260)
-        self.run_ui.groupBox_events.setMinimumWidth(220)
         self.run_ui.groupBox_table.setMinimumWidth(360)
         self.run_ui.tabWidget_plots.setDocumentMode(True)
         self.run_ui.verticalLayout_livePlots.setContentsMargins(10, 22, 10, 10)
         self.run_ui.verticalLayout_livePlots.setSpacing(0)
-        self.run_ui.verticalLayout_events.setContentsMargins(10, 22, 10, 10)
         self.run_ui.verticalLayout_table.setContentsMargins(10, 22, 10, 10)
 
         for layout in (
@@ -2429,21 +2423,62 @@ class MainWindow(QMainWindow):
     def _append_recent_eval(self, payload: dict) -> None:
         self.results_controller.append_recent_eval(payload)
 
+    def _append_log_event(
+        self,
+        message: str,
+        *,
+        category: str,
+        level: str = "INFO",
+    ) -> None:
+        message = str(message).strip()
+        if not message:
+            return
+        event = GuiLogEvent(message=message, category=category, level=level)
+        self._log_events.append(event)
+        if len(self._log_events) > 2000:
+            del self._log_events[:-2000]
+
+        line = event.display_text()
+        self.ui.plainTextEdit_consoleLog.appendPlainText(line)
+        if event.is_warning:
+            self.ui.plainTextEdit_warningError.appendPlainText(line)
+        if event.category == "MACHINE":
+            self.ui.plainTextEdit_pvLog.appendPlainText(line)
+
     def _log_console(self, message: str) -> None:
-        self.ui.plainTextEdit_consoleLog.appendPlainText(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
+        self._append_log_event(message, category="APP")
 
     def _log_warning(self, message: str) -> None:
-        line = f"[{datetime.now().strftime('%H:%M:%S')}] [WARN] {message}"
-        self.ui.plainTextEdit_consoleLog.appendPlainText(line)
-        self.ui.plainTextEdit_warningError.appendPlainText(line)
+        self._append_log_event(message, category="WARNING", level="WARNING")
 
     def _log_pv(self, message: str) -> None:
-        line = f"[{datetime.now().strftime('%H:%M:%S')}] [PV] {message}"
-        self.ui.plainTextEdit_consoleLog.appendPlainText(line)
-        self.ui.plainTextEdit_pvLog.appendPlainText(line)
+        self._append_log_event(message, category="MACHINE")
 
     def _log_event(self, message: str) -> None:
-        self.run_ui.plainTextEdit_events.appendPlainText(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
+        self._append_log_event(message, category="RUN")
+
+    def _log_worker_output(self, message: str) -> None:
+        is_policy_event = str(message).strip().startswith("Policy triggered")
+        self._append_log_event(
+            message,
+            category="POLICY" if is_policy_event else "CONSOLE",
+        )
+
+    def _log_run_warning(self, message: str) -> None:
+        self._append_log_event(
+            message,
+            category="RUN",
+            level="WARNING",
+        )
+        self._set_log_panel_visible(True)
+
+    def _log_run_error(self, message: str) -> None:
+        self._append_log_event(
+            message,
+            category="RUN",
+            level="ERROR",
+        )
+        self._set_log_panel_visible(True)
 
     def _append_overview_activity(
         self,
@@ -3053,8 +3088,6 @@ class MainWindow(QMainWindow):
             self.ui.splitter_convergencePlots.setSizes([1, 1])
         if hasattr(self.run_ui, "splitter_main"):
             self.run_ui.splitter_main.setSizes([430, 240])
-        if hasattr(self.run_ui, "splitter_runRight"):
-            self.run_ui.splitter_runRight.setSizes([280, 720])
         self.statusBar().showMessage("Layout reset")
 
     def _show_about(self) -> None:

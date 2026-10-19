@@ -15,5 +15,4 @@ class RunPreparationPresenter:
         self.view.reset_plot_data()
         self.view.redraw_plots()
         self.view.clear_recent_evaluations()
-        self.view.clear_run_events()
         self.view.update_results_after_start(task)

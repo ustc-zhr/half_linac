@@ -91,15 +91,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="QSplitter" name="splitter_runRight">
-      <property name="orientation"><enum>Qt::Vertical</enum></property>
-      <widget class="QGroupBox" name="groupBox_events">
-       <property name="title"><string>Events</string></property>
-       <layout class="QVBoxLayout" name="verticalLayout_events">
-        <item><widget class="QPlainTextEdit" name="plainTextEdit_events"/></item>
-       </layout>
-      </widget>
-      <widget class="QGroupBox" name="groupBox_table">
+     <widget class="QGroupBox" name="groupBox_table">
        <property name="title"><string>Evaluation History</string></property>
        <layout class="QVBoxLayout" name="verticalLayout_table">
         <item><widget class="QTableWidget" name="tableWidget_recent"><column><property name="text"><string>Eval ID</string></property></column><column><property name="text"><string>Timestamp</string></property></column><column><property name="text"><string>Status</string></property></column><column><property name="text"><string>X Summary</string></property></column><column><property name="text"><string>Y Summary</string></property></column><column><property name="text"><string>Constraint Summary</string></property></column></widget></item>
@@ -112,7 +104,6 @@
         </item>
        </layout>
       </widget>
-     </widget>
     </widget>
    </item>
   </layout>
