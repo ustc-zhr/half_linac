@@ -1044,8 +1044,26 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.run_ui.pushButton_abortRestore.parent() is window.run_ui.groupBox_runtime
         assert window.run_ui.pushButton_restoreInitial.parent() is window.frame_results_source
         assert window.run_ui.pushButton_setBest.parent() is window.frame_results_source
-        assert window.run_ui.frame_eval.maximumWidth() == 118
-        assert window.run_ui.frame_best.maximumWidth() == 176
+        live_status_frames = (
+            window.run_ui.frame_eval,
+            window.run_ui.frame_elapsed,
+            window.run_ui.frame_best,
+            window.run_ui.frame_feasibility,
+        )
+        assert all(
+            frame.sizePolicy().horizontalPolicy() == QSizePolicy.Preferred
+            for frame in live_status_frames
+        )
+        assert all(frame.minimumWidth() >= 102 for frame in live_status_frames)
+        assert window.run_ui.gridLayout_runtime.columnStretch(0) == 1
+        for frame, column in zip(live_status_frames, (1, 3, 5, 7)):
+            item_index = window.run_ui.gridLayout_runtime.indexOf(frame)
+            assert window.run_ui.gridLayout_runtime.getItemPosition(item_index) == (
+                0,
+                column,
+                1,
+                1,
+            )
         assert window.run_ui.frame_eval.objectName() == "statusItem"
         assert window.run_ui.label_evalTitle.property("role") == "title"
         assert window.run_ui.label_evalValue.property("role") == "value"
@@ -1203,28 +1221,30 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         )
         assert len(result_status_items) == 3
         assert all(
-            item.sizePolicy().horizontalPolicy() == QSizePolicy.Expanding
+            item.sizePolicy().horizontalPolicy() == QSizePolicy.Preferred
             for item in result_status_items
         )
         result_status_layout = window.frame_results_source.layout()
-        assert [result_status_layout.stretch(index) for index in range(3)] == [2, 2, 3]
+        assert result_status_layout.stretch(0) == 1
+        assert [result_status_layout.indexOf(item) for item in result_status_items] == [
+            1,
+            2,
+            3,
+        ]
         current_main_page = window.ui.stackedWidget_pages.currentWidget()
         current_run_tab = window.ui.tabWidget_runWorkspace.currentWidget()
         window.ui.stackedWidget_pages.setCurrentWidget(window.ui.page_runWorkspace)
         window.ui.tabWidget_runWorkspace.setCurrentWidget(window.ui.page_results)
         app.processEvents()
-        compact_window_size = window.size()
-        compact_status_widths = [item.width() for item in result_status_items]
-        window.resize(compact_window_size.width() + 400, compact_window_size.height())
-        app.processEvents()
-        expanded_status_widths = [item.width() for item in result_status_items]
-        assert all(
-            expanded_width > compact_width
-            for expanded_width, compact_width in zip(
-                expanded_status_widths, compact_status_widths
-            )
+        compact_output_width = result_status_items[2].width()
+        window.state.latest_result_output_dir = (
+            "/tmp/gotacc/20261011_114447_47207_extended"
         )
-        window.resize(compact_window_size)
+        window.results_controller.refresh_result_source()
+        app.processEvents()
+        assert result_status_items[2].width() > compact_output_width
+        window.state.latest_result_output_dir = None
+        window.results_controller.refresh_result_source()
         window.ui.tabWidget_runWorkspace.setCurrentWidget(current_run_tab)
         window.ui.stackedWidget_pages.setCurrentWidget(current_main_page)
         app.processEvents()
@@ -1381,6 +1401,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
             window.run_ui.label_bestTitle.text()
             == "Best Feasible Optimizer Score · sphere ↑ · w=1"
         )
+        assert window.run_ui.frame_best.minimumWidth() > 176
         tooltip = window.run_ui.label_bestTitle.toolTip()
         assert "sphere: maximize; configured weight=1" in tooltip
         assert "weight is not applied by the offline backend" in tooltip

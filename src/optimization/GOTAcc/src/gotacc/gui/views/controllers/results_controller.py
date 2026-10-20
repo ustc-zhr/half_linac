@@ -147,6 +147,7 @@ class ResultsController:
         self.window.label_results_source_outcome.setToolTip("Outcome of the result-producing run.")
         self.window.label_results_source_output.setText(output_text)
         self.window.label_results_source_output.setToolTip(output_path or "No output directory is available.")
+        self.window._fit_status_items_to_content(*self.window._results_source_items)
 
         tone = {
             "Running": "success",

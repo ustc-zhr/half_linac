@@ -66,6 +66,7 @@ class RuntimeStatusController:
             budget = 0
         budget_text = str(budget) if budget > 0 else "--"
         self.window.run_ui.label_evalValue.setText(f"{state.run.eval_count}/{budget_text}")
+        self.window._fit_status_items_to_content(self.window.run_ui.frame_eval)
 
     def set_run_buttons_enabled(self, *, start: bool, stop: bool) -> None:
         self.window.ui.pushButton_startRun.setEnabled(start)
@@ -153,6 +154,12 @@ class RuntimeStatusController:
         task = self._task_for_run_workspace(task)
         self._sync_run_action_visibility(task)
         self._sync_plot_tab_visibility(task)
+        self.window._fit_status_items_to_content(
+            self.window.run_ui.frame_eval,
+            self.window.run_ui.frame_elapsed,
+            self.window.run_ui.frame_best,
+            self.window.run_ui.frame_feasibility,
+        )
 
     def _task_for_run_workspace(self, task: dict[str, Any] | None = None) -> dict[str, Any]:
         if task is not None:

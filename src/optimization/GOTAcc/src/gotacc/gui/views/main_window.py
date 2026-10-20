@@ -526,6 +526,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(value_label)
         return item, value_label
 
+    @staticmethod
+    def _fit_status_items_to_content(*items: QFrame) -> None:
+        for item in items:
+            item.setMinimumWidth(102)
+            item.setMinimumWidth(max(102, item.sizeHint().width()))
+            item.updateGeometry()
+
     def _add_status_strip_items(self, *items: QFrame) -> None:
         for index, item in enumerate(items):
             if index:
@@ -899,7 +906,7 @@ class MainWindow(QMainWindow):
             self.run_ui.horizontalLayout_actions.removeWidget(button)
             button.setParent(self.run_ui.groupBox_runtime)
             self.run_ui.gridLayout_runtime.addWidget(button, 0, column, 1, 1, Qt.AlignVCenter)
-        self.run_ui.gridLayout_runtime.setColumnStretch(7, 1)
+        self.run_ui.gridLayout_runtime.setColumnStretch(0, 1)
 
         layout = self.run_ui.verticalLayout_main
         layout.removeWidget(self.run_ui.groupBox_runtime)
@@ -954,27 +961,23 @@ class MainWindow(QMainWindow):
             self.run_ui.frame_feasibility,
         )
         self.run_ui.frame_phase.setVisible(False)
+        self.run_ui.gridLayout_runtime.removeWidget(self.run_ui.frame_phase)
         separators = []
-        frame_min_widths = (108, 108, 132, 132)
-        frame_widths = (118, 118, 176, 142)
-        for index, (frame, min_width, width) in enumerate(
-            zip(frames, frame_min_widths, frame_widths)
-        ):
+        for index, frame in enumerate(frames):
             frame.setObjectName("statusItem")
             frame.setProperty("tone", "subtle")
             frame.setMinimumHeight(42)
             frame.setMaximumHeight(44)
-            frame.setMinimumWidth(min_width)
-            frame.setMaximumWidth(width)
+            frame.setMinimumWidth(102)
             frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
             if index:
                 separator = QFrame(self.run_ui.groupBox_runtime)
                 separator.setObjectName("statusSeparator")
                 separator.setFrameShape(QFrame.VLine)
                 separator.setFrameShadow(QFrame.Plain)
-                self.run_ui.gridLayout_runtime.addWidget(separator, 0, index * 2 - 1, 1, 1)
+                self.run_ui.gridLayout_runtime.addWidget(separator, 0, index * 2, 1, 1)
                 separators.append(separator)
-            self.run_ui.gridLayout_runtime.addWidget(frame, 0, index * 2, 1, 1)
+            self.run_ui.gridLayout_runtime.addWidget(frame, 0, index * 2 + 1, 1, 1)
 
         layouts = (
             self.run_ui.verticalLayout_eval,
@@ -1013,6 +1016,8 @@ class MainWindow(QMainWindow):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
 
+        self._fit_status_items_to_content(*frames)
+
     def _configure_results_workspace_layout(self) -> None:
         self.ui.verticalLayout_resultsPage.setContentsMargins(8, 8, 8, 8)
         self.ui.verticalLayout_resultsPage.setSpacing(8)
@@ -1028,12 +1033,15 @@ class MainWindow(QMainWindow):
             self._status_strip_item("OUTCOME", "--", self.frame_results_source),
             self._status_strip_item("OUTPUT", "--", self.frame_results_source),
         )
-        for (item, _label), stretch in zip(source_items, (2, 2, 3)):
-            item.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            source_layout.addWidget(item, stretch)
+        source_layout.addStretch(1)
+        for item, _label in source_items:
+            item.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            source_layout.addWidget(item)
         self.label_results_source_task = source_items[0][1]
         self.label_results_source_outcome = source_items[1][1]
         self.label_results_source_output = source_items[2][1]
+        self._results_source_items = tuple(item for item, _label in source_items)
+        self._fit_status_items_to_content(*self._results_source_items)
         source_layout.addSpacing(8)
         for button in (
             self.run_ui.pushButton_restoreInitial,
