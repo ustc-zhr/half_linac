@@ -8,7 +8,7 @@
   "source": {
     "machine_definition": "../../half_linac/configs/machines/half/machine.json",
     "control_backend": "../../half_linac/configs/machines/half/control_backends/real.json",
-    "scope": "All scalar BPM, current-transformer, LLRF, energy, profile-size, microwave-cabinet temperature, and accelerating-structure temperature diagnostics; all magnetic-current and klystron-HV write/readback pairs. Raw camera image arrays are intentionally excluded."
+    "scope": "All scalar BPM, current-transformer, LLRF, energy, profile-size, microwave-cabinet temperature, accelerating-structure temperature, and ambient-temperature diagnostics; all magnetic-current and klystron-HV write/readback pairs. Raw camera image arrays are intentionally excluded."
   },
   "defaults": {
     "acquisition": {
@@ -160,6 +160,13 @@
       "kind": "object",
       "color": "#e76f51",
       "order": 135
+    },
+    {
+      "id": "ambient_temperature",
+      "label": "Ambient Temperature",
+      "kind": "object",
+      "color": "#43aa8b",
+      "order": 140
     }
   ],
   "knobs": [
@@ -22601,6 +22608,29 @@
         "t002"
       ],
       "note": "Accelerating structure temperature probe."
+    },
+    {
+      "id": "klystron_gallery_ambient_temperature",
+      "name": "Klystron gallery ambient temperature",
+      "group": "ambient_temperature",
+      "read_pv": "PF:WC:L003_TA_T001S:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "ambient",
+        "environment",
+        "klystron_gallery",
+        "t001s"
+      ],
+      "note": "Klystron gallery ambient temperature probe."
     }
   ],
   "presets": [
