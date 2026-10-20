@@ -1049,9 +1049,11 @@ class MainWindow(QMainWindow):
         self.ui.verticalLayout_resultsPage.insertWidget(0, self.frame_results_source)
 
         self.ui.splitter_resultsMain.setChildrenCollapsible(False)
+        self.ui.splitter_resultsMain.setCollapsible(0, True)
+        self.ui.splitter_resultsMain.setCollapsible(1, False)
         self.ui.splitter_resultsMain.setStretchFactor(0, 0)
         self.ui.splitter_resultsMain.setStretchFactor(1, 1)
-        self.ui.groupBox_runList.setMinimumWidth(250)
+        self.ui.groupBox_runList.setMinimumWidth(0)
         self.ui.groupBox_runList.setMaximumWidth(300)
         self.ui.treeWidget_runList.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.ui.treeWidget_runList.setTextElideMode(Qt.ElideMiddle)

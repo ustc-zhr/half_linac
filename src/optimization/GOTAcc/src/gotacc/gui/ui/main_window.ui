@@ -674,7 +674,7 @@
             <widget class="QGroupBox" name="groupBox_runList">
              <property name="minimumSize">
               <size>
-               <width>280</width>
+               <width>0</width>
                <height>0</height>
               </size>
              </property>

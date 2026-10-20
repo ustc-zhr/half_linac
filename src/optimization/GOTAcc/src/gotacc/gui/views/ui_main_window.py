@@ -368,7 +368,7 @@ class Ui_MainWindow(object):
         self.splitter_resultsMain.setOrientation(QtCore.Qt.Horizontal)
         self.splitter_resultsMain.setObjectName("splitter_resultsMain")
         self.groupBox_runList = QtWidgets.QGroupBox(self.splitter_resultsMain)
-        self.groupBox_runList.setMinimumSize(QtCore.QSize(280, 0))
+        self.groupBox_runList.setMinimumSize(QtCore.QSize(0, 0))
         self.groupBox_runList.setObjectName("groupBox_runList")
         self.verticalLayout_runList = QtWidgets.QVBoxLayout(self.groupBox_runList)
         self.verticalLayout_runList.setObjectName("verticalLayout_runList")

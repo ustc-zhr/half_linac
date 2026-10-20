@@ -1136,10 +1136,19 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.run_ui.verticalLayout_main.indexOf(window.run_ui.groupBox_runtime) == 1
         assert window.run_ui.verticalLayout_main.indexOf(window.run_ui.groupBox_actions) == -1
         assert not window.ui.splitter_resultsMain.childrenCollapsible()
+        assert window.ui.splitter_resultsMain.isCollapsible(0)
+        assert not window.ui.splitter_resultsMain.isCollapsible(1)
         assert not window.ui.splitter_resultsRight.childrenCollapsible()
         assert window.ui.splitter_convergencePlots.orientation() == Qt.Horizontal
         assert window.ui.tabWidget_resultsViews.documentMode()
+        assert window.ui.groupBox_runList.minimumWidth() == 0
         assert window.ui.groupBox_runList.maximumWidth() == 300
+        window.ui.splitter_resultsMain.setSizes([0, 1000])
+        app.processEvents()
+        assert window.ui.splitter_resultsMain.sizes()[0] == 0
+        window._reset_layout()
+        app.processEvents()
+        assert window.ui.splitter_resultsMain.sizes()[0] > 0
         for button in (
             window.ui.pushButton_refreshRunArchives,
             window.ui.pushButton_loadArchivedRun,
