@@ -675,7 +675,7 @@ QLabel#appTitle {{
     color: {hero_title};
     background: transparent;
     border: none;
-    font-size: 15px;
+    font-size: 20px;
     font-weight: 700;
 }}
 QLabel#appSubtitle {{

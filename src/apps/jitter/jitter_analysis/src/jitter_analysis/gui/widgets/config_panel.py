@@ -74,21 +74,22 @@ if QtWidgets is not None:
             grid.addWidget(self.config_path_edit, 0, 1, 1, 2)
             grid.addWidget(self.load_button, 1, 1)
             grid.addWidget(self.edit_library_button, 1, 2)
-            grid.addWidget(self._field_label("Run Setup"), 2, 0, QtCore.Qt.AlignVCenter)
+            grid.addWidget(self._divider(), 2, 0, 1, 3)
+            grid.addWidget(self._field_label("Run Setup"), 3, 0, QtCore.Qt.AlignVCenter)
             grid.addWidget(
                 self.load_setup_button,
-                2,
+                3,
                 1,
                 QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter,
             )
-            grid.addWidget(self.save_setup_button, 2, 2, QtCore.Qt.AlignVCenter)
-            grid.addWidget(self._divider(), 3, 0, 1, 3)
-            grid.addWidget(self._field_label("Save Dir"), 4, 0, QtCore.Qt.AlignVCenter)
-            grid.addLayout(save_dir_layout, 4, 1, 1, 2)
-            grid.addWidget(self._field_label("Operator"), 5, 0)
-            grid.addWidget(self.operator_edit, 5, 1, 1, 2)
-            grid.addWidget(self._field_label("Notes", align_top=True), 6, 0)
-            grid.addWidget(self.notes_edit, 6, 1, 1, 2)
+            grid.addWidget(self.save_setup_button, 3, 2, QtCore.Qt.AlignVCenter)
+            grid.addWidget(self._divider(), 4, 0, 1, 3)
+            grid.addWidget(self._field_label("Save Dir"), 5, 0, QtCore.Qt.AlignVCenter)
+            grid.addLayout(save_dir_layout, 5, 1, 1, 2)
+            grid.addWidget(self._field_label("Operator"), 6, 0)
+            grid.addWidget(self.operator_edit, 6, 1, 1, 2)
+            grid.addWidget(self._field_label("Notes", align_top=True), 7, 0)
+            grid.addWidget(self.notes_edit, 7, 1, 1, 2)
 
             layout.addLayout(grid)
             layout.addStretch(1)
