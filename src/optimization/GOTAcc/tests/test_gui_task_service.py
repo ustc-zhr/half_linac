@@ -1055,8 +1055,8 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
             for frame in live_status_frames
         )
         assert all(frame.minimumWidth() >= 102 for frame in live_status_frames)
-        assert window.run_ui.gridLayout_runtime.columnStretch(0) == 1
-        for frame, column in zip(live_status_frames, (1, 3, 5, 7)):
+        assert window.run_ui.gridLayout_runtime.columnStretch(7) == 1
+        for frame, column in zip(live_status_frames, (0, 2, 4, 6)):
             item_index = window.run_ui.gridLayout_runtime.indexOf(frame)
             assert window.run_ui.gridLayout_runtime.getItemPosition(item_index) == (
                 0,
@@ -1225,11 +1225,11 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
             for item in result_status_items
         )
         result_status_layout = window.frame_results_source.layout()
-        assert result_status_layout.stretch(0) == 1
+        assert result_status_layout.stretch(3) == 1
         assert [result_status_layout.indexOf(item) for item in result_status_items] == [
+            0,
             1,
             2,
-            3,
         ]
         current_main_page = window.ui.stackedWidget_pages.currentWidget()
         current_run_tab = window.ui.tabWidget_runWorkspace.currentWidget()

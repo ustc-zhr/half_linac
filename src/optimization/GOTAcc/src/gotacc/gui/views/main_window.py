@@ -906,7 +906,7 @@ class MainWindow(QMainWindow):
             self.run_ui.horizontalLayout_actions.removeWidget(button)
             button.setParent(self.run_ui.groupBox_runtime)
             self.run_ui.gridLayout_runtime.addWidget(button, 0, column, 1, 1, Qt.AlignVCenter)
-        self.run_ui.gridLayout_runtime.setColumnStretch(0, 1)
+        self.run_ui.gridLayout_runtime.setColumnStretch(7, 1)
 
         layout = self.run_ui.verticalLayout_main
         layout.removeWidget(self.run_ui.groupBox_runtime)
@@ -975,9 +975,9 @@ class MainWindow(QMainWindow):
                 separator.setObjectName("statusSeparator")
                 separator.setFrameShape(QFrame.VLine)
                 separator.setFrameShadow(QFrame.Plain)
-                self.run_ui.gridLayout_runtime.addWidget(separator, 0, index * 2, 1, 1)
+                self.run_ui.gridLayout_runtime.addWidget(separator, 0, index * 2 - 1, 1, 1)
                 separators.append(separator)
-            self.run_ui.gridLayout_runtime.addWidget(frame, 0, index * 2 + 1, 1, 1)
+            self.run_ui.gridLayout_runtime.addWidget(frame, 0, index * 2, 1, 1)
 
         layouts = (
             self.run_ui.verticalLayout_eval,
@@ -1033,7 +1033,6 @@ class MainWindow(QMainWindow):
             self._status_strip_item("OUTCOME", "--", self.frame_results_source),
             self._status_strip_item("OUTPUT", "--", self.frame_results_source),
         )
-        source_layout.addStretch(1)
         for item, _label in source_items:
             item.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
             source_layout.addWidget(item)
@@ -1042,6 +1041,7 @@ class MainWindow(QMainWindow):
         self.label_results_source_output = source_items[2][1]
         self._results_source_items = tuple(item for item, _label in source_items)
         self._fit_status_items_to_content(*self._results_source_items)
+        source_layout.addStretch(1)
         source_layout.addSpacing(8)
         for button in (
             self.run_ui.pushButton_restoreInitial,
