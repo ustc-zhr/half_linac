@@ -1028,12 +1028,9 @@ class MainWindow(QMainWindow):
             self._status_strip_item("OUTCOME", "--", self.frame_results_source),
             self._status_strip_item("OUTPUT", "--", self.frame_results_source),
         )
-        for item, _label in source_items:
-            source_layout.addWidget(item)
-        for (item, _label), width in zip(source_items, (220, 170, 220)):
-            item.setMaximumWidth(width)
-            item.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        source_layout.addStretch(1)
+        for (item, _label), stretch in zip(source_items, (2, 2, 3)):
+            item.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            source_layout.addWidget(item, stretch)
         self.label_results_source_task = source_items[0][1]
         self.label_results_source_outcome = source_items[1][1]
         self.label_results_source_output = source_items[2][1]

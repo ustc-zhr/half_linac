@@ -1202,6 +1202,32 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
             QFrame, "statusItem"
         )
         assert len(result_status_items) == 3
+        assert all(
+            item.sizePolicy().horizontalPolicy() == QSizePolicy.Expanding
+            for item in result_status_items
+        )
+        result_status_layout = window.frame_results_source.layout()
+        assert [result_status_layout.stretch(index) for index in range(3)] == [2, 2, 3]
+        current_main_page = window.ui.stackedWidget_pages.currentWidget()
+        current_run_tab = window.ui.tabWidget_runWorkspace.currentWidget()
+        window.ui.stackedWidget_pages.setCurrentWidget(window.ui.page_runWorkspace)
+        window.ui.tabWidget_runWorkspace.setCurrentWidget(window.ui.page_results)
+        app.processEvents()
+        compact_window_size = window.size()
+        compact_status_widths = [item.width() for item in result_status_items]
+        window.resize(compact_window_size.width() + 400, compact_window_size.height())
+        app.processEvents()
+        expanded_status_widths = [item.width() for item in result_status_items]
+        assert all(
+            expanded_width > compact_width
+            for expanded_width, compact_width in zip(
+                expanded_status_widths, compact_status_widths
+            )
+        )
+        window.resize(compact_window_size)
+        window.ui.tabWidget_runWorkspace.setCurrentWidget(current_run_tab)
+        window.ui.stackedWidget_pages.setCurrentWidget(current_main_page)
+        app.processEvents()
         assert window.frame_results_source.findChildren(QFrame, "statusSeparator") == []
         assert window.ui.treeWidget_runList.topLevelItem(0).text(0) == "Archived Runs"
         window.state.latest_task_snapshot = {"task_name": "result_task"}
