@@ -1317,6 +1317,28 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
 
         archived_task = TaskService.create_run_archive(multi_task)
         archive_dir = Path(archived_task["run_archive_dir"])
+        sibling_dir = tmp_path / "older_task" / "20260828_110000_000000"
+        sibling_dir.mkdir(parents=True)
+        sibling_task = dict(
+            multi_task,
+            task_name="older_task",
+            project_workdir=str(tmp_path),
+            run_archive_dir=str(sibling_dir),
+            run_id=sibling_dir.name,
+            workdir=str(sibling_dir),
+        )
+        (sibling_dir / "run_summary.json").write_text(
+            json.dumps(
+                {
+                    "format_version": 1,
+                    "run_id": sibling_dir.name,
+                    "task": sibling_task,
+                    "run_state": "Finished",
+                }
+            ),
+            encoding="utf-8",
+        )
+        archived_task["project_workdir"] = str(tmp_path / "moved_original_runs")
         evaluation_records = [
             {
                 "eval_id": 1,
@@ -1378,6 +1400,12 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         )
         window.results_controller.load_run_archive(archive_dir)
         assert window.state.viewing_archived_run
+        archives_item = window.ui.treeWidget_runList.topLevelItem(1)
+        archive_paths = {
+            Path(archives_item.child(index).data(0, Qt.UserRole)["path"])
+            for index in range(archives_item.childCount())
+        }
+        assert archive_paths == {archive_dir, sibling_dir}
         assert window.state.run.eval_count == 2
         assert window.state.hypervolume_history == [0.1, 0.25]
         assert window.state.latest_initial_x == {"x0": 0.1, "x1": 0.2, "x2": 0.3}

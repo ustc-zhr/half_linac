@@ -78,6 +78,7 @@ class ResultsController:
         self.view = window.view_adapter
         self.canvas_class = canvas_class
         self.variable_trajectory_mode = "raw"
+        self._archive_browse_root: Path | None = None
 
     def init_results_page(self) -> None:
         tree = self.window.ui.treeWidget_runList
@@ -1337,16 +1338,37 @@ class ResultsController:
                 )
             )
 
-
     def _archive_root(self) -> Path:
-        task = self.window.state.latest_task_snapshot or {}
+        state = self.window.state
+        if state.viewing_archived_run and self._archive_browse_root is not None:
+            return self._archive_browse_root
+
+        task = state.latest_task_snapshot or {}
         root = task.get("project_workdir")
         if not root:
             try:
                 root = self.view.current_task().get("workdir")
             except Exception:
                 root = None
-        return Path(str(root or Path.cwd())).expanduser().resolve()
+        self._archive_browse_root = Path(str(root or Path.cwd())).expanduser().resolve()
+        return self._archive_browse_root
+
+    def _set_archive_root_for_loaded_run(self, directory: Path, task: dict) -> None:
+        candidates = [self._archive_root()]
+        saved_root = str(task.get("project_workdir") or "").strip()
+        if saved_root:
+            candidates.append(Path(saved_root).expanduser().resolve())
+
+        for candidate in candidates:
+            try:
+                relative = directory.relative_to(candidate)
+            except ValueError:
+                continue
+            if len(relative.parts) == 2:
+                self._archive_browse_root = candidate
+                return
+
+        self._archive_browse_root = directory.parent.parent
 
     def _archive_summary_paths(self) -> list[Path]:
         root = self._archive_root()
@@ -1623,6 +1645,7 @@ class ResultsController:
 
         state = self.window.state
         task = copy.deepcopy(summary["task"])
+        self._set_archive_root_for_loaded_run(directory, task)
         state.viewing_archived_run = True
         state.latest_task_snapshot = task
         state.latest_task_identity = TaskService.normalized_task_identity(task)
