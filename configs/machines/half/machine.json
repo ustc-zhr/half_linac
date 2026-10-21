@@ -2919,7 +2919,7 @@
       "kind": "rf",
       "display_name": "Prebuncher LLRF",
       "order": 286,
-      "tags": ["rf", "llrf", "wrapped_phase"],
+      "tags": ["rf", "llrf", "wrapped_phase", "prebuncher"],
       "limits": {
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}

@@ -70,6 +70,19 @@
       "restore_initial_on_failure": true
     }
   },
+  "batch": {
+    "enabled": true,
+    "exclude_tags": ["prebuncher"],
+    "quality": {
+      "min_points_used": 5,
+      "min_r_squared": 0.90,
+      "crest_edge_margin_steps": 1
+    },
+    "apply": {
+      "phase": "crest",
+      "follow_energy": true
+    }
+  },
   "write_control": {"vm": "blocked", "real": "allowed"},
   "real_status": "write_smoke_passed"
 }

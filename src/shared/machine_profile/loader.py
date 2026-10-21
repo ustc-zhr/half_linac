@@ -1220,6 +1220,81 @@ def _validate_basic_app_support(
             )
         if _expect_int(center_lock.get("max_iterations"), f"{defaults_location}.center_lock.max_iterations") < 1:
             raise MachineProfileError(f"{defaults_location}.center_lock.max_iterations must be at least 1.")
+        batch = workflow.get("batch")
+        if batch is not None:
+            batch = _expect_mapping(
+                batch, "workflows.rf_phase_scan.batch"
+            )
+            enabled = batch.get("enabled", False)
+            if not isinstance(enabled, bool):
+                raise MachineProfileError(
+                    "workflows.rf_phase_scan.batch.enabled must be boolean."
+                )
+            if enabled:
+                exclude_tags = _expect_optional_string_list(
+                    batch.get("exclude_tags"),
+                    "workflows.rf_phase_scan.batch.exclude_tags",
+                )
+                available_tags = {
+                    tag for element in candidates for tag in element.tags
+                }
+                unknown_tags = sorted(set(exclude_tags) - available_tags)
+                if unknown_tags:
+                    raise MachineProfileError(
+                        "workflows.rf_phase_scan.batch.exclude_tags contains "
+                        f"unknown RF tag(s): {', '.join(unknown_tags)}."
+                    )
+                batch_candidates = [
+                    element
+                    for element in candidates
+                    if not set(exclude_tags).intersection(element.tags)
+                ]
+                if not batch_candidates:
+                    raise MachineProfileError(
+                        "workflows.rf_phase_scan.batch excludes every eligible LLRF."
+                    )
+                quality = _expect_mapping(
+                    batch.get("quality"),
+                    "workflows.rf_phase_scan.batch.quality",
+                )
+                min_points = _expect_int(
+                    quality.get("min_points_used"),
+                    "workflows.rf_phase_scan.batch.quality.min_points_used",
+                )
+                phase_steps = int(phase_scan["steps"])
+                if min_points < 3 or min_points > phase_steps:
+                    raise MachineProfileError(
+                        "workflows.rf_phase_scan.batch.quality.min_points_used "
+                        "must be between 3 and scan.phase.steps."
+                    )
+                min_r_squared = _expect_finite_number(
+                    quality.get("min_r_squared"),
+                    "workflows.rf_phase_scan.batch.quality.min_r_squared",
+                )
+                if not 0 <= min_r_squared <= 1:
+                    raise MachineProfileError(
+                        "workflows.rf_phase_scan.batch.quality.min_r_squared must be in [0, 1]."
+                    )
+                margin_steps = _expect_int(
+                    quality.get("crest_edge_margin_steps"),
+                    "workflows.rf_phase_scan.batch.quality.crest_edge_margin_steps",
+                )
+                if margin_steps < 0 or margin_steps * 2 >= phase_steps - 1:
+                    raise MachineProfileError(
+                        "workflows.rf_phase_scan.batch.quality.crest_edge_margin_steps "
+                        "leaves no accepted scan interior."
+                    )
+                apply = _expect_mapping(
+                    batch.get("apply"), "workflows.rf_phase_scan.batch.apply"
+                )
+                if str(apply.get("phase", "")).strip().lower() != "crest":
+                    raise MachineProfileError(
+                        "workflows.rf_phase_scan.batch.apply.phase must be 'crest'."
+                    )
+                if apply.get("follow_energy") is not True:
+                    raise MachineProfileError(
+                        "workflows.rf_phase_scan.batch.apply.follow_energy must be true."
+                    )
         return
 
     if app_name == "solenoid_centering":

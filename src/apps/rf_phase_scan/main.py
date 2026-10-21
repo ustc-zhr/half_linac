@@ -28,6 +28,11 @@ from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.apps.rf_phase_scan.energy_match_tuner import (
     RFPhaseEnergyMatcher, reference_x_pixel,
 )
+from half_linac.src.apps.rf_phase_scan.executor import (
+    RFPhaseScanCallbacks,
+    RFPhaseScanExecutor,
+    RFPhaseScanRequest,
+)
 from half_linac.src.apps.rf_phase_scan.image_acquisition import RFImageAcquisition
 from half_linac.src.apps.rf_phase_scan.mplwidget import MplWidget
 from half_linac.src.apps.rf_phase_scan.spectrum_profile import (
@@ -479,62 +484,37 @@ class ScanThread(QThread):
 
 
     def run(self):
-        log = None
-        lock = None
-        result = None
-        try:
-            self.state.emit("Preparing")
-            require_workflow_write_allowed(self.context, "rf_phase_scan", "RF Crest & Gain")
-            lock = EnergyControlLock.for_machine(
-                self.context.machine.id,
-                {"app": "rf_phase_scan", "operation": "RF Crest & Gain"},
-            )
-            lock.acquire()
-            initial_phase, initial_energy = caget(self.phase_pv), caget(self.energy_pv)
-            if initial_phase is None or initial_energy is None:
-                raise RuntimeError("Initial phase and energy setpoints must be readable.")
-            paths = resolve_app_runtime_paths(Path(__file__).resolve().parent, self.context)
-            log = PhaseEnergyScanLog.create(paths["runs_dir"], {
-                "machine_id": self.context.machine.id, "backend": self.context.control_backend.name,
-                "station_id": "eny", "element_id": self.target.element_id,
-                "phase_pv": self.phase_pv,
-                "phase_readback_pv": self.phase_readback_pv,
-                "energy_pv": self.energy_pv,
-                "initial_phase_deg": float(initial_phase), "initial_energy_mev": float(initial_energy),
-                "background_used": self.remove_bg,
-                "background_path": self.background_metadata.get("path"),
-                "background_shape": self.background_metadata.get("shape"),
-                "roi_enabled": self.acquisition.roi is not None,
-                "roi": self.acquisition.roi.as_dict() if self.acquisition.roi is not None else None,
-                "phase_mode": self.settings.phase_mode,
-                "point_measurement": dict(self.point_measurement),
-                "measurement_samples": self.point_measurement["samples"],
-                "measurement_interval_s": self.point_measurement["interval_s"],
-                "measurement_min_valid_samples": self.point_measurement["min_valid_samples"],
-                "energy_match_settings": dict(self.scan),
-            })
-            scanner = PhaseEnergyScanner(
-                settings=self.settings, read_phase=lambda: caget(self.phase_pv),
-                set_phase=self._set_phase,
-                read_energy=lambda: caget(self.energy_pv),
-                set_energy=self._set_energy,
-                match_energy=self._match, cancel_requested=self.isInterruptionRequested,
-                progress_callback=lambda payload: self._progress(payload, log),
-            )
-            result = scanner.run().to_mapping()
-            result["csv_path"] = str(log.csv_path)
-            result["json_path"] = str(log.json_path)
-            log.finish(result)
-        except Exception as exc:
-            result = {
-                "status": "FAILED", "message": str(exc), "points": [], "fit": None,
-                "phase_restored": None, "energy_restored": None,
-            }
-        finally:
-            if log is not None:
-                log.close()
-            if lock is not None:
-                lock.release()
+        request = RFPhaseScanRequest(
+            context=self.context,
+            target=self.target,
+            settings=self.settings,
+            scan=self.scan,
+            image_pv=self.image_pv,
+            image_shape=tuple(self.image_shape),
+            pixel_width_mm=self.pixel_width_mm,
+            phase_pv=self.phase_pv,
+            phase_readback_pv=self.phase_readback_pv,
+            phase_verification=self.phase_verification,
+            energy_pv=self.energy_pv,
+            remove_bg=self.remove_bg,
+            bg_image=self.bg_image,
+            background_metadata=self.background_metadata,
+            point_measurement=self.point_measurement,
+            roi=self.acquisition.roi,
+        )
+        callbacks = RFPhaseScanCallbacks(
+            point=self.point.emit,
+            diagnostic=self.diagnostic.emit,
+            state=self.state.emit,
+            progress=self.progress.emit,
+            match_state=self.match_state.emit,
+        )
+        result = RFPhaseScanExecutor(
+            request,
+            cancel_requested=self.isInterruptionRequested,
+            callbacks=callbacks,
+            manage_lock=True,
+        ).run()
         self.done.emit(result)
 
     def _set_phase(self, value):
@@ -585,6 +565,7 @@ class RFPhaseScanWindow(QMainWindow):
         )
         self.config = dict(get_workflow(self.context.profile, "rf_phase_scan"))
         self.station = self.config
+        self.batch_config = dict(self.config.get("batch", {}))
         self.diagnostics = dict(self.config["diagnostics"])
         diagnostic_geometry = resolve_element_image_geometry(
             self.context,
@@ -751,12 +732,15 @@ class RFPhaseScanWindow(QMainWindow):
         self.spectrum_summary.setProperty("role", "muted")
         self.start = QPushButton("Start scan")
         self.start.setObjectName("startButton")
+        self.batch_button = QPushButton("Batch…")
         self.stop = QPushButton("Stop")
         self.review_button = QPushButton("Review data...")
         self.review_button.setEnabled(False)
         self.stop.setObjectName("stopButton")
         self.stop.setEnabled(False)
         self.start.clicked.connect(self.start_scan)
+        self.batch_button.clicked.connect(self._show_batch_dialog)
+        self.batch_button.setVisible(bool(self.batch_config.get("enabled", False)))
         self.stop.clicked.connect(self.stop_scan)
         self.load_background_button.clicked.connect(self.load_background_file)
         self.capture_background_button.clicked.connect(self.capture_background)
@@ -869,6 +853,7 @@ class RFPhaseScanWindow(QMainWindow):
         action_layout.setContentsMargins(12, 0, 12, 0)
         action_layout.setSpacing(8)
         action_layout.addWidget(self.start, 1)
+        action_layout.addWidget(self.batch_button)
         action_layout.addWidget(self.stop)
         controls_layout.addLayout(action_layout)
         controls_layout.addWidget(self.progress)
@@ -915,6 +900,7 @@ class RFPhaseScanWindow(QMainWindow):
         root.addLayout(workspace, 1)
         self.setCentralWidget(body)
         self.thread = None
+        self.batch_dialog = None
         self.points_data = []
         self.last_result = {}
         self.last_review_path = None
@@ -934,6 +920,9 @@ class RFPhaseScanWindow(QMainWindow):
         self._update_roi_status()
         self._load_latest_background(silent=True)
         self.start.setEnabled(bool(self.targets))
+        self.batch_button.setEnabled(
+            bool(self.targets) and bool(self.batch_config.get("enabled", False))
+        )
 
         for widget in (self.low, self.high):
             widget.setSuffix(" deg")
@@ -2135,8 +2124,183 @@ class RFPhaseScanWindow(QMainWindow):
         save_background(self.background_image, image_path, image_path.with_suffix(".json"), metadata)
         self._set_background(self.background_image, metadata, image_path)
 
+    def _build_batch_scan_request(self, target):
+        if self.low.value() >= self.high.value() or self.high.value() - self.low.value() > 360:
+            raise ValueError("Phase scan range must be increasing and no wider than 360 degrees.")
+        self._validate_auto_tune_settings()
+        scan_config = dict(self.config["scan"])
+        sampling_config = dict(scan_config["point_measurement"])
+        geometry = resolve_element_image_geometry(
+            self.context,
+            self.diagnostics["flag_element"],
+            self.context.control_backend.name,
+        )
+        auto_tune_settings = self._resolved_auto_tune_settings(geometry)
+        energy_element = str(self.config["energy_element"])
+        energy_target = resolve_write_target(
+            self.context,
+            energy_element,
+            logical_channel=self.config["energy_set_channel"],
+            unit="MeV",
+        )
+        energy_limit = energy_target.machine_limit
+        if energy_limit.low is None or energy_limit.high is None:
+            raise ValueError(
+                f"Configure finite limits for {energy_element}."
+                f"{self.config['energy_set_channel']}."
+            )
+        configured_energy_range = dict(self.auto_tune_config["range"])
+        energy_low = max(float(energy_limit.low), float(configured_energy_range["low"]))
+        energy_high = min(float(energy_limit.high), float(configured_energy_range["high"]))
+        if energy_low >= energy_high:
+            raise ValueError(
+                "Energy Match range does not overlap the machine energy limits."
+            )
+        phase = PhaseScanSettings(
+            low_offset_deg=float(self.low.value()),
+            high_offset_deg=float(self.high.value()),
+            points=self.points.value(),
+            phase_settle_time_s=float(self.settle.value()),
+            tracking_half_window_mev=float(self.tracking.value()),
+            energy_low_mev=energy_low,
+            energy_high_mev=energy_high,
+            phase_mode=str(self.phase_mode.currentData()),
+            min_relative_brightness=float(
+                sampling_config.get("fit_min_relative_brightness", 0.05)
+            ),
+        )
+        point_measurement = {
+            "samples": self.measurement_samples.value(),
+            "interval_s": self.measurement_interval.value(),
+            "min_valid_samples": min(
+                int(sampling_config["min_valid_samples"]),
+                self.measurement_samples.value(),
+            ),
+        }
+        background_metadata = dict(self.background_metadata)
+        background_metadata["path"] = (
+            str(self.runtime_paths["background_image_path"])
+            if self.background_image is not None
+            else None
+        )
+        background_metadata["shape"] = (
+            list(self.background_image.shape)
+            if self.background_image is not None
+            else None
+        )
+        background_metadata["phase_mode"] = phase.phase_mode
+        background_metadata["point_measurement"] = dict(point_measurement)
+        background_metadata["energy_match_settings"] = dict(auto_tune_settings)
+        background_metadata["roi_enabled"] = self.roi_control.use_roi.isChecked()
+        background_metadata["roi"] = self.roi_control.roi().as_dict()
+        return RFPhaseScanRequest(
+            context=self.context,
+            target=target,
+            settings=phase,
+            scan=auto_tune_settings,
+            image_pv=PV(
+                resolve_channel(
+                    self.context,
+                    self.diagnostics["flag_element"],
+                    self.diagnostics["flag_image_channel"],
+                )
+            ),
+            image_shape=geometry.shape,
+            pixel_width_mm=geometry.pixel_width_mm,
+            phase_pv=target.pv_name,
+            phase_readback_pv=resolve_channel(
+                self.context,
+                target.element_id,
+                str(self.phase_verification["channel"]),
+            ),
+            phase_verification=dict(self.phase_verification),
+            energy_pv=energy_target.pv_name,
+            remove_bg=self.use_background.isChecked() and self.background_image is not None,
+            bg_image=self.background_image,
+            background_metadata=background_metadata,
+            point_measurement=point_measurement,
+            roi=self.roi_control.active_roi(),
+            energy_machine_low_mev=float(energy_limit.low),
+            energy_machine_high_mev=float(energy_limit.high),
+        )
+
+    def _show_batch_dialog(self):
+        if self.thread is not None:
+            return
+        from half_linac.src.apps.rf_phase_scan.batch import RFPhaseBatchDialog
+
+        if self.batch_dialog is None:
+            self.batch_dialog = RFPhaseBatchDialog(self)
+        self.batch_dialog.show()
+        self.batch_dialog.raise_()
+        self.batch_dialog.activateWindow()
+
+    def _set_batch_running(self, running):
+        for widget in (
+            self.combo, self.phase_mode, self.low, self.high, self.points,
+            self.settle, self.tracking, self.measurement_samples,
+            self.measurement_interval, self.auto_tune_settings_button,
+            self.use_background, self.background_settings_button,
+            self.roi_button, self.preview_button,
+        ):
+            widget.setEnabled(not running)
+        self.start.setEnabled(not running and bool(self.targets))
+        self.batch_button.setEnabled(
+            not running
+            and bool(self.targets)
+            and bool(self.batch_config.get("enabled", False))
+        )
+        self.review_button.setEnabled(not running and bool(self.points_data))
+
+    def _begin_batch_item(self, element_id):
+        index = self.combo.findText(str(element_id))
+        if index >= 0:
+            self.combo.setCurrentIndex(index)
+        self.points_data = []
+        self.last_result = {}
+        self.last_review_path = None
+        self.review_dirty = False
+        self.review_button.setEnabled(False)
+        self.last_fit = None
+        self.last_initial_phase = None
+        self.active_phase_mode = str(self.phase_mode.currentData())
+        self.progress.setRange(0, self.points.value())
+        self.progress.setValue(0)
+        self.progress.setTextVisible(True)
+        self.progress.setVisible(True)
+        self.status_panel.set_item("restore", "Pending", "subtle")
+        self._redraw_plot()
+
+    def _batch_point(self, point):
+        self._point(point)
+        self._update_progress(len(self.points_data), self.points.value())
+
+    def _batch_scan_finished(self, result):
+        self.last_result = dict(result)
+        if not self.points_data and result.get("points"):
+            self.points_data = [dict(point) for point in result["points"]]
+        for point in self.points_data:
+            self._prepare_review_point(point)
+        self.last_fit = result.get("fit") or None
+        self.last_initial_phase = result.get("initial_phase_deg")
+        batch_running = (
+            self.batch_dialog is not None
+            and self.batch_dialog.worker is not None
+        )
+        self.review_button.setEnabled(bool(self.points_data) and not batch_running)
+        self._populate_review_tables()
+        self._redraw_plot(self.last_fit, self.last_initial_phase)
+        self._update_result_summary()
+        self.progress.setVisible(False)
+        if result.get("phase_restored") and result.get("energy_restored"):
+            self.status_panel.set_item("restore", "Phase + energy OK", "success")
+        else:
+            self.status_panel.set_item("restore", "Failed", "warning")
+
     def start_scan(self):
         if not self.targets or self.thread is not None: return
+        if self.batch_dialog is not None and self.batch_dialog.worker is not None:
+            return
         target = self.targets[self.combo.currentIndex()]
         energy_element = str(self.config["energy_element"])
         if self.low.value() >= self.high.value() or self.high.value() - self.low.value() > 360:
@@ -2255,6 +2419,7 @@ class RFPhaseScanWindow(QMainWindow):
         self._set_scan_status("Preparing")
         self.thread.start()
         self.start.setEnabled(False)
+        self.batch_button.setEnabled(False)
         self.stop.setEnabled(True)
 
     def _point(self, point):
@@ -2311,6 +2476,9 @@ class RFPhaseScanWindow(QMainWindow):
     def finished(self, result):
         self._set_scan_status(str(result.get("status", "FAILED")))
         self.stop.setEnabled(False); self.start.setEnabled(True); self.thread = None
+        self.batch_button.setEnabled(
+            bool(self.targets) and bool(self.batch_config.get("enabled", False))
+        )
         self.progress.setVisible(False)
         self.last_result = dict(result)
         if not self.points_data and result.get("points"):
@@ -2336,6 +2504,16 @@ class RFPhaseScanWindow(QMainWindow):
             widget.setEnabled(True)
 
     def closeEvent(self, event):
+        if (
+            self.batch_dialog is not None
+            and self.batch_dialog.worker is not None
+            and self.batch_dialog.worker.isRunning()
+        ):
+            self.batch_dialog.worker.stop()
+            if not self.batch_dialog.worker.wait(15000):
+                self._set_scan_status("Restoring", "Batch restore is still in progress; close deferred.")
+                event.ignore()
+                return
         if self.thread is not None and self.thread.isRunning():
             self.thread.requestInterruption()
             if not self.thread.wait(15000):
