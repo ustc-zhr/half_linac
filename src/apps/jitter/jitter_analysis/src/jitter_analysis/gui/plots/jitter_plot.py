@@ -185,6 +185,8 @@ if QtWidgets is not None:
             ]
 
     class JitterPlot(QtWidgets.QWidget):
+        analysisRangeChanged = QtCore.pyqtSignal(object)
+
         def __init__(self, parent=None) -> None:
             super().__init__(parent)
             self._series_rows = []
@@ -194,6 +196,10 @@ if QtWidgets is not None:
             self._sample_elapsed_seconds = []
             self._time_origin = None
             self._time_origin_epoch_seconds = None
+            self._available_sample_indices = []
+            self._analysis_sample_range = None
+            self._analysis_region = None
+            self._updating_analysis_region = False
 
             layout = QtWidgets.QVBoxLayout(self)
 
@@ -239,6 +245,22 @@ if QtWidgets is not None:
             self.controls_layout = controls
             layout.addLayout(controls)
 
+            range_controls = QtWidgets.QHBoxLayout()
+            range_controls.addWidget(QtWidgets.QLabel("Analysis Range"))
+            self.select_range_button = QtWidgets.QPushButton("Select Range", self)
+            self.use_all_data_button = QtWidgets.QPushButton("Use All Data", self)
+            for button in (self.select_range_button, self.use_all_data_button):
+                button.setProperty("compactControl", "true")
+                button.setFixedHeight(28)
+            self.select_range_button.setEnabled(False)
+            self.use_all_data_button.setEnabled(False)
+            range_controls.addWidget(self.select_range_button)
+            range_controls.addWidget(self.use_all_data_button)
+            self.range_summary_label = QtWidgets.QLabel("All data", self)
+            self.range_summary_label.setWordWrap(True)
+            range_controls.addWidget(self.range_summary_label, 1)
+            layout.addLayout(range_controls)
+
             self.info_label = QtWidgets.QLabel("Select one or more read PVs to inspect jitter points.")
             self.info_label.setWordWrap(True)
             layout.addWidget(self.info_label)
@@ -263,12 +285,21 @@ if QtWidgets is not None:
             self.downsample_check.toggled.connect(self._handle_downsample_changed)
             self.display_points_spin.valueChanged.connect(self._render_series)
             self.series_button.clicked.connect(self._open_series_selector)
+            self.select_range_button.clicked.connect(self._select_full_range)
+            self.use_all_data_button.clicked.connect(self._use_all_data)
             self._update_downsample_control_state()
 
         def add_trailing_control_widget(self, widget) -> None:
             self.controls_layout.addWidget(widget, 0)
 
-        def clear_data(self, message: str) -> None:
+        def clear_data(self, message: str, *, preserve_analysis_range: bool = False) -> None:
+            preserved_range = self._analysis_sample_range if preserve_analysis_range else None
+            preserved_indices = list(self._available_sample_indices) if preserve_analysis_range else []
+            preserved_elapsed = list(self._sample_elapsed_seconds) if preserve_analysis_range else []
+            preserved_origin = self._time_origin if preserve_analysis_range else None
+            preserved_origin_epoch = (
+                self._time_origin_epoch_seconds if preserve_analysis_range else None
+            )
             self._series_rows = []
             self._series_visibility = {}
             self._focused_pv_id = None
@@ -276,6 +307,16 @@ if QtWidgets is not None:
             self._sample_elapsed_seconds = []
             self._time_origin = None
             self._time_origin_epoch_seconds = None
+            self._available_sample_indices = preserved_indices
+            self.clear_analysis_range(emit=False)
+            if preserved_range is not None:
+                self._sample_elapsed_seconds = preserved_elapsed
+                self._time_origin = preserved_origin
+                self._time_origin_epoch_seconds = preserved_origin_epoch
+                self._analysis_sample_range = preserved_range
+                self.use_all_data_button.setEnabled(True)
+                self.select_range_button.setEnabled(bool(self._available_sample_indices))
+                self._update_analysis_range_summary()
             self.info_label.setText(message)
             self._rebuild_series_menu()
             if self.plot_widget is not None:
@@ -285,6 +326,7 @@ if QtWidgets is not None:
                 self.plot_widget.setTitle("Jitter Points")
                 self.plot_widget.setLabel("bottom", "Sample Index")
                 self.plot_widget.setLabel("left", "Value")
+                self._restore_analysis_region()
 
         def current_pv_ids(self) -> list[str]:
             return [
@@ -306,6 +348,15 @@ if QtWidgets is not None:
             previous_visibility = dict(self._series_visibility)
             self._series_rows = list(rows)
             self._set_sample_timestamps(sample_timestamps)
+            self._available_sample_indices = sorted(
+                {
+                    int(sample_index)
+                    for row in self._series_rows
+                    for sample_index in row.get(
+                        "available_sample_indices", row.get("sample_indices", [])
+                    )
+                }
+            )
             self._series_visibility = resolve_initial_visibility(
                 [str(row["pv_id"]) for row in self._series_rows],
                 previous_visibility=previous_visibility,
@@ -326,7 +377,145 @@ if QtWidgets is not None:
                 self._focused_pv_id = visible_ids[0] if visible_ids else str(self._series_rows[0]["pv_id"])
 
             self._rebuild_series_menu()
+            self.set_analysis_sample_range(self._analysis_sample_range, emit=False)
             self._render_series()
+
+        def analysis_sample_range(self) -> tuple[int, int] | None:
+            return self._analysis_sample_range
+
+        def set_analysis_sample_range(self, sample_range, *, emit: bool = False) -> None:
+            normalized_range = self._normalize_analysis_range(sample_range)
+            changed = normalized_range != self._analysis_sample_range
+            self._analysis_sample_range = normalized_range
+            self.select_range_button.setEnabled(bool(self._available_sample_indices))
+            self.use_all_data_button.setEnabled(normalized_range is not None)
+            self._update_analysis_range_summary()
+            self._restore_analysis_region()
+            if emit and changed:
+                self.analysisRangeChanged.emit(normalized_range)
+
+        def clear_analysis_range(self, *, emit: bool = False) -> None:
+            changed = self._analysis_sample_range is not None
+            self._analysis_sample_range = None
+            if self.plot_widget is not None and self._analysis_region is not None:
+                try:
+                    self.plot_widget.removeItem(self._analysis_region)
+                except Exception:
+                    pass
+            self._analysis_region = None
+            self.use_all_data_button.setEnabled(False)
+            self.select_range_button.setEnabled(bool(self._available_sample_indices))
+            self._update_analysis_range_summary()
+            if emit and changed:
+                self.analysisRangeChanged.emit(None)
+
+        def _normalize_analysis_range(self, sample_range) -> tuple[int, int] | None:
+            if sample_range is None or not self._available_sample_indices:
+                return None
+            start, end = (int(item) for item in sample_range)
+            low, high = min(start, end), max(start, end)
+            available_low = self._available_sample_indices[0]
+            available_high = self._available_sample_indices[-1]
+            low = min(max(low, available_low), available_high)
+            high = min(max(high, available_low), available_high)
+            return (
+                self._nearest_sample_index(float(low), axis_mode="sample_index"),
+                self._nearest_sample_index(float(high), axis_mode="sample_index"),
+            )
+
+        def _select_full_range(self, *_args) -> None:
+            if not self._available_sample_indices:
+                return
+            self.set_analysis_sample_range(
+                (self._available_sample_indices[0], self._available_sample_indices[-1]),
+                emit=True,
+            )
+
+        def _use_all_data(self, *_args) -> None:
+            self.clear_analysis_range(emit=True)
+            self._render_series()
+
+        def _nearest_sample_index(self, axis_value: float, axis_mode: str | None = None) -> int:
+            if not self._available_sample_indices:
+                return 0
+            mode = str(axis_mode or self._axis_mode())
+            return min(
+                self._available_sample_indices,
+                key=lambda sample_index: abs(
+                    self._axis_value_for_index(sample_index, axis_mode=mode) - float(axis_value)
+                ),
+            )
+
+        def _analysis_range_text(self, sample_range=None) -> str:
+            active_range = self._analysis_sample_range if sample_range is None else sample_range
+            if active_range is None:
+                return "All data"
+            start, end = active_range
+            summary = f"Selected samples {start + 1}\N{EN DASH}{end + 1}"
+            start_time = self._sample_elapsed_for_index(start)
+            end_time = self._sample_elapsed_for_index(end)
+            if start_time is not None and end_time is not None:
+                summary += f" | {abs(end_time - start_time):.6g} s"
+            return summary
+
+        def _sample_elapsed_for_index(self, sample_index: int) -> float | None:
+            if 0 <= sample_index < len(self._sample_elapsed_seconds):
+                value = self._sample_elapsed_seconds[sample_index]
+                return None if value is None else float(value)
+            return None
+
+        def _update_analysis_range_summary(self, sample_range=None) -> None:
+            self.range_summary_label.setText(self._analysis_range_text(sample_range))
+
+        def _restore_analysis_region(self) -> None:
+            if self.plot_widget is None:
+                return
+            if self._analysis_region is not None:
+                try:
+                    self.plot_widget.removeItem(self._analysis_region)
+                except Exception:
+                    pass
+                self._analysis_region = None
+            if self._analysis_sample_range is None:
+                return
+            start, end = self._analysis_sample_range
+            axis_mode = self._axis_mode()
+            region_values = (
+                self._axis_value_for_index(start, axis_mode=axis_mode),
+                self._axis_value_for_index(end, axis_mode=axis_mode),
+            )
+            self._updating_analysis_region = True
+            try:
+                region = pg.LinearRegionItem(
+                    values=region_values,
+                    orientation=pg.LinearRegionItem.Vertical,
+                    movable=True,
+                    brush=pg.mkBrush(68, 138, 255, 42),
+                    pen=pg.mkPen(68, 138, 255, 190, width=1.5),
+                )
+                region.setZValue(-10)
+                region.sigRegionChanged.connect(self._on_analysis_region_changed)
+                region.sigRegionChangeFinished.connect(self._on_analysis_region_finished)
+                self.plot_widget.addItem(region)
+                self._analysis_region = region
+            finally:
+                self._updating_analysis_region = False
+
+        def _on_analysis_region_changed(self, *_args) -> None:
+            if self._updating_analysis_region or self._analysis_region is None:
+                return
+            region_start, region_end = self._analysis_region.getRegion()
+            start = self._nearest_sample_index(min(region_start, region_end))
+            end = self._nearest_sample_index(max(region_start, region_end))
+            self._update_analysis_range_summary((min(start, end), max(start, end)))
+
+        def _on_analysis_region_finished(self, *_args) -> None:
+            if self._updating_analysis_region or self._analysis_region is None:
+                return
+            region_start, region_end = self._analysis_region.getRegion()
+            start = self._nearest_sample_index(min(region_start, region_end))
+            end = self._nearest_sample_index(max(region_start, region_end))
+            self.set_analysis_sample_range((min(start, end), max(start, end)), emit=True)
 
         def select_pv_id(self, pv_id: str | None) -> None:
             if not pv_id:
@@ -501,6 +690,7 @@ if QtWidgets is not None:
                     self.plot_widget.setTitle("Jitter Points")
                     self.plot_widget.setLabel("bottom", "Sample Index")
                     self.plot_widget.setLabel("left", "Value")
+                    self._restore_analysis_region()
                 return
 
             if self._focused_pv_id not in {str(row["pv_id"]) for row in visible_rows}:
@@ -527,7 +717,7 @@ if QtWidgets is not None:
                 )
                 if fallback_count:
                     fallback_note = f" | {fallback_count} constant variable(s) shown as mean-centered."
-            kept_count = len(focused_row["values"])
+            kept_count = int(focused_row.get("analysis_count", len(focused_row["values"])))
             raw_count = int(focused_row.get("raw_count", kept_count))
             removed_count = int(focused_row.get("removed_count", max(raw_count - kept_count, 0)))
             if raw_count > kept_count or removed_count > 0:
@@ -657,6 +847,7 @@ if QtWidgets is not None:
             y_range = padded_finite_range(visible_y_values)
             if y_range is not None:
                 self.plot_widget.setYRange(y_range[0], y_range[1], padding=0.0)
+            self._restore_analysis_region()
 
 else:
 

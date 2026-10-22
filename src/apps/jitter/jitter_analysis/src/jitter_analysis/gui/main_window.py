@@ -258,6 +258,7 @@ class MainWindow(_MainWindowBase):
         self.current_run_steps = []
         self.current_run_record_count = 0
         self.current_run_sample_timestamps = []
+        self._analysis_sample_range: tuple[int, int] | None = None
         self.current_series_values = {}
         self.current_series_metadata = {}
         self.current_waveform_records = {}
@@ -1122,17 +1123,58 @@ class MainWindow(_MainWindowBase):
         self.jitter_outlier_filter_spin.setEnabled(self._analysis_outlier_filter_available() and bool(enabled))
         self._on_jitter_filter_changed()
 
+    def _shared_analysis_tab_indices(self) -> tuple[int, int, int]:
+        return (self.jitter_tab_index, self.correlation_tab_index, self.spectrum_tab_index)
+
+    def _invalidate_shared_analysis_tabs(self) -> None:
+        target_tabs = self._shared_analysis_tab_indices()
+        for tab_index in target_tabs:
+            self._analysis_tab_loaded[tab_index] = False
+        if self.main_tabs.currentIndex() == self.analysis_page_index:
+            current_tab = self.analysis_tabs.currentIndex()
+            if current_tab in target_tabs:
+                self._ensure_analysis_tab_loaded(current_tab)
+
     def _on_jitter_filter_changed(self, *_args) -> None:
         self._update_jitter_filter_status()
         if self.loaded_config is None or not self._has_current_run_data():
             return
-        self._analysis_tab_loaded[self.jitter_tab_index] = False
-        self._analysis_tab_loaded[self.correlation_tab_index] = False
-        self._analysis_tab_loaded[self.spectrum_tab_index] = False
-        if self.main_tabs.currentIndex() == self.analysis_page_index:
-            current_tab = self.analysis_tabs.currentIndex()
-            if current_tab in {self.jitter_tab_index, self.correlation_tab_index, self.spectrum_tab_index}:
-                self._ensure_analysis_tab_loaded(current_tab)
+        self._invalidate_shared_analysis_tabs()
+
+    def _on_analysis_range_changed(self, sample_range) -> None:
+        normalized_range = None
+        if sample_range is not None:
+            start, end = (int(item) for item in sample_range)
+            normalized_range = (min(start, end), max(start, end))
+        if normalized_range == self._analysis_sample_range:
+            return
+        self._analysis_sample_range = normalized_range
+        if self.loaded_config is not None and self._has_current_run_data():
+            self._invalidate_shared_analysis_tabs()
+
+    def _clear_analysis_sample_range(self) -> None:
+        self._analysis_sample_range = None
+        jitter_plot = getattr(self, "jitter_plot", None)
+        if jitter_plot is not None:
+            jitter_plot.clear_analysis_range(emit=False)
+
+    def _analysis_range_summary_text(self) -> str:
+        if self._analysis_sample_range is None:
+            return ""
+        start, end = self._analysis_sample_range
+        summary = f"Selected samples {start + 1}\N{EN DASH}{end + 1}"
+        timestamps = self.current_run_sample_timestamps
+        if 0 <= start < len(timestamps) and 0 <= end < len(timestamps):
+            start_time = timestamps[start]
+            end_time = timestamps[end]
+            if start_time is not None and end_time is not None:
+                summary += f" | {abs((end_time - start_time).total_seconds()):.6g} s"
+        return summary
+
+    def _append_analysis_range_summary(self, label) -> None:
+        summary = self._analysis_range_summary_text()
+        if summary:
+            label.setText(label.text() + f" | {summary}")
 
     def _on_analysis_tab_changed(self, index: int) -> None:
         self._ensure_analysis_tab_loaded(index)
@@ -1170,6 +1212,7 @@ class MainWindow(_MainWindowBase):
         self.jitter_table.currentCellChanged.connect(self._on_jitter_table_changed)
         self.jitter_outlier_filter_check.toggled.connect(self._on_jitter_filter_toggled)
         self.jitter_outlier_filter_spin.valueChanged.connect(self._on_jitter_filter_changed)
+        self.jitter_plot.analysisRangeChanged.connect(self._on_analysis_range_changed)
         self.scan_panel.active_knob_combo.currentIndexChanged.connect(self._sync_knob_from_combo)
         self.scan_panel.random_config_button.clicked.connect(self.open_random_knob_config_dialog)
         self.scan_panel.random_preview_button.clicked.connect(self.refresh_random_preview)
@@ -2739,6 +2782,7 @@ class MainWindow(_MainWindowBase):
             step_indices,
             outlier_filter_enabled=self._jitter_outlier_filter_enabled(),
             outlier_filter_threshold=self._jitter_outlier_filter_threshold(),
+            sample_index_range=self._analysis_sample_range,
         )
 
     def _analysis_mode_key(self, fallback_mode: str) -> str:
@@ -2961,6 +3005,7 @@ class MainWindow(_MainWindowBase):
             self._analysis_tab_loaded[tab_index] = False
 
     def _prepare_analysis_views_for_current_data(self) -> None:
+        self._clear_analysis_sample_range()
         self._mark_analysis_tabs_dirty()
         self._analysis_tab_loading = None
         self._waveform_analysis_signature = None
@@ -4026,6 +4071,7 @@ class MainWindow(_MainWindowBase):
         self.main_tabs.setCurrentIndex(self.config_tab_index)
 
     def _reset_analysis_views(self) -> None:
+        self._clear_analysis_sample_range()
         self._mark_analysis_tabs_dirty()
         self._analysis_tab_loading = None
         self.waveform_plot.clear_data(
@@ -4227,7 +4273,7 @@ class MainWindow(_MainWindowBase):
             filtered_values = list(filtered["filtered_values"])
             if not filtered_values:
                 continue
-            filtered_sample_indices = list(filtered["filtered_sample_indices"])
+            source_count = int(filtered["source_count"])
             raw_count = int(filtered["raw_count"])
             removed_count = int(filtered["removed_count"])
             total_removed += removed_count
@@ -4247,11 +4293,28 @@ class MainWindow(_MainWindowBase):
                 for part in (name, pv_id, read_pv, group_id, group_label, *tags)
                 if str(part).strip()
             )
-            if len(filtered_sample_indices) != len(filtered_values):
-                filtered_sample_indices = list(range(len(filtered_values)))
             rows.append(
-                (pv_id, name, stats, unit, raw_count, removed_count, search_text)
+                (
+                    pv_id,
+                    name,
+                    stats,
+                    unit,
+                    source_count,
+                    raw_count,
+                    removed_count,
+                    search_text,
+                )
             )
+
+            display_values = list(filtered["display_values"])
+            display_sample_indices = list(filtered["aligned_sample_indices"])
+            if len(display_sample_indices) != len(display_values):
+                display_sample_indices = list(range(len(display_values)))
+            plot_pairs = [
+                (int(sample_index), float(value))
+                for sample_index, value in zip(display_sample_indices, display_values)
+                if not math.isnan(float(value))
+            ]
             plot_rows.append(
                 {
                     "pv_id": pv_id,
@@ -4261,13 +4324,16 @@ class MainWindow(_MainWindowBase):
                     "group_label": group_label,
                     "read_pv": read_pv,
                     "tags": tags,
-                    "sample_indices": filtered_sample_indices,
-                    "values": filtered_values,
+                    "sample_indices": [item[0] for item in plot_pairs],
+                    "available_sample_indices": list(filtered["aligned_sample_indices"]),
+                    "values": [item[1] for item in plot_pairs],
                     "mean": stats.mean,
                     "std": stats.std,
                     "relative_jitter_percent": stats.relative_jitter_percent,
                     "p2p": stats.peak_to_peak,
+                    "source_count": source_count,
                     "raw_count": raw_count,
+                    "analysis_count": stats.count,
                     "removed_count": removed_count,
                     "filter_mode": str(filtered["filter_mode"]),
                 }
@@ -4284,6 +4350,7 @@ class MainWindow(_MainWindowBase):
             name,
             stats,
             unit,
+            source_count,
             raw_count,
             removed_count,
             search_text,
@@ -4317,11 +4384,19 @@ class MainWindow(_MainWindowBase):
                 6: stats.minimum,
                 7: stats.maximum,
             }
-            tooltip = (
-                f"Raw valid samples: {raw_count}\n"
-                f"Samples kept in Jitter tab: {stats.count}\n"
-                f"Filtered outliers: {removed_count}"
-            )
+            if self._analysis_sample_range is None:
+                tooltip = (
+                    f"Raw valid samples: {raw_count}\n"
+                    f"Samples kept in Jitter tab: {stats.count}\n"
+                    f"Filtered outliers: {removed_count}"
+                )
+            else:
+                tooltip = (
+                    f"Source valid samples: {source_count}\n"
+                    f"Valid samples in selected range: {raw_count}\n"
+                    f"Samples kept in Jitter tab: {stats.count}\n"
+                    f"Filtered outliers in selected range: {removed_count}"
+                )
             for col_index, value in enumerate(values):
                 if col_index in numeric_sort_values:
                     item = _NumericTableWidgetItem(value, numeric_sort_values[col_index])
@@ -4342,7 +4417,10 @@ class MainWindow(_MainWindowBase):
             self.jitter_table.sortItems(sort_column, sort_order)
         self._apply_jitter_table_filter()
         self._apply_jitter_table_column_layout()
-        self._update_jitter_filter_status(total_removed=total_removed, affected_variables=affected_variables)
+        self._update_jitter_filter_status(
+            total_removed=total_removed,
+            affected_variables=affected_variables,
+        )
         current_pv_ids = self.jitter_plot.current_pv_ids()
         focused_pv_id = self.jitter_plot.focused_pv_id()
         if plot_rows:
@@ -4352,11 +4430,20 @@ class MainWindow(_MainWindowBase):
                 focused_pv_id=focused_pv_id,
                 sample_timestamps=self.current_run_sample_timestamps,
             )
+            self.jitter_plot.set_analysis_sample_range(
+                self._analysis_sample_range,
+                emit=False,
+            )
         else:
             message = "No valid jitter samples are available."
-            if self._jitter_outlier_filter_enabled() and total_removed:
+            if self._analysis_sample_range is not None:
+                message = "No valid jitter samples are available in the selected range."
+            elif self._jitter_outlier_filter_enabled() and total_removed:
                 message = "All jitter samples were removed by the outlier filter."
-            self.jitter_plot.clear_data(message)
+            self.jitter_plot.clear_data(
+                message,
+                preserve_analysis_range=self._analysis_sample_range is not None,
+            )
         if plot_rows:
             blockers = [QtCore.QSignalBlocker(self.jitter_table)]
             try:
@@ -4607,7 +4694,7 @@ class MainWindow(_MainWindowBase):
         series_metadata_by_name = {}
         total_removed = 0
         affected_variables = 0
-        for pv_id, values in self.current_series_values.items():
+        for pv_id in self.current_series_values:
             if pv_id not in objects_by_id:
                 continue
             filtered = self._filtered_series_payload(pv_id)
@@ -4628,21 +4715,32 @@ class MainWindow(_MainWindowBase):
                 "sample_indices": list(filtered["aligned_sample_indices"]),
                 "step_indices": list(filtered["aligned_step_indices"]),
                 "pv_id": pv_id,
+                "source_count": int(filtered["source_count"]),
+                "range_count": int(filtered["range_count"]),
                 "raw_count": int(filtered["raw_count"]),
-                "removed_count": int(filtered["removed_count"]),
+                "removed_count": removed_count,
             }
 
         if len(series_by_name) < 2:
             message = "Need at least two read PV series with valid samples to compute correlation."
-            if self._jitter_outlier_filter_enabled() and total_removed:
+            if self._analysis_sample_range is not None:
+                message = "Need at least two read PV series with valid samples in the selected range."
+            elif self._jitter_outlier_filter_enabled() and total_removed:
                 message = "Need at least two read PV series with valid samples after outlier filtering."
+            range_summary = self._analysis_range_summary_text()
+            if range_summary:
+                message += f" | {range_summary}"
             self.correlation_plot.clear_data(message)
             return
 
         try:
             result = compute_correlation_matrix(series_by_name)
         except ValueError as exc:
-            self.correlation_plot.clear_data(str(exc))
+            message = str(exc)
+            range_summary = self._analysis_range_summary_text()
+            if range_summary:
+                message += f" | {range_summary}"
+            self.correlation_plot.clear_data(message)
             return
         self.correlation_plot.set_matrix(
             result.names,
@@ -4655,6 +4753,7 @@ class MainWindow(_MainWindowBase):
                 self.correlation_plot.summary_label.text()
                 + f" Outlier filter removed {total_removed} point(s) across {affected_variables} variable(s)."
             )
+        self._append_analysis_range_summary(self.correlation_plot.summary_label)
 
     def _populate_spectrum_view(self) -> None:
         if self.loaded_config is None:
@@ -4678,19 +4777,55 @@ class MainWindow(_MainWindowBase):
                 affected_variables += 1
             if len(finite_values) < 2:
                 continue
+            metadata = self.current_series_metadata.get(pv_id, [])
             try:
-                metadata = self.current_series_metadata.get(pv_id, [])
-                if isinstance(metadata, dict) and "timestamps" not in metadata:
-                    sample_interval_sec = self._estimate_series_sample_interval_from_sample_indices(
-                        finite_sample_indices
-                    )
+                if self._analysis_sample_range is None:
+                    if isinstance(metadata, dict) and "timestamps" not in metadata:
+                        sample_interval_sec = self._estimate_series_sample_interval_from_sample_indices(
+                            finite_sample_indices
+                        )
+                    else:
+                        if isinstance(metadata, dict):
+                            metadata_timestamps = list(metadata.get("timestamps", []))
+                            timestamps = [
+                                timestamp
+                                for value, timestamp in zip(values, metadata_timestamps)
+                                if not math.isnan(float(value)) and timestamp is not None
+                            ]
+                        else:
+                            timestamps = [
+                                item.get("timestamp")
+                                for value, item in zip(values, metadata)
+                                if not math.isnan(float(value)) and item.get("timestamp") is not None
+                            ]
+                        sample_interval_sec = self._estimate_series_sample_interval(timestamps)
                 else:
-                    timestamps = [
-                        item.get("timestamp")
-                        for value, item in zip(values, metadata)
-                        if not math.isnan(float(value)) and item.get("timestamp") is not None
-                    ]
-                    sample_interval_sec = self._estimate_series_sample_interval(timestamps)
+                    try:
+                        sample_interval_sec = self._estimate_series_sample_interval_from_sample_indices(
+                            finite_sample_indices
+                        )
+                    except ValueError:
+                        raw_indices = list(filtered["filtered_raw_indices"])
+                        if isinstance(metadata, dict):
+                            metadata_timestamps = list(metadata.get("timestamps", []))
+                            timestamps = [
+                                metadata_timestamps[index]
+                                for index in raw_indices
+                                if (
+                                    index < len(metadata_timestamps)
+                                    and metadata_timestamps[index] is not None
+                                )
+                            ]
+                        else:
+                            timestamps = [
+                                metadata[index].get("timestamp")
+                                for index in raw_indices
+                                if (
+                                    index < len(metadata)
+                                    and metadata[index].get("timestamp") is not None
+                                )
+                            ]
+                        sample_interval_sec = self._estimate_series_sample_interval(timestamps)
             except ValueError:
                 continue
             obj = objects_by_id[pv_id]
@@ -4705,16 +4840,24 @@ class MainWindow(_MainWindowBase):
                     "display_name": display_name,
                     "unit": obj.unit,
                     "sample_count": len(finite_values),
+                    "sample_indices": finite_sample_indices,
                     "series_sample_interval_sec": sample_interval_sec,
                     "values": finite_values,
+                    "source_count": int(filtered["source_count"]),
+                    "range_count": int(filtered["range_count"]),
                     "removed_count": removed_count,
                 }
             )
 
         if not series_sources:
             message = "Need at least one read PV with two valid samples and usable timestamps to compute spectrum."
-            if self._jitter_outlier_filter_enabled() and total_removed:
+            if self._analysis_sample_range is not None:
+                message = "Need at least two valid timestamped samples in the selected range to compute spectrum."
+            elif self._jitter_outlier_filter_enabled() and total_removed:
                 message = "All usable spectrum samples were removed by the outlier filter."
+            range_summary = self._analysis_range_summary_text()
+            if range_summary:
+                message += f" | {range_summary}"
             self.spectrum_plot.clear_data(message)
             return
 
@@ -4724,6 +4867,7 @@ class MainWindow(_MainWindowBase):
                 self.spectrum_plot.info_label.text()
                 + f" | Outlier filter removed {total_removed} point(s) across {affected_variables} variable(s)."
             )
+        self._append_analysis_range_summary(self.spectrum_plot.info_label)
 
     @staticmethod
     def _estimate_series_sample_interval(timestamps) -> float:

@@ -85,3 +85,48 @@ def test_filtered_series_payload_handles_all_nan_values():
     assert math.isnan(payload["aligned_values"][0])
     assert payload["raw_count"] == 0
     assert payload["filter_mode"] == "robust_z_score_noop"
+
+
+def test_filtered_series_payload_applies_inclusive_sample_range_before_nan_removal():
+    payload = filtered_series_payload(
+        [10.0, float("nan"), 30.0, 40.0],
+        [100, 101, 102, 104],
+        [0, 0, 1, 1],
+        outlier_filter_enabled=False,
+        outlier_filter_threshold=4.0,
+        sample_index_range=(103, 101),
+    )
+
+    assert payload["source_count"] == 3
+    assert payload["range_count"] == 1
+    assert payload["raw_count"] == 1
+    assert payload["filtered_values"] == [30.0]
+    assert payload["filtered_sample_indices"] == [102]
+    assert math.isnan(payload["aligned_values"][0])
+    assert math.isnan(payload["aligned_values"][1])
+    assert payload["aligned_values"][2] == 30.0
+    assert math.isnan(payload["aligned_values"][3])
+    assert payload["display_values"][0] == 10.0
+    assert math.isnan(payload["display_values"][1])
+    assert payload["display_values"][2:] == [30.0, 40.0]
+
+
+def test_filtered_series_payload_filters_outliers_only_inside_selected_range():
+    payload = filtered_series_payload(
+        [100.0, 1.0, 1.0, 1.0, 1.0, 100.0],
+        [0, 1, 2, 3, 4, 5],
+        [None] * 6,
+        outlier_filter_enabled=True,
+        outlier_filter_threshold=4.0,
+        sample_index_range=(1, 5),
+    )
+
+    assert payload["source_count"] == 6
+    assert payload["range_count"] == 5
+    assert payload["filtered_values"] == [1.0, 1.0, 1.0, 1.0]
+    assert payload["filtered_sample_indices"] == [1, 2, 3, 4]
+    assert payload["removed_count"] == 1
+    assert math.isnan(payload["aligned_values"][0])
+    assert math.isnan(payload["aligned_values"][5])
+    assert payload["display_values"][0] == 100.0
+    assert math.isnan(payload["display_values"][5])

@@ -44,17 +44,34 @@ def filtered_series_payload(
     *,
     outlier_filter_enabled: bool,
     outlier_filter_threshold: float,
+    sample_index_range: tuple[int, int] | None = None,
 ) -> dict[str, object]:
+    normalized_range = None
+    if sample_index_range is not None:
+        range_start, range_end = (int(item) for item in sample_index_range)
+        normalized_range = (min(range_start, range_end), max(range_start, range_end))
+
     finite_rows = []
     aligned_values = []
+    display_values = []
+    source_count = 0
     for index, value in enumerate(values):
         numeric_value = float(value)
         if math.isnan(numeric_value):
             aligned_values.append(float("nan"))
+            display_values.append(float("nan"))
             continue
-        aligned_values.append(numeric_value)
+        source_count += 1
         sample_index = int(sample_indices[index]) if index < len(sample_indices) else index
         step_index = step_indices[index] if index < len(step_indices) else None
+        in_range = (
+            normalized_range is None
+            or normalized_range[0] <= sample_index <= normalized_range[1]
+        )
+        aligned_values.append(numeric_value if in_range else float("nan"))
+        display_values.append(numeric_value)
+        if not in_range:
+            continue
         finite_rows.append((index, numeric_value, sample_index, step_index))
 
     if not finite_rows:
@@ -65,8 +82,11 @@ def filtered_series_payload(
             "filtered_step_indices": [],
             "filtered_raw_indices": [],
             "aligned_values": aligned_values,
+            "display_values": display_values,
             "aligned_sample_indices": list(sample_indices),
             "aligned_step_indices": list(step_indices),
+            "source_count": source_count,
+            "range_count": 0,
             "raw_count": 0,
             "removed_count": 0,
             "filter_mode": "off" if not outlier_filter_enabled else "robust_z_score_noop",
@@ -96,6 +116,7 @@ def filtered_series_payload(
             filtered_raw_indices.append(raw_index)
         else:
             aligned_values[raw_index] = float("nan")
+            display_values[raw_index] = float("nan")
 
     return {
         "raw_values": raw_values,
@@ -104,8 +125,11 @@ def filtered_series_payload(
         "filtered_step_indices": filtered_step_indices,
         "filtered_raw_indices": filtered_raw_indices,
         "aligned_values": aligned_values,
+        "display_values": display_values,
         "aligned_sample_indices": list(sample_indices),
         "aligned_step_indices": list(step_indices),
+        "source_count": source_count,
+        "range_count": len(raw_values),
         "raw_count": len(raw_values),
         "removed_count": int(filter_result.removed_count),
         "filter_mode": filter_result.applied_mode,
