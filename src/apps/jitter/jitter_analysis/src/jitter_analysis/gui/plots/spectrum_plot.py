@@ -13,6 +13,34 @@ try:
 except ImportError:  # pragma: no cover - optional runtime dependency
     pg = None
 
+if pg is not None:
+
+    class SpectrumAxisItem(pg.AxisItem):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.enableAutoSIPrefix(False)
+
+        def logTickStrings(self, values, scale, spacing):
+            labels = super().logTickStrings(values, scale, spacing)
+            if spacing is not None:
+                return labels
+
+            decade_indices = {
+                index
+                for index, value in enumerate(values)
+                if abs(float(value) - round(float(value))) < 1.0e-9
+            }
+            visible_indices = set(decade_indices)
+            if len(decade_indices) < 2:
+                for index, value in enumerate(values):
+                    mantissa = 10.0 ** (float(value) % 1.0)
+                    if min(abs(mantissa - 2.0), abs(mantissa - 5.0)) < 1.0e-8:
+                        visible_indices.add(index)
+            return [label if index in visible_indices else "" for index, label in enumerate(labels)]
+
+else:
+    SpectrumAxisItem = None
+
 if QtWidgets is not None:
     from ...analysis.spectrum import compute_amplitude_spectrum, compute_welch_psd
 
@@ -47,6 +75,22 @@ if QtWidgets is not None:
             self.mode_combo.addItem("Amplitude (FFT)", "amplitude")
             self.mode_combo.addItem("PSD (Welch)", "welch_psd")
             controls.addWidget(self.mode_combo)
+            controls.addWidget(QtWidgets.QLabel("X Scale"))
+            self.x_scale_combo = QtWidgets.QComboBox(self)
+            self.x_scale_combo.addItem("Linear", "linear")
+            self.x_scale_combo.addItem("Log10", "log10")
+            self.x_scale_combo.setToolTip(
+                "Use a logarithmic frequency axis. The 0 Hz component is hidden in this mode."
+            )
+            controls.addWidget(self.x_scale_combo)
+            controls.addWidget(QtWidgets.QLabel("Y Scale"))
+            self.y_scale_combo = QtWidgets.QComboBox(self)
+            self.y_scale_combo.addItem("Linear", "linear")
+            self.y_scale_combo.addItem("Log10", "log10")
+            self.y_scale_combo.setToolTip(
+                "Use a logarithmic Y axis to reveal spectrum components across multiple orders of magnitude."
+            )
+            controls.addWidget(self.y_scale_combo)
             controls.addWidget(QtWidgets.QLabel("Window"))
             self.window_combo = QtWidgets.QComboBox(self)
             self.window_combo.addItem("Mode Default", "default")
@@ -66,7 +110,12 @@ if QtWidgets is not None:
             controls.addStretch(1)
             layout.addLayout(controls)
             if pg is not None:
-                self.plot_widget = pg.PlotWidget(title="Spectrum")
+                self._frequency_axis = SpectrumAxisItem(orientation="bottom")
+                self._amplitude_axis = SpectrumAxisItem(orientation="left")
+                self.plot_widget = pg.PlotWidget(
+                    title="Spectrum",
+                    axisItems={"bottom": self._frequency_axis, "left": self._amplitude_axis},
+                )
                 self.plot_widget.addLegend()
                 self.plot_widget.setLabel("bottom", "Frequency [Hz]")
                 self.plot_widget.setLabel("left", "Amplitude")
@@ -87,6 +136,8 @@ if QtWidgets is not None:
             self.summary_table.horizontalHeader().setStretchLastSection(True)
             layout.addWidget(self.summary_table)
             self.mode_combo.currentIndexChanged.connect(self._handle_mode_changed)
+            self.x_scale_combo.currentIndexChanged.connect(self._handle_axis_scale_changed)
+            self.y_scale_combo.currentIndexChanged.connect(self._handle_axis_scale_changed)
             self.window_combo.currentIndexChanged.connect(self._render_sources)
             self.nperseg_spin.valueChanged.connect(self._render_sources)
             self._update_control_state()
@@ -103,7 +154,7 @@ if QtWidgets is not None:
             self.plot_widget.addLegend()
             style_plot_widget(self.plot_widget)
             self.plot_widget.setTitle("Spectrum")
-            self.plot_widget.setLabel("left", "Amplitude")
+            self._apply_axis_scales(auto_range=False)
 
         def set_series_sources(self, series_sources) -> None:
             self._series_sources = list(series_sources)
@@ -119,6 +170,32 @@ if QtWidgets is not None:
         def _handle_mode_changed(self, *_args) -> None:
             self._update_control_state()
             self._render_sources()
+
+        def _handle_axis_scale_changed(self, *_args) -> None:
+            self._apply_axis_scales(auto_range=True)
+
+        def _is_log_x(self) -> bool:
+            return str(self.x_scale_combo.currentData() or "linear") == "log10"
+
+        def _is_log_y(self) -> bool:
+            return str(self.y_scale_combo.currentData() or "linear") == "log10"
+
+        def _x_axis_label(self) -> str:
+            return "Frequency [Hz] (log scale)" if self._is_log_x() else "Frequency [Hz]"
+
+        def _y_axis_label(self, mode: str) -> str:
+            label = "PSD" if mode == "welch_psd" else "Amplitude"
+            return f"{label} (log scale)" if self._is_log_y() else label
+
+        def _apply_axis_scales(self, *, auto_range: bool) -> None:
+            if self.plot_widget is None:
+                return
+            mode = str(self.mode_combo.currentData() or "amplitude")
+            self.plot_widget.setLogMode(x=self._is_log_x(), y=self._is_log_y())
+            self.plot_widget.setLabel("bottom", self._x_axis_label())
+            self.plot_widget.setLabel("left", self._y_axis_label(mode))
+            if auto_range:
+                self.plot_widget.autoRange()
 
         def _update_control_state(self) -> None:
             is_welch = str(self.mode_combo.currentData() or "amplitude") == "welch_psd"
@@ -207,7 +284,7 @@ if QtWidgets is not None:
                     style_plot_widget(self.plot_widget)
                     self.plot_widget.setTitle("Spectrum")
                     self.plot_widget.setLabel("bottom", "Frequency [Hz]")
-                    self.plot_widget.setLabel("left", "Amplitude" if mode != "welch_psd" else "PSD")
+                    self._apply_axis_scales(auto_range=False)
                 self.info_label.setText("No PV is selected for spectrum display.")
                 return
 
@@ -241,7 +318,7 @@ if QtWidgets is not None:
                     style_plot_widget(self.plot_widget)
                     self.plot_widget.setTitle("Spectrum")
                     self.plot_widget.setLabel("bottom", "Frequency [Hz]")
-                    self.plot_widget.setLabel("left", "Amplitude" if mode != "welch_psd" else "PSD")
+                    self._apply_axis_scales(auto_range=False)
                 if failures:
                     self.info_label.setText("Spectrum analysis is unavailable for the current data.")
                 else:
@@ -255,10 +332,8 @@ if QtWidgets is not None:
                 style_plot_widget(self.plot_widget)
                 if mode == "welch_psd":
                     self.plot_widget.setTitle("Power Spectral Density")
-                    self.plot_widget.setLabel("left", "PSD")
                 else:
                     self.plot_widget.setTitle("Amplitude Spectrum")
-                    self.plot_widget.setLabel("left", "Amplitude")
 
             peak_summaries = []
             for row, item in enumerate(series_items):
@@ -308,6 +383,7 @@ if QtWidgets is not None:
 
             if self.plot_widget is not None:
                 style_plot_widget(self.plot_widget)
+                self._apply_axis_scales(auto_range=False)
 
             self.summary_table.setHorizontalHeaderLabels(
                 ["PV", "Samples", "dt [s]", "Window", "Seg", "Peak f [Hz]", peak_label, "Unit"]
