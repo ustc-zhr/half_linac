@@ -16,6 +16,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HALF_LINAC_ROOT = REPO_ROOT.parent / "half_linac"
 DEFAULT_OUTPUT = REPO_ROOT / "configs" / "half_pvlist.json"
 
+ENERGY_SPECTRUM_CHANNELS = (
+    ("energy_center", "center energy"),
+    ("energy_actual", "actual energy"),
+    ("energy_deviation", "energy deviation"),
+    ("energy_spread_sigma", "energy spread sigma"),
+    ("energy_spread_fwhm", "energy spread FWHM"),
+)
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -87,6 +95,7 @@ def sync_config(
     sync_existing_objects(data["objects"], elements, channels)
     ensure_rf_phase_knobs(data["knobs"], elements, channels)
     ensure_llrfpb_phase_object(data, elements, channels)
+    ensure_energy_spectrum_objects(data["objects"], elements, channels)
     rename_rf_phase_objects(data["objects"])
     return data
 
@@ -249,6 +258,40 @@ def ensure_llrfpb_phase_object(
             targets = preset.setdefault("targets", [])
             if "llrfpb_phase" not in targets:
                 targets.append("llrfpb_phase")
+
+
+def ensure_energy_spectrum_objects(
+    objects: list[dict[str, Any]],
+    elements: dict[str, dict[str, Any]],
+    channels: dict[str, dict[str, str]],
+) -> None:
+    objects_by_id = {obj["id"]: obj for obj in objects}
+    for element_id, element in elements.items():
+        element_channels = channels.get(element_id, {})
+        for channel_key, label in ENERGY_SPECTRUM_CHANNELS:
+            read_pv = element_channels.get(channel_key)
+            if not read_pv:
+                continue
+            object_id = f"{slug(element_id)}_{channel_key}"
+            existing = objects_by_id.get(object_id)
+            if existing:
+                existing["read_pv"] = read_pv
+                continue
+            obj = {
+                "id": object_id,
+                "name": "{} {}".format(element.get("display_name", element_id), label),
+                "group": "energy",
+                "read_pv": read_pv,
+                "unit": "MeV",
+                "precision": 3,
+                "kind": "scalar",
+                "access": "ro",
+                "analysis": {"jitter": True, "correlation": True, "spectrum": True},
+                "tags": unique_tags(element, "energy", "energy_spectrum"),
+                "note": "PV is imported from half_linac real control backend.",
+            }
+            objects.append(obj)
+            objects_by_id[object_id] = obj
 
 
 def rename_rf_phase_objects(objects: list[dict[str, Any]]) -> None:

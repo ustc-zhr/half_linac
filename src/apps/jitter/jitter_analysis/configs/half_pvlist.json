@@ -22631,6 +22631,206 @@
         "t001s"
       ],
       "note": "Klystron gallery ambient temperature probe."
+    },
+    {
+      "id": "prf02_energy_center",
+      "name": "PRF02 center energy",
+      "group": "energy",
+      "read_pv": "IN:BD:PRF02:H:E0",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "prf02_energy_actual",
+      "name": "PRF02 actual energy",
+      "group": "energy",
+      "read_pv": "IN:BD:PRF02:H:E",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "prf02_energy_deviation",
+      "name": "PRF02 energy deviation",
+      "group": "energy",
+      "read_pv": "IN:BD:PRF02:H:DeltaE",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "prf02_energy_spread_sigma",
+      "name": "PRF02 energy spread sigma",
+      "group": "energy",
+      "read_pv": "IN:BD:PRF02:H:Sigma",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "prf02_energy_spread_fwhm",
+      "name": "PRF02 energy spread FWHM",
+      "group": "energy",
+      "read_pv": "IN:BD:PRF02:H:DE",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "eny_energy_center",
+      "name": "ENY center energy",
+      "group": "energy",
+      "read_pv": "IN:BD:ENY:H:E0",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "eny_energy_actual",
+      "name": "ENY actual energy",
+      "group": "energy",
+      "read_pv": "IN:BD:ENY:H:E",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "eny_energy_deviation",
+      "name": "ENY energy deviation",
+      "group": "energy",
+      "read_pv": "IN:BD:ENY:H:DeltaE",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "eny_energy_spread_sigma",
+      "name": "ENY energy spread sigma",
+      "group": "energy",
+      "read_pv": "IN:BD:ENY:H:Sigma",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
+    },
+    {
+      "id": "eny_energy_spread_fwhm",
+      "name": "ENY energy spread FWHM",
+      "group": "energy",
+      "read_pv": "IN:BD:ENY:H:DE",
+      "unit": "MeV",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "energy_spectrum",
+        "energy"
+      ],
+      "note": "PV is imported from half_linac real control backend."
     }
   ],
   "presets": [
