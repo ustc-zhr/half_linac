@@ -267,6 +267,24 @@
       "voltage_set": "IRFEL:modulator2:HV:set:ao",
       "voltage_readback": "IRFEL:modulator2:HV:ai"
     },
+    "LLRFPB": {
+      "phase_set": "IRFEL:IN-MW:SHB:SET_PHASE",
+      "phase_readback": "IRFEL:IN-MW:SHB:GET_PHASE",
+      "amplitude_set": "IRFEL:IN-MW:SHB:SET_AMP",
+      "amplitude_readback": "IRFEL:IN-MW:SHB:GET_AMP"
+    },
+    "LLRF01": {
+      "phase_set": "IRFEL:IN-MW:KLY1:SET_PHASE",
+      "phase_readback": "IRFEL:IN-MW:KLY1:GET_PHASE",
+      "amplitude_set": "IRFEL:IN-MW:KLY1:SET_AMP",
+      "amplitude_readback": "IRFEL:IN-MW:KLY1:GET_AMP"
+    },
+    "LLRF02": {
+      "phase_set": "IRFEL:IN-MW:KLY2:SET_PHASE",
+      "phase_readback": "IRFEL:IN-MW:KLY2:GET_PHASE",
+      "amplitude_set": "IRFEL:IN-MW:KLY2:SET_AMP",
+      "amplitude_readback": "IRFEL:IN-MW:KLY2:GET_AMP"
+    },
     "KLY1_CH3_PHASE": {
       "phase_set": "IRFEL:IN-MW:KLY1:SET_PHASE",
       "phase_readback": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE"

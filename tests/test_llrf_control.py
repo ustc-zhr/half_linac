@@ -44,6 +44,41 @@ def test_half_runtime_discovers_all_llrfs_with_limits_and_steps() -> None:
         assert amplitude.readback_pv == f"IN:MW:{group.element_id}:GET_AMP"
 
 
+def test_irfel_runtime_discovers_configured_llrfs_with_limits_and_steps() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "HALF_LINAC_MACHINE_ID": "irfel",
+            "HALF_LINAC_CONTROL_BACKEND": "real",
+        },
+    ):
+        runtime = load_llrf_runtime()
+
+    assert [group.element_id for group in runtime.groups] == [
+        "LLRFPB",
+        "LLRF01",
+        "LLRF02",
+    ]
+    assert runtime.default_element == "LLRF01"
+    prefixes = {
+        "LLRFPB": "IRFEL:IN-MW:SHB",
+        "LLRF01": "IRFEL:IN-MW:KLY1",
+        "LLRF02": "IRFEL:IN-MW:KLY2",
+    }
+    for group in runtime.groups:
+        phase = group.quantities["phase"]
+        amplitude = group.quantities["amplitude"]
+        assert (phase.low, phase.high, phase.unit, phase.default_step) == (-180, 180, "deg", 5)
+        assert (amplitude.low, amplitude.high, amplitude.unit, amplitude.default_step) == (0, 100, "%", 2)
+        assert phase.readback_tolerance == 0.1
+        assert amplitude.readback_tolerance == 1
+        prefix = prefixes[group.element_id]
+        assert phase.setpoint_pv == f"{prefix}:SET_PHASE"
+        assert phase.readback_pv == f"{prefix}:GET_PHASE"
+        assert amplitude.setpoint_pv == f"{prefix}:SET_AMP"
+        assert amplitude.readback_pv == f"{prefix}:GET_AMP"
+
+
 def test_phase_wrap_preserves_range_endpoints_and_wraps_overflow() -> None:
     assert LlrfControlWindow._wrap_phase(180, -180, 180) == 180
     assert LlrfControlWindow._wrap_phase(185, -180, 180) == -175

@@ -99,6 +99,11 @@ class IRFELVmAcceptanceTests(unittest.TestCase):
                 machine_id="irfel",
                 control_backend="real",
             ),
+            "llrf_control": load_app_context(
+                "llrf_control",
+                machine_id="irfel",
+                control_backend="real",
+            ),
         }
         dispersion_context = load_app_context(
             "dispersion_correction",

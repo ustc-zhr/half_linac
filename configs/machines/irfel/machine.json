@@ -1103,6 +1103,57 @@
       ]
     },
     {
+      "id": "LLRFPB",
+      "kind": "rf",
+      "display_name": "Prebuncher LLRF",
+      "order": 65,
+      "tags": ["rf", "llrf", "wrapped_phase", "prebuncher"],
+      "limits": {
+        "phase_set": {"low": -180, "high": 180, "unit": "deg"},
+        "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
+      },
+      "logical_channels": [
+        "phase_set",
+        "phase_readback",
+        "amplitude_set",
+        "amplitude_readback"
+      ]
+    },
+    {
+      "id": "LLRF01",
+      "kind": "rf",
+      "display_name": "LLRF01",
+      "order": 66,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {
+        "phase_set": {"low": -180, "high": 180, "unit": "deg"},
+        "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
+      },
+      "logical_channels": [
+        "phase_set",
+        "phase_readback",
+        "amplitude_set",
+        "amplitude_readback"
+      ]
+    },
+    {
+      "id": "LLRF02",
+      "kind": "rf",
+      "display_name": "LLRF02",
+      "order": 67,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {
+        "phase_set": {"low": -180, "high": 180, "unit": "deg"},
+        "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
+      },
+      "logical_channels": [
+        "phase_set",
+        "phase_readback",
+        "amplitude_set",
+        "amplitude_readback"
+      ]
+    },
+    {
       "id": "KLY1_CH3_PHASE",
       "kind": "rf",
       "display_name": "KLY1 CH3 Phase",

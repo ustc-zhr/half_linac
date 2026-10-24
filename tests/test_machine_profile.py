@@ -1595,6 +1595,43 @@ class MachineProfileTests(unittest.TestCase):
                     f"{prefix}:GET_AMP",
                 )
 
+    def test_irfel_llrf_phase_and_amplitude_channels_are_complete(self):
+        profile = load_profile("irfel")
+        prefixes = {
+            "LLRFPB": "IRFEL:IN-MW:SHB",
+            "LLRF01": "IRFEL:IN-MW:KLY1",
+            "LLRF02": "IRFEL:IN-MW:KLY2",
+        }
+
+        for element_id, prefix in prefixes.items():
+            with self.subTest(element_id=element_id):
+                element = profile.get_element(element_id)
+                self.assertEqual(element.kind, "rf")
+                self.assertIn("llrf", element.tags)
+                self.assertEqual(
+                    element.limits_for("phase_set"),
+                    {"low": -180, "high": 180, "unit": "deg"},
+                )
+                self.assertEqual(
+                    element.limits_for("amplitude_set"),
+                    {"low": 0, "high": 100, "unit": "%"},
+                )
+                for quantity in ("phase", "amplitude"):
+                    suffix = "PHASE" if quantity == "phase" else "AMP"
+                    self.assertEqual(
+                        resolve_channel(profile, element_id, f"{quantity}_set", "real"),
+                        f"{prefix}:SET_{suffix}",
+                    )
+                    self.assertEqual(
+                        resolve_channel(
+                            profile,
+                            element_id,
+                            f"{quantity}_readback",
+                            "real",
+                        ),
+                        f"{prefix}:GET_{suffix}",
+                    )
+
     def test_vm_backend_uses_softioc_alias_naming_for_magnets(self):
         profile = load_profile("half")
         self.assertEqual(
