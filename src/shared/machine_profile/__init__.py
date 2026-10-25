@@ -49,6 +49,10 @@ from .energy_spectrum import (
     resolve_energy_spectrum_auto_tune,
     resolve_energy_spectrum_stations,
 )
+from .energy_feedback import (
+    resolve_energy_feedback_workflow,
+    validate_energy_feedback_workflow,
+)
 from .model_backend import (
     BeamModelBackend,
     EnergyModelBackend,
@@ -159,6 +163,8 @@ __all__ = [
     "CONTROL_BACKEND_ENV",
     "ElementConfig",
     "EnergyModelBackend",
+    "resolve_energy_feedback_workflow",
+    "validate_energy_feedback_workflow",
     "EnergyOpticsResult",
     "TwissProfileResult",
     "ElegantModelBackend",

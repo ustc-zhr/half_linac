@@ -26,6 +26,7 @@ REAL_COMMISSIONING_WORKFLOWS_BY_APP = {
     "orbit_display": "orbit_display",
     "beam_monitor": "beam_monitor",
     "energy_spectrum": "energy_spectrum",
+    "energy_feedback": "energy_feedback",
     "rf_phase_scan": "rf_phase_scan",
     "bba": "bba",
     "emit_measure": "emit_measure",

@@ -38,6 +38,7 @@ from .energy_spectrum import (
     resolve_energy_spectrum_auto_tune,
     resolve_energy_spectrum_stations,
 )
+from .energy_feedback import validate_energy_feedback_workflow
 from .limits import LimitRange, effective_limit
 from ..energy_tuning import normalize_pipeline, EnergyTuningPipelineError
 
@@ -47,6 +48,7 @@ SUPPORTED_APP_NAMES = {
     "orbit_display",
     "beam_monitor",
     "energy_spectrum",
+    "energy_feedback",
     "rf_phase_scan",
     "bba",
     "emit_measure",
@@ -70,6 +72,7 @@ APP_WORKFLOW_FILES = {
     "orbit_display": "orbit_display.json",
     "beam_monitor": "beam_monitor.json",
     "energy_spectrum": "energy_spectrum.json",
+    "energy_feedback": "energy_feedback.json",
     "rf_phase_scan": "rf_phase_scan.json",
     "bba": "bba.json",
     "emit_measure": "emit_measure.json",
@@ -90,6 +93,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_display": ("orbit_display",),
     "beam_monitor": ("beam_monitor",),
     "energy_spectrum": ("energy_spectrum",),
+    "energy_feedback": ("energy_feedback",),
     "rf_phase_scan": ("rf_phase_scan",),
     "bba": ("bba",),
     "emit_measure": ("emit_measure",),
@@ -949,6 +953,19 @@ def _validate_basic_app_support(
                 "energy_spectrum requires apps/energy_spectrum.json."
             )
         _validate_energy_spectrum_workflow(profile, workflow)
+        return
+
+    if app_name == "energy_feedback":
+        workflow = profile.workflows.get("energy_feedback")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError(
+                "energy_feedback requires apps/energy_feedback.json."
+            )
+        validate_energy_feedback_workflow(
+            profile,
+            workflow,
+            control_backend=control_backend,
+        )
         return
 
     if app_name == "rf_phase_scan":

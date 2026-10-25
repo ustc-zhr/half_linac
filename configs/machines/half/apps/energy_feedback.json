@@ -1,0 +1,123 @@
+{
+  "control_backends": ["real"],
+  "real_status": "write_smoke_passed",
+  "write_control": {
+    "default": "blocked",
+    "real": "allowed"
+  },
+  "measurement": {
+    "kind": "energy_spectrum_target",
+    "label": "Energy Spectrum Target",
+    "capabilities": [
+      "energy"
+    ],
+    "energy": {
+      "element": "ENY",
+      "channel": "energy_actual",
+      "unit": "MeV"
+    },
+    "diagnostics": {},
+    "valid_range_mev": [0, 2450],
+    "median_window": 3
+  },
+  "pulse": {
+    "marker": null,
+    "require_marker_for_write": false
+  },
+  "control_groups": [
+    {
+      "id": "llrf18_llrf19_phase",
+      "label": "LLRF18 / LLRF19 phase pair",
+      "response_mev_per_knob_unit": -1.0,
+      "loop_gain": 0.1,
+      "max_knob_step": 0.3,
+      "deadband_mev": 0.0,
+      "action_window_mev": 5.0,
+      "actuators": [
+        {
+          "id": "llrf18_phase",
+          "label": "Phase 1 · LLRF18",
+          "element": "LLRF18",
+          "setpoint": "phase_set",
+          "readback": "phase_readback",
+          "coefficient": 1.0,
+          "unit": "deg",
+          "max_step": 0.3,
+          "max_session_delta": 3.0,
+          "verify_tolerance": 0.1,
+          "cyclic_period": 360.0,
+          "operating_range": [-180.0, 180.0]
+        },
+        {
+          "id": "llrf19_phase",
+          "label": "Phase 2 · LLRF19",
+          "element": "LLRF19",
+          "setpoint": "phase_set",
+          "readback": "phase_readback",
+          "coefficient": -1.081423,
+          "unit": "deg",
+          "max_step": 0.325,
+          "max_session_delta": 3.0,
+          "verify_tolerance": 0.1,
+          "cyclic_period": 360.0,
+          "operating_range": [-180.0, 180.0]
+        }
+      ]
+    }
+  ],
+  "write_verification": {
+    "timeout_s": 1.0,
+    "poll_interval_s": 0.05,
+    "command_precision": 2
+  },
+  "operator_controls": {
+    "target": {
+      "minimum": 0.0,
+      "maximum": 2450.0,
+      "decimals": 3
+    },
+    "gain": {
+      "label": "ki",
+      "minimum": 0.001,
+      "maximum": 1.0,
+      "decimals": 4
+    },
+    "actuator_ratio": {
+      "label": "alpha",
+      "actuator": "llrf19_phase",
+      "sign": -1,
+      "minimum": 0.001,
+      "maximum": 10.0,
+      "decimals": 6
+    },
+    "max_knob_step": {
+      "label": "Step limit",
+      "minimum": 0.01,
+      "maximum": 5.0,
+      "decimals": 3
+    },
+    "action_window": {
+      "label": "Action window",
+      "minimum": 0.1,
+      "maximum": 100.0,
+      "decimals": 3
+    },
+    "max_session_delta": {
+      "label": "Session limit",
+      "minimum": 0.1,
+      "maximum": 30.0,
+      "decimals": 3
+    }
+  },
+  "runtime": {
+    "sample_period_s": 1.0,
+    "plot_period_s": 1.0,
+    "connection_timeout_s": 2.0,
+    "stale_timeout_s": 3.0,
+    "max_history_points": 10000
+  },
+  "logging": {
+    "file_prefix": "energy_feedback",
+    "flush_every_n_rows": 1
+  }
+}
