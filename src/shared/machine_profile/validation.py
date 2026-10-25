@@ -629,7 +629,13 @@ def _validate_real_commissioning_status(
 
 
 MODEL_VALIDATED_APP_NAMES = frozenset(
-    {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
+    {
+        "bba",
+        "emit_measure",
+        "energy_spectrum",
+        "energy_feedback",
+        "dispersion_correction",
+    }
 )
 COMMISSIONING_VALIDATION_EXEMPT_APP_NAMES = frozenset({"machine_snapshot"})
 INTRINSIC_READ_ONLY_APP_NAMES = COMMISSIONING_VALIDATION_EXEMPT_APP_NAMES
@@ -757,6 +763,62 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
                     f"model:{app_name}",
                     FAIL,
                     f"emit_measure model line {line_name!r} is not a LINE in {backend.source_lattice}.",
+                )
+
+    if app_name == "energy_feedback":
+        workflow = context.profile.workflows.get("energy_feedback", {})
+        bpm_sources = tuple(
+            source
+            for source in workflow.get("measurement_alternatives", ())
+            if source.get("kind") == "bpm_transport"
+        )
+        for source in bpm_sources:
+            bpm_ids = tuple(source.get("bpm_elements", ()))
+            source_id = str(source.get("id", "bpm_transport"))
+            try:
+                selected_line = backend.get_measurement_model_line(
+                    bpm_ids[0], bpm_ids[2]
+                )
+                line_backend = ElegantModelBackend(
+                    context.model_backend,
+                    line_name=selected_line.name,
+                )
+                path = line_backend.get_line_elements(bpm_ids[0], bpm_ids[2])
+                path_ids = tuple(str(element["NAME"]) for element in path)
+                indices = tuple(path_ids.index(bpm_id) for bpm_id in bpm_ids)
+                if indices != tuple(sorted(indices)) or len(set(indices)) != 3:
+                    raise MachineProfileError(
+                        f"configured BPM order {bpm_ids!r} is invalid on "
+                        f"model line {selected_line.name!r}"
+                    )
+                quadrupoles_list: list[str] = []
+                for element_id in path_ids:
+                    try:
+                        profile_element = context.profile.get_element(element_id)
+                    except MachineProfileError:
+                        continue
+                    if profile_element.kind == "quad":
+                        quadrupoles_list.append(element_id)
+                quadrupoles = tuple(quadrupoles_list)
+                if not quadrupoles:
+                    raise MachineProfileError(
+                        f"model path {bpm_ids[0]} to {bpm_ids[2]} has no quadrupoles"
+                    )
+                missing_k1 = tuple(
+                    element_id
+                    for element_id in quadrupoles
+                    if "K1" not in line_backend.get_lattice_element(element_id)
+                )
+                if missing_k1:
+                    raise MachineProfileError(
+                        "quadrupoles missing Elegant K1 fields: "
+                        + ", ".join(missing_k1)
+                    )
+            except (IndexError, KeyError, MachineProfileError) as exc:
+                return MachineValidationCheck(
+                    f"model:{app_name}",
+                    FAIL,
+                    f"invalid {source_id} BPM energy transport path: {exc}",
                 )
 
     return MachineValidationCheck(

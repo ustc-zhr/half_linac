@@ -6,6 +6,7 @@
     "real": "allowed"
   },
   "measurement": {
+    "id": "energy_spectrum",
     "kind": "energy_spectrum_target",
     "label": "Energy Spectrum",
     "capabilities": [
@@ -20,6 +21,42 @@
     "valid_range_mev": [0, 2450],
     "median_window": 3
   },
+  "default_measurement_source": "energy_spectrum",
+  "measurement_alternatives": [
+    {
+      "id": "bpm21_22_23",
+      "kind": "bpm_transport",
+      "label": "BPM21/22/23",
+      "capabilities": ["energy"],
+      "bpm_elements": ["BPM21", "BPM22", "BPM23"],
+      "plane": "x",
+      "offset_mm": {
+        "BPM21": 0.0,
+        "BPM22": 0.0,
+        "BPM23": 0.0
+      },
+      "reference_energy": {
+        "element": "LINAC_ENERGY",
+        "channel": "setpoint",
+        "unit": "MeV"
+      },
+      "valid_range_mev": [0.0, 2450.0],
+      "median_window": 3,
+      "runtime": {
+        "stale_timeout_s": 3.0,
+        "max_bpm_timestamp_skew_s": 0.2
+      },
+      "model": {
+        "quadrupole_strength_channel": "K1_total",
+        "min_abs_r12_m": 1e-6,
+        "min_abs_r16_m": 1e-6,
+        "k1_abs_tolerance_per_m2": 1e-4,
+        "k1_rel_tolerance": 1e-4,
+        "zero_threshold_mm": 1e-6,
+        "bend_assumption": "BH01 uses the fixed reference bend in the Elegant lattice"
+      }
+    }
+  ],
   "pulse": {
     "marker": null,
     "require_marker_for_write": false

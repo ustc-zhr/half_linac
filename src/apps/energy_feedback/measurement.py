@@ -9,6 +9,8 @@ from collections import deque
 from collections.abc import Mapping
 from typing import Callable, Protocol
 
+from half_linac.src.shared.energy_measurement import BpmEnergySampler
+
 from .client import PVClient
 from .models import EnergyMeasurement, MeasurementQuality, PVReading
 
@@ -202,6 +204,67 @@ class DirectEnergyProvider:
             diagnostic_errors={},
             quality=MeasurementQuality("HOLD", reason, connected=connected),
             diagnostic_source_timestamps={},
+        )
+
+
+class BpmTransportEnergyProvider:
+    """Adapt reusable three-BPM samples to the Energy Feedback interface."""
+
+    def __init__(
+        self,
+        sampler: BpmEnergySampler,
+        *,
+        runtime_metadata: Mapping[str, object],
+    ) -> None:
+        self.sampler = sampler
+        self.runtime_metadata = dict(runtime_metadata)
+
+    @property
+    def required_keys(self) -> tuple[str, ...]:
+        return self.sampler.required_keys
+
+    def reset(self) -> None:
+        self.sampler.reset_filter()
+
+    def sample(self, now: float | None = None) -> EnergyMeasurement:
+        result = self.sampler.sample(now)
+        diagnostics: dict[str, float | None] = {
+            "bpm_transport.reference_energy_mev": result.reference_energy_mev,
+            "bpm_transport.delta": result.delta,
+            "bpm_transport.delta_energy_mev": result.delta_energy_mev,
+            "bpm_transport.energy_raw_mev": result.energy_raw_mev,
+            "bpm_transport.timestamp_skew_s": result.timestamp_skew_s,
+        }
+        timestamps: dict[str, float | None] = {}
+        for bpm_id, value in result.bpm_values_mm.items():
+            key = f"bpm_transport.{bpm_id}.x_mm"
+            diagnostics[key] = value
+            timestamps[key] = result.bpm_source_timestamps.get(bpm_id)
+        for quadrupole, value in result.k1_values_per_m2.items():
+            diagnostics[f"bpm_transport.{quadrupole}.K1_total_per_m2"] = value
+
+        reason = result.quality_reason or "measurement valid"
+        connected = not any(
+            token in reason.lower() for token in ("disconnected", "read failure")
+        )
+        return EnergyMeasurement(
+            sampled_at=result.sampled_at,
+            source_timestamp=result.source_timestamp,
+            target_source_timestamp=None,
+            energy_mev=result.energy_filtered_mev,
+            target_mev=None,
+            error_mev=None,
+            diagnostics=diagnostics,
+            diagnostic_errors=(
+                {} if result.valid else {"bpm_transport": result.quality_reason}
+            ),
+            quality=MeasurementQuality(
+                result.quality_state,
+                reason,
+                connected=connected,
+                stale="stale" in reason.lower(),
+            ),
+            diagnostic_source_timestamps=timestamps,
         )
 
 

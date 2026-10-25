@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
@@ -20,11 +21,13 @@ from .profile_runtime import APP_DIR
 
 CSV_FIELDS = (
     "sampled_at",
+    "measurement_source",
     "source_timestamp",
     "target_source_timestamp",
     "machine",
     "backend",
     "quality",
+    "quality_reason",
     "connected",
     "energy_mev",
     "target_mev",
@@ -66,6 +69,11 @@ class EnergyFeedbackCsvLogger:
         self._rows = 0
         self._context = context
         self._config = config
+        self._measurement_runtime_metadata: dict[str, Any] = {}
+        self._write_metadata("running")
+
+    def set_measurement_runtime_metadata(self, metadata: Mapping[str, Any]) -> None:
+        self._measurement_runtime_metadata = dict(metadata)
         self._write_metadata("running")
 
     def append(
@@ -87,6 +95,7 @@ class EnergyFeedbackCsvLogger:
         self._writer.writerow(
             {
                 "sampled_at": _value(measurement.sampled_at),
+                "measurement_source": self._config["measurement_source_id"],
                 "source_timestamp": _value(measurement.source_timestamp),
                 "target_source_timestamp": _value(
                     measurement.target_source_timestamp
@@ -94,6 +103,7 @@ class EnergyFeedbackCsvLogger:
                 "machine": self._config["machine_id"],
                 "backend": self._config["backend"],
                 "quality": measurement.quality.state,
+                "quality_reason": measurement.quality.reason,
                 "connected": int(measurement.quality.connected),
                 "energy_mev": _value(measurement.energy_mev),
                 "target_mev": _value(measurement.target_mev),
@@ -155,16 +165,34 @@ class EnergyFeedbackCsvLogger:
             "backend": self._config["backend"],
             "mode": "write_enabled" if self._config.get("write_enabled") else "read_only",
             "measurement_provider": {
+                "id": self._config["measurement_source_id"],
                 "kind": self._config["measurement_kind"],
                 "label": self._config["measurement_label"],
                 "capabilities": list(
                     self._config["measurement_capabilities"]
                 ),
             },
+            "measurement_runtime": self._measurement_runtime_metadata,
             "state": state,
             "csv_path": str(self.csv_path),
             "signals": self._config["signals"],
             "configuration": self._config["workflow"],
+            "profile_snapshot": {
+                "schema_version": self._context.profile.schema_version,
+                "machine": asdict(self._context.profile.machine),
+                "control_backends": list(
+                    self._context.profile.control_backends
+                ),
+                "runtime": (
+                    asdict(self._context.profile.runtime)
+                    if self._context.profile.runtime is not None
+                    else None
+                ),
+                "elements": [
+                    asdict(element) for element in self._context.profile.elements
+                ],
+                "workflows": self._context.profile.workflows,
+            },
         }
         _write_json(self.run_dir / "metadata.json", payload)
         latest = resolve_app_runtime_paths(APP_DIR, self._context)[

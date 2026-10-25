@@ -42,6 +42,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSplitter,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -58,6 +59,7 @@ from half_linac.src.apps.energy_feedback.engine import (
 from half_linac.src.apps.energy_feedback.models import FeedbackDecision, PVReading
 from half_linac.src.apps.energy_feedback.profile_runtime import (
     WORKFLOW_NAME,
+    activate_measurement_source,
     build_measurement_provider,
     load_runtime_config,
 )
@@ -69,6 +71,7 @@ from half_linac.src.apps.energy_feedback.writer import (
 from half_linac.src.shared.machine_profile import (
     AppContext,
     EnergyControlLock,
+    MachineProfileError,
     RuntimeContextWidget,
     load_app_context,
     require_workflow_write_allowed,
@@ -168,6 +171,7 @@ class GuardedDoubleSpinBox(QDoubleSpinBox):
 
 class AcquisitionThread(QThread):
     sample_ready = pyqtSignal(object, object, object)
+    provider_ready = pyqtSignal(object)
     startup_failed = pyqtSignal(str)
     feedback_state = pyqtSignal(bool, str)
     manual_result = pyqtSignal(object)
@@ -272,14 +276,31 @@ class AcquisitionThread(QThread):
                 for group in self.config["control_groups"]
                 for actuator in group.actuators
             )
+            source = self.config["measurement_sources"][
+                self.config["measurement_source_id"]
+            ]
+            active_keys = set(source["signal_keys"])
+            for group in self.config["control_groups"]:
+                for actuator in group.actuators:
+                    active_keys.add(actuator.readback_key)
+                    active_keys.add(actuator.setpoint_key)
             client = EpicsPVClient(
-                self.config["pvs"],
+                {
+                    key: pv_name
+                    for key, pv_name in self.config["pvs"].items()
+                    if key in active_keys
+                },
                 connection_timeout_s=float(
                     self.config["runtime"]["connection_timeout_s"]
                 ),
                 writable_keys=writable_keys if self.config["write_enabled"] else (),
             )
-            provider = build_measurement_provider(self.config, client)
+            provider = build_measurement_provider(
+                self.config, client, context=self.context
+            )
+            self.provider_ready.emit(
+                dict(getattr(provider, "runtime_metadata", {}))
+            )
         except Exception as exc:  # noqa: BLE001 - reported as disconnected
             self.startup_failed.emit(str(exc))
             return
@@ -620,7 +641,7 @@ class EnergyFeedbackWindow(QMainWindow):
         body = QFrame()
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(10)
+        body_layout.setSpacing(0)
 
         left_column = QWidget()
         left_layout = QVBoxLayout(left_column)
@@ -635,6 +656,7 @@ class EnergyFeedbackWindow(QMainWindow):
         self.canvas = FigureCanvas(self.figure)
         self.energy_axis = None
         self.error_axis = None
+        self.bpm_axis = None
         self.actuator_axis = None
         self._rebuild_plot_axes("Feedback")
         plot_layout.addWidget(self.canvas, 1)
@@ -685,9 +707,24 @@ class EnergyFeedbackWindow(QMainWindow):
             1,
         )
         acquisition_grid.addWidget(self._field_label("Energy Source"), 2, 0)
-        acquisition_grid.addWidget(
-            self._read_only_value(self.config["measurement_label"]), 2, 1
+        self.energy_source_combo = QComboBox()
+        self.energy_source_combo.setToolTip(
+            "Stop acquisition before changing the energy measurement source"
         )
+        for source_id, source in self.config["measurement_sources"].items():
+            self.energy_source_combo.addItem(str(source["label"]), source_id)
+        selected_index = self.energy_source_combo.findData(
+            self.config["measurement_source_id"]
+        )
+        self.energy_source_combo.setCurrentIndex(max(0, selected_index))
+        acquisition_grid.addWidget(self.energy_source_combo, 2, 1)
+        self.source_detail_value = QLabel(self.config["measurement_label"])
+        self.source_detail_value.setProperty("role", "hint")
+        self.source_detail_value.setWordWrap(True)
+        self.source_detail_value.setVisible(
+            self.config["measurement_kind"] == "bpm_transport"
+        )
+        acquisition_grid.addWidget(self.source_detail_value, 3, 0, 1, 2)
         operation_layout.addWidget(acquisition_card)
 
         plot_card, plot_grid = self._create_section_card(
@@ -843,8 +880,18 @@ class EnergyFeedbackWindow(QMainWindow):
         right_layout.addWidget(phase_group)
         right_layout.addStretch(1)
 
-        body_layout.addWidget(left_column, 7)
-        body_layout.addWidget(right_column, 4)
+        self.main_splitter = QSplitter(Qt.Horizontal, body)
+        self.main_splitter.setObjectName("mainSplitter")
+        self.main_splitter.setChildrenCollapsible(True)
+        self.main_splitter.setCollapsible(0, False)
+        self.main_splitter.setCollapsible(1, True)
+        self.main_splitter.setHandleWidth(10)
+        self.main_splitter.addWidget(left_column)
+        self.main_splitter.addWidget(right_column)
+        self.main_splitter.setStretchFactor(0, 7)
+        self.main_splitter.setStretchFactor(1, 4)
+        self.main_splitter.setSizes([1000, 430])
+        body_layout.addWidget(self.main_splitter)
         outer.addWidget(body, 1)
         self.setCentralWidget(root)
 
@@ -864,6 +911,9 @@ class EnergyFeedbackWindow(QMainWindow):
 
         self.start_button.clicked.connect(self.start_acquisition)
         self.stop_button.clicked.connect(self.stop_acquisition)
+        self.energy_source_combo.currentIndexChanged.connect(
+            self._on_energy_source_changed
+        )
         self.plot_toggle_button.clicked.connect(self.toggle_plot)
         self.clear_button.clicked.connect(self.clear_plot)
         self.feedback_start_button.clicked.connect(self.start_feedback)
@@ -882,18 +932,28 @@ class EnergyFeedbackWindow(QMainWindow):
         self.figure.clear()
         self.energy_axis = None
         self.error_axis = None
+        self.bpm_axis = None
         self.actuator_axis = None
         if view == "Error Focus":
             self.error_axis = self.figure.add_subplot(1, 1, 1)
             return
         if view == "Full Detail":
-            grid = self.figure.add_gridspec(3, 1, height_ratios=(25, 50, 25))
+            bpm_source = self.config["measurement_kind"] == "bpm_transport"
+            grid = self.figure.add_gridspec(
+                4 if bpm_source else 3,
+                1,
+                height_ratios=(22, 36, 22, 20) if bpm_source else (25, 50, 25),
+            )
             self.energy_axis = self.figure.add_subplot(grid[0, 0])
             self.error_axis = self.figure.add_subplot(
                 grid[1, 0], sharex=self.energy_axis
             )
+            if bpm_source:
+                self.bpm_axis = self.figure.add_subplot(
+                    grid[2, 0], sharex=self.energy_axis
+                )
             self.actuator_axis = self.figure.add_subplot(
-                grid[2, 0], sharex=self.energy_axis
+                grid[3 if bpm_source else 2, 0], sharex=self.energy_axis
             )
             return
         grid = self.figure.add_gridspec(2, 1, height_ratios=(65, 35))
@@ -1098,6 +1158,13 @@ class EnergyFeedbackWindow(QMainWindow):
             background-color: {theme['summary']};
             border: 1px solid {theme['border']}; border-radius: 14px;
         }}
+        QSplitter#mainSplitter::handle:horizontal {{
+            background: {theme['border']};
+            margin: 10px 3px; border-radius: 2px;
+        }}
+        QSplitter#mainSplitter::handle:horizontal:hover {{
+            background: {theme['metric']};
+        }}
         QLabel#summaryTitle {{ font-size: 22px; font-weight: 700; }}
         QToolButton#themeToggleButton {{
             background: {theme['section']}; border: 1px solid {theme['border']};
@@ -1205,11 +1272,18 @@ class EnergyFeedbackWindow(QMainWindow):
         self.target_energy_spin.setEnabled(False)
         self.initial_phase_value.setText("Initial: —")
         self._set_manual_controls(False)
+        self.energy_source_combo.setEnabled(False)
+        if self.config["measurement_kind"] == "bpm_transport":
+            self.source_detail_value.setVisible(True)
+            self.source_detail_value.setText(
+                "BPM21/22/23 · reading E0/K1 and building transport model…"
+            )
         try:
             self.safety.start_acquisition()
             self.logger = EnergyFeedbackCsvLogger(self.context, self.config)
             self.worker = AcquisitionThread(self.context, self.config)
             self.worker.sample_ready.connect(self._on_sample)
+            self.worker.provider_ready.connect(self._on_provider_ready)
             self.worker.startup_failed.connect(self._on_startup_failed)
             self.worker.feedback_state.connect(self._on_feedback_state)
             self.worker.manual_result.connect(self._on_manual_result)
@@ -1223,6 +1297,7 @@ class EnergyFeedbackWindow(QMainWindow):
             self.event_value.setText(f"Start failed: {exc}")
             self._set_status_item("data", "Disconnected", "danger")
             self._set_status_item("action", "Start failed", "danger")
+            self.energy_source_combo.setEnabled(True)
             return
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -1230,7 +1305,9 @@ class EnergyFeedbackWindow(QMainWindow):
         self._set_status_item("phase", "Checking", "info")
         self._set_status_item("action", "Connecting", "info")
         self.event_value.setToolTip(str(self.logger.csv_path))
-        self.event_value.setText("Acquisition starting · connection check in progress")
+        self.event_value.setText(
+            f"Acquisition starting · log {self.logger.csv_path}"
+        )
 
     def stop_acquisition(self) -> None:
         worker = self.worker
@@ -1256,6 +1333,7 @@ class EnergyFeedbackWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         self.feedback_start_button.setEnabled(False)
         self.feedback_stop_button.setEnabled(False)
+        self.energy_source_combo.setEnabled(True)
         self._set_parameter_editing(True)
         self._set_manual_controls(False)
         self._set_status_item("data", "Stopped", "subtle")
@@ -1263,6 +1341,42 @@ class EnergyFeedbackWindow(QMainWindow):
         self._set_status_item("phase", "Not checked", "subtle")
         self._set_status_item("action", "Stopped", "subtle")
         self.event_value.setText("Acquisition stopped")
+
+    def _on_energy_source_changed(self, index: int) -> None:
+        if index < 0:
+            return
+        source_id = str(self.energy_source_combo.itemData(index))
+        if source_id == self.config["measurement_source_id"]:
+            return
+        if self.worker is not None and self.worker.isRunning():
+            previous = self.energy_source_combo.findData(
+                self.config["measurement_source_id"]
+            )
+            self.energy_source_combo.blockSignals(True)
+            self.energy_source_combo.setCurrentIndex(previous)
+            self.energy_source_combo.blockSignals(False)
+            return
+        try:
+            activate_measurement_source(self.config, source_id)
+        except MachineProfileError as exc:
+            self.event_value.setText(f"Energy source change failed: {exc}")
+            return
+        self._target_initialized = False
+        self.target_energy_spin.setEnabled(False)
+        self._latest_measurement = None
+        self._history.clear()
+        self._rebuild_plot_axes(self.plot_view_combo.currentText())
+        self._draw_plot()
+        self.event_value.setText(
+            f"Energy source selected: {self.config['measurement_label']} · press Start"
+        )
+        is_bpm_source = self.config["measurement_kind"] == "bpm_transport"
+        self.source_detail_value.setVisible(is_bpm_source)
+        self.source_detail_value.setText(
+            f"{self.config['measurement_label']} · press Start to apply"
+            if is_bpm_source
+            else ""
+        )
 
     def start_feedback(self) -> None:
         if not self.config["control_groups"]:
@@ -1541,6 +1655,7 @@ class EnergyFeedbackWindow(QMainWindow):
         self.energy_metric.setText(_format_value(measurement.energy_mev, "MeV"))
         self.target_metric.setText(_format_value(measurement.target_mev, "MeV"))
         self.error_metric.setText(_format_value(measurement.error_mev, "MeV"))
+        self._update_source_detail(measurement)
 
         phase_parts = []
         for actuator_id, (label, spin, _button) in self._phase_controls.items():
@@ -1581,6 +1696,21 @@ class EnergyFeedbackWindow(QMainWindow):
         self._history["energy"].append(_plot_value(measurement.energy_mev))
         self._history["target"].append(_plot_value(measurement.target_mev))
         self._history["error"].append(_plot_value(measurement.error_mev))
+        diagnostic_value = (
+            lambda key: measurement.diagnostics.get(key)
+            if measurement.quality.valid
+            else None
+        )
+        self._history["bpm_energy.raw"].append(
+            _plot_value(diagnostic_value("bpm_transport.energy_raw_mev"))
+        )
+        self._history["bpm_energy.reference"].append(
+            _plot_value(diagnostic_value("bpm_transport.reference_energy_mev"))
+        )
+        for bpm_id in ("BPM21", "BPM22", "BPM23"):
+            self._history[f"bpm.{bpm_id}.x"].append(
+                _plot_value(diagnostic_value(f"bpm_transport.{bpm_id}.x_mm"))
+            )
         was_hold = self._last_plot_state == "HOLD"
         is_hold = safety.state == "HOLD"
         self._history["event.applied"].append(
@@ -1675,12 +1805,45 @@ class EnergyFeedbackWindow(QMainWindow):
             self.logger.close("failed")
             self.logger = None
 
+    def _on_provider_ready(self, metadata: object) -> None:
+        details = dict(metadata)
+        if self.logger is not None:
+            self.logger.set_measurement_runtime_metadata(details)
+        if details and self.config["measurement_kind"] == "bpm_transport":
+            self.source_detail_value.setVisible(True)
+            quadrupoles = ", ".join(details.get("quadrupoles", ()))
+            self.source_detail_value.setText(
+                f"Model ready · {details.get('model_line', '—')} · {quadrupoles}"
+            )
+
+    def _update_source_detail(self, measurement: object) -> None:
+        if self.config["measurement_kind"] != "bpm_transport":
+            self.source_detail_value.setVisible(False)
+            self.source_detail_value.setText("")
+            self.source_detail_value.setToolTip("")
+            return
+        self.source_detail_value.setVisible(True)
+        diagnostics = measurement.diagnostics
+        fields = [
+            "BPM model ready",
+            f"E0 {_format_value(diagnostics.get('bpm_transport.reference_energy_mev'), 'MeV')}",
+            f"raw ΔE {_format_value(diagnostics.get('bpm_transport.delta_energy_mev'), 'MeV')}",
+            f"skew {_format_value(diagnostics.get('bpm_transport.timestamp_skew_s'), 's')}",
+        ]
+        fields.extend(
+            f"{bpm_id} {_format_value(diagnostics.get(f'bpm_transport.{bpm_id}.x_mm'), 'mm')}"
+            for bpm_id in ("BPM21", "BPM22", "BPM23")
+        )
+        self.source_detail_value.setText(" · ".join(fields))
+        self.source_detail_value.setToolTip(measurement.quality.reason)
+
     def _on_worker_finished(self) -> None:
         self._feedback_active = False
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.feedback_start_button.setEnabled(False)
         self.feedback_stop_button.setEnabled(False)
+        self.energy_source_combo.setEnabled(True)
         self._set_manual_controls(False)
 
     def _draw_plot(self) -> None:
@@ -1783,15 +1946,45 @@ class EnergyFeedbackWindow(QMainWindow):
                 self.energy_axis.plot(
                     x_values,
                     values("energy"),
-                    label="Measured Energy",
+                    label="Filtered Energy",
                     color=theme["energy"],
                 )
+                if self.config["measurement_kind"] == "bpm_transport":
+                    self.energy_axis.plot(
+                        x_values,
+                        values("bpm_energy.raw"),
+                        label="Raw BPM Energy",
+                        color=theme["info"] if "info" in theme else theme["target"],
+                        alpha=0.65,
+                    )
+                    self.energy_axis.plot(
+                        x_values,
+                        values("bpm_energy.reference"),
+                        label="E0 (LINAC_ENERGY)",
+                        color=theme["target"],
+                        linestyle="--",
+                    )
                 if view == "Full Detail":
                     self.energy_axis.plot(
                         x_values,
                         values("target"),
                         label="Target Energy",
                         color=theme["target"],
+                    )
+            if self.bpm_axis is not None:
+                bpm_colors = (
+                    theme["energy"],
+                    theme["phase1"],
+                    theme["phase2"],
+                )
+                for bpm_id, color in zip(
+                    ("BPM21", "BPM22", "BPM23"), bpm_colors
+                ):
+                    self.bpm_axis.plot(
+                        x_values,
+                        values(f"bpm.{bpm_id}.x"),
+                        label=bpm_id,
+                        color=color,
                     )
             if self.error_axis is not None:
                 self.error_axis.plot(
@@ -1855,6 +2048,8 @@ class EnergyFeedbackWindow(QMainWindow):
             )
         if self.error_axis is not None:
             self.error_axis.set_ylabel("Feedback Error [MeV]", color=theme["text"])
+        if self.bpm_axis is not None:
+            self.bpm_axis.set_ylabel("BPM X [mm]", color=theme["text"])
         if self.actuator_axis is not None:
             self.actuator_axis.set_ylabel(
                 "Phase Correction [deg]", color=theme["text"]
@@ -1894,6 +2089,7 @@ class EnergyFeedbackWindow(QMainWindow):
             for axis in (
                 self.energy_axis,
                 self.error_axis,
+                self.bpm_axis,
                 self.actuator_axis,
             )
             if axis is not None

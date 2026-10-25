@@ -801,6 +801,8 @@ class EnergyFeedbackLoggingTests(unittest.TestCase):
                 self.assertEqual(len(rows), 1)
                 self.assertEqual(rows[0]["decision_reason"], "monitor only")
                 self.assertEqual(rows[0]["source_timestamp"], "100")
+                self.assertEqual(rows[0]["measurement_source"], "energy_spectrum")
+                self.assertEqual(rows[0]["quality_reason"], "measurement valid")
                 logger.close()
 
                 metadata = json.loads(
@@ -811,6 +813,7 @@ class EnergyFeedbackLoggingTests(unittest.TestCase):
                 self.assertEqual(
                     metadata["measurement_provider"],
                     {
+                        "id": "energy_spectrum",
                         "kind": "energy_spectrum_target",
                         "label": "Energy Spectrum",
                         "capabilities": ["energy"],
@@ -819,6 +822,9 @@ class EnergyFeedbackLoggingTests(unittest.TestCase):
                 self.assertEqual(
                     metadata["configuration"]["measurement"]["kind"],
                     "energy_spectrum_target",
+                )
+                self.assertEqual(
+                    metadata["profile_snapshot"]["machine"]["id"], "half"
                 )
 
 
@@ -871,7 +877,7 @@ try:
 
     if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
         raise ImportError("offscreen Qt platform was not explicitly enabled")
-    from PyQt5.QtWidgets import QApplication, QDoubleSpinBox, QGroupBox
+    from PyQt5.QtWidgets import QApplication, QDoubleSpinBox, QGroupBox, QSplitter
     from half_linac.src.apps.energy_feedback.main import (
         DARK_THEME,
         LIGHT_THEME,
@@ -910,6 +916,43 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
                 tuple(window._status_items),
                 ("data", "loop", "phase", "action", "access"),
             )
+        finally:
+            window.close()
+
+    def test_energy_source_selector_switches_to_bpm21_22_23_while_stopped(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="half", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            self.assertTrue(window.source_detail_value.isHidden())
+            labels = tuple(
+                window.energy_source_combo.itemText(index)
+                for index in range(window.energy_source_combo.count())
+            )
+            self.assertEqual(labels, ("Energy Spectrum", "BPM21/22/23"))
+            self.assertTrue(window.energy_source_combo.isEnabled())
+            window.energy_source_combo.setCurrentIndex(1)
+            self.assertEqual(window.config["measurement_source_id"], "bpm21_22_23")
+            self.assertEqual(window.config["measurement_kind"], "bpm_transport")
+            self.assertFalse(window.source_detail_value.isHidden())
+            self.assertIn("press Start", window.source_detail_value.text())
+            self.assertIsNone(window.worker)
+        finally:
+            window.close()
+
+    def test_control_sidebar_is_draggable_and_fully_collapsible(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="half", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            self.assertIsInstance(window.main_splitter, QSplitter)
+            self.assertFalse(window.main_splitter.isCollapsible(0))
+            self.assertTrue(window.main_splitter.isCollapsible(1))
+            self.assertEqual(window.main_splitter.handleWidth(), 10)
+            window.main_splitter.setSizes([1200, 0])
+            self.assertEqual(window.main_splitter.sizes()[1], 0)
         finally:
             window.close()
 

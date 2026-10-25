@@ -173,6 +173,98 @@ def _element_limit(
     return float(limit["low"]), float(limit["high"])
 
 
+def _validate_bpm_transport_source(
+    profile: MachineProfile,
+    raw: Any,
+    name: str,
+    backends: Sequence[str],
+) -> str:
+    source = _mapping(profile, raw, name)
+    source_id = _text(profile, source.get("id"), f"{name}.id")
+    if _text(profile, source.get("kind"), f"{name}.kind") != "bpm_transport":
+        _fail(profile, f"{name}.kind must be 'bpm_transport'")
+    _text(profile, source.get("label"), f"{name}.label")
+    capabilities = [
+        _text(profile, item, f"{name}.capabilities[]")
+        for item in _sequence(profile, source.get("capabilities"), f"{name}.capabilities")
+    ]
+    if capabilities != ["energy"]:
+        _fail(profile, f"{name}.capabilities must be exactly ['energy']")
+
+    bpm_ids = [
+        _text(profile, item, f"{name}.bpm_elements[]")
+        for item in _sequence(profile, source.get("bpm_elements"), f"{name}.bpm_elements")
+    ]
+    if len(bpm_ids) != 3 or len(set(bpm_ids)) != 3:
+        _fail(profile, f"{name}.bpm_elements must contain three distinct BPMs")
+    plane = _text(profile, source.get("plane"), f"{name}.plane")
+    if plane != "x":
+        _fail(profile, f"{name}.plane must be 'x'")
+    for bpm_id in bpm_ids:
+        element = profile.get_element(bpm_id)
+        if element.kind != "bpm":
+            _fail(profile, f"{name} element {bpm_id!r} is not a BPM")
+        for backend in backends:
+            if backend not in element.channels.get(plane, {}):
+                _fail(profile, f"{name} BPM {bpm_id}.{plane} is unavailable on {backend}")
+
+    offsets = _mapping(profile, source.get("offset_mm"), f"{name}.offset_mm")
+    if set(offsets) != set(bpm_ids):
+        _fail(profile, f"{name}.offset_mm keys must match bpm_elements")
+    for bpm_id in bpm_ids:
+        _number(profile, offsets[bpm_id], f"{name}.offset_mm.{bpm_id}")
+
+    reference_id, reference_channel = _signal(
+        profile,
+        source.get("reference_energy"),
+        f"{name}.reference_energy",
+        backends,
+        expected_unit="MeV",
+    )
+    if profile.get_element(reference_id).kind != "energy":
+        _fail(profile, f"{name}.reference_energy must reference an energy element")
+    valid_range = _range(
+        profile, source.get("valid_range_mev"), f"{name}.valid_range_mev"
+    )
+    reference_limit = _element_limit(profile, reference_id, reference_channel)
+    if reference_limit is None:
+        _fail(profile, f"{name}.reference_energy must define an absolute limit")
+    if valid_range[0] < reference_limit[0] or valid_range[1] > reference_limit[1]:
+        _fail(profile, f"{name}.valid_range_mev exceeds the reference machine limit")
+
+    median_window = _integer(
+        profile,
+        source.get("median_window", 1),
+        f"{name}.median_window",
+        positive=True,
+    )
+    if median_window % 2 == 0:
+        _fail(profile, f"{name}.median_window must be odd")
+
+    runtime = _mapping(profile, source.get("runtime"), f"{name}.runtime")
+    for key in ("stale_timeout_s", "max_bpm_timestamp_skew_s"):
+        _number(profile, runtime.get(key), f"{name}.runtime.{key}", positive=True)
+
+    model = _mapping(profile, source.get("model"), f"{name}.model")
+    strength_channel = _text(
+        profile,
+        model.get("quadrupole_strength_channel"),
+        f"{name}.model.quadrupole_strength_channel",
+    )
+    if strength_channel != "K1_total":
+        _fail(profile, f"{name}.model.quadrupole_strength_channel must be 'K1_total'")
+    for key in ("min_abs_r12_m", "min_abs_r16_m"):
+        _number(profile, model.get(key), f"{name}.model.{key}", positive=True)
+    for key in (
+        "k1_abs_tolerance_per_m2",
+        "k1_rel_tolerance",
+        "zero_threshold_mm",
+    ):
+        _number(profile, model.get(key), f"{name}.model.{key}", nonnegative=True)
+    _text(profile, model.get("bend_assumption"), f"{name}.model.bend_assumption")
+    return source_id
+
+
 def validate_energy_feedback_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
@@ -292,6 +384,36 @@ def validate_energy_feedback_workflow(
     )
     if median_window % 2 == 0:
         _fail(profile, "measurement.median_window must be odd")
+
+    default_source_id = _text(
+        profile,
+        measurement.get("id", measurement_kind),
+        "measurement.id",
+    )
+    source_ids = {default_source_id}
+    for index, alternative in enumerate(
+        _sequence(
+            profile,
+            workflow.get("measurement_alternatives", ()),
+            "measurement_alternatives",
+        )
+    ):
+        source_id = _validate_bpm_transport_source(
+            profile,
+            alternative,
+            f"measurement_alternatives[{index}]",
+            backends,
+        )
+        if source_id in source_ids:
+            _fail(profile, f"duplicate measurement source id {source_id!r}")
+        source_ids.add(source_id)
+    selected_source = _text(
+        profile,
+        workflow.get("default_measurement_source", default_source_id),
+        "default_measurement_source",
+    )
+    if selected_source not in source_ids:
+        _fail(profile, "default_measurement_source is not configured")
 
     target = workflow.get("target")
     if target is not None:
