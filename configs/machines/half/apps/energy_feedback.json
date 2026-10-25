@@ -7,7 +7,7 @@
   },
   "measurement": {
     "kind": "energy_spectrum_target",
-    "label": "Energy Spectrum Target",
+    "label": "Energy Spectrum",
     "capabilities": [
       "energy"
     ],

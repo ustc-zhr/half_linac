@@ -684,7 +684,7 @@ class EnergyFeedbackWindow(QMainWindow):
             1,
             1,
         )
-        acquisition_grid.addWidget(self._field_label("Measurement"), 2, 0)
+        acquisition_grid.addWidget(self._field_label("Energy Source"), 2, 0)
         acquisition_grid.addWidget(
             self._read_only_value(self.config["measurement_label"]), 2, 1
         )

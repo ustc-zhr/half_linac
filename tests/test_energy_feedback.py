@@ -621,7 +621,7 @@ class EnergyFeedbackProfileTests(unittest.TestCase):
         self.assertTrue(config["write_enabled"])
         self.assertEqual(len(workflow["control_groups"]), 1)
         self.assertEqual(config["measurement_kind"], "energy_spectrum_target")
-        self.assertEqual(config["measurement_label"], "Energy Spectrum Target")
+        self.assertEqual(config["measurement_label"], "Energy Spectrum")
         self.assertEqual(config["measurement_capabilities"], ("energy",))
         self.assertEqual(config["pvs"]["energy"], "IN:BD:ENY:H:E")
         self.assertNotIn("target", config["pvs"])
@@ -812,7 +812,7 @@ class EnergyFeedbackLoggingTests(unittest.TestCase):
                     metadata["measurement_provider"],
                     {
                         "kind": "energy_spectrum_target",
-                        "label": "Energy Spectrum Target",
+                        "label": "Energy Spectrum",
                         "capabilities": ["energy"],
                     },
                 )
