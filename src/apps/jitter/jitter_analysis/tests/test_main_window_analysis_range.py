@@ -107,6 +107,15 @@ def test_selected_range_controls_jitter_correlation_and_spectrum_inputs(window):
     first_source = next(
         source for source in window.spectrum_plot._series_sources if source["pv_id"] == objects[0].id
     )
+    expected_group_label = next(
+        group.label
+        for group in window.loaded_config.groups
+        if group.id == objects[0].group
+    )
+    assert first_source["group_id"] == objects[0].group
+    assert first_source["group_label"] == expected_group_label
+    assert first_source["read_pv"] == objects[0].read_pv
+    assert first_source["tags"] == list(objects[0].tags)
     assert first_source["values"] == [10.0, 20.0, 30.0]
     assert first_source["sample_indices"] == [1, 2, 3]
     assert first_source["series_sample_interval_sec"] == pytest.approx(0.5)

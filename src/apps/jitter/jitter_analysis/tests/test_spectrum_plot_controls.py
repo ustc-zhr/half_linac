@@ -21,7 +21,16 @@ def qt_app():
     return app or spectrum_plot_module.QtWidgets.QApplication([])
 
 
-def _series_source(*, contiguous=True):
+def _series_source(
+    *,
+    contiguous=True,
+    pv_id="test_phase",
+    name="Test phase",
+    group_id="llrf_channel_phase",
+    group_label="LLRF Channel Phase",
+    read_pv="TEST:LLRF:PHASE",
+    tags=None,
+):
     sample_count = 128
     sample_indices = list(range(sample_count))
     if not contiguous:
@@ -29,9 +38,13 @@ def _series_source(*, contiguous=True):
     times = np.arange(sample_count, dtype=float)
     values = 2.0 + 0.4 * np.sin(2.0 * np.pi * 0.125 * times)
     return {
-        "pv_id": "test_phase",
-        "name": "Test phase",
+        "pv_id": pv_id,
+        "name": name,
         "unit": "deg",
+        "group_id": group_id,
+        "group_label": group_label,
+        "read_pv": read_pv,
+        "tags": list(tags or ["phase"]),
         "sample_count": sample_count,
         "sample_indices": sample_indices,
         "sample_times_sec": times.tolist(),
@@ -47,6 +60,66 @@ def _select_mode(plot, mode):
     index = plot.mode_combo.findData(mode)
     assert index >= 0
     plot.mode_combo.setCurrentIndex(index)
+
+
+def test_spectrum_show_uses_jitter_variable_selector(qt_app, monkeypatch):
+    first = _series_source()
+    second = _series_source(
+        pv_id="test_amplitude",
+        name="Test amplitude",
+        group_id="llrf_channel_amplitude",
+        group_label="LLRF Channel Amplitude",
+        read_pv="TEST:LLRF:AMPLITUDE",
+        tags=["amplitude"],
+    )
+    captured = {}
+
+    class FakeVisibilityDialog:
+        def __init__(self, rows, visible_pv_ids, parent=None):
+            captured["rows"] = rows
+            captured["visible_pv_ids"] = list(visible_pv_ids)
+            captured["parent"] = parent
+
+        def exec_(self):
+            return spectrum_plot_module.QtWidgets.QDialog.Accepted
+
+        def selected_pv_ids(self):
+            return ["test_amplitude"]
+
+    monkeypatch.setattr(
+        spectrum_plot_module,
+        "SeriesVisibilityDialog",
+        FakeVisibilityDialog,
+    )
+    plot = spectrum_plot_module.SpectrumPlot()
+    plot.set_series_sources([first, second])
+
+    assert plot.series_button.text() == "Visible Variables (1/2)"
+    assert plot.series_button.property("plotToolbarControl") == "true"
+    assert plot.series_button.height() == 28
+    assert plot.current_pv_ids() == ["test_phase"]
+
+    plot.series_button.click()
+
+    assert captured["visible_pv_ids"] == ["test_phase"]
+    assert captured["parent"] is plot
+    assert captured["rows"][1] == {
+        "pv_id": "test_amplitude",
+        "label": "Test amplitude [test_amplitude]",
+        "group_id": "llrf_channel_amplitude",
+        "group_label": "LLRF Channel Amplitude",
+        "read_pv": "TEST:LLRF:AMPLITUDE",
+        "tags": ["amplitude"],
+    }
+    assert plot.current_pv_ids() == ["test_amplitude"]
+    assert plot.series_button.text() == "Visible Variables (1/2)"
+    assert plot.summary_table.item(0, 0).text() == (
+        "Test amplitude [test_amplitude]"
+    )
+
+    plot.close()
+    plot.deleteLater()
+    qt_app.processEvents()
 
 
 def test_spectrum_plot_supports_independent_linear_and_log_axes(qt_app):

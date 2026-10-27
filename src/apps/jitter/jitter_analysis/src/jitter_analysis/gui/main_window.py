@@ -4763,6 +4763,7 @@ class MainWindow(_MainWindowBase):
             return
 
         objects_by_id = {obj.id: obj for obj in self.loaded_config.objects}
+        group_labels = {group.id: group.label for group in self.loaded_config.groups}
         series_sources = []
         total_removed = 0
         affected_variables = 0
@@ -4797,11 +4798,16 @@ class MainWindow(_MainWindowBase):
             ]
 
             obj = objects_by_id[pv_id]
+            group_id = obj.group
             series_sources.append(
                 {
                     "pv_id": pv_id,
                     "name": obj.name,
                     "unit": obj.unit,
+                    "group_id": group_id,
+                    "group_label": group_labels.get(group_id, group_id),
+                    "read_pv": obj.read_pv,
+                    "tags": list(obj.tags),
                     "sample_count": len(finite_values),
                     "sample_indices": finite_sample_indices,
                     "sample_times_sec": sample_times_sec,

@@ -50,6 +50,7 @@ if QtWidgets is not None:
         compute_periodic_fit,
         compute_welch_psd,
     )
+    from .jitter_plot import SeriesVisibilityDialog
 
     DEFAULT_VISIBLE_SPECTRUM_SERIES = 1
 
@@ -73,12 +74,11 @@ if QtWidgets is not None:
             controls = QtWidgets.QHBoxLayout()
             controls.addWidget(QtWidgets.QLabel("Show"))
             self.series_button = QtWidgets.QToolButton(self)
-            self.series_button.setText("Visible PVs")
-            self.series_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
-            self.series_menu = QtWidgets.QMenu(self.series_button)
-            self.series_button.setMenu(self.series_menu)
+            self.series_button.setText("Visible Variables")
+            self.series_button.setProperty("plotToolbarControl", "true")
+            self.series_button.setFixedHeight(28)
             self.series_button.setEnabled(False)
-            controls.addWidget(self.series_button)
+            controls.addWidget(self.series_button, 0)
 
             controls.addWidget(QtWidgets.QLabel("Mode"))
             self.mode_combo = QtWidgets.QComboBox(self)
@@ -192,6 +192,7 @@ if QtWidgets is not None:
             self.detrend_combo.currentIndexChanged.connect(self._render_sources)
             self.nperseg_spin.valueChanged.connect(self._render_sources)
             self.fit_frequency_spin.valueChanged.connect(self._render_sources)
+            self.series_button.clicked.connect(self._open_series_selector)
             self._update_control_state()
             self._set_summary_headers(self._headers_for_mode("amplitude"))
 
@@ -344,43 +345,56 @@ if QtWidgets is not None:
             return f"{token}²/Hz" if token else "1/Hz"
 
         def _rebuild_series_menu(self) -> None:
-            self.series_menu.clear()
             self.series_button.setEnabled(bool(self._series_sources))
             if not self._series_sources:
-                self.series_button.setText("Visible PVs")
+                self.series_button.setText("Visible Variables")
                 return
 
-            show_all_action = self.series_menu.addAction("Show All")
-            show_all_action.triggered.connect(
-                lambda: self._set_all_series_visibility(True)
-            )
-            hide_all_action = self.series_menu.addAction("Hide All")
-            hide_all_action.triggered.connect(
-                lambda: self._set_all_series_visibility(False)
-            )
-            self.series_menu.addSeparator()
-
-            visible_count = 0
-            total_count = len(self._series_sources)
-            for source in self._series_sources:
-                key = self._series_key(source)
-                label = self._series_label(source)
-                visible = bool(self._series_visibility.get(key, True))
-                if visible:
-                    visible_count += 1
-                action = self.series_menu.addAction(label)
-                action.setCheckable(True)
-                action.setChecked(visible)
-                action.toggled.connect(
-                    lambda checked, series_key=key: self._set_series_visibility(
-                        series_key,
-                        checked,
-                    )
-                )
-
             self.series_button.setText(
-                f"Visible PVs ({visible_count}/{total_count})"
+                f"Visible Variables ({len(self.current_pv_ids())}/{len(self._series_sources)})"
             )
+
+        def current_pv_ids(self) -> list[str]:
+            return [
+                self._series_key(source)
+                for source in self._series_sources
+                if self._series_visibility.get(self._series_key(source), True)
+            ]
+
+        def _selector_rows(self) -> list[dict]:
+            return [
+                {
+                    "pv_id": self._series_key(source),
+                    "label": self._series_label(source),
+                    "group_id": source.get("group_id", ""),
+                    "group_label": source.get("group_label", ""),
+                    "read_pv": source.get("read_pv", ""),
+                    "tags": source.get("tags", []),
+                }
+                for source in self._series_sources
+            ]
+
+        def _open_series_selector(self) -> None:
+            if not self._series_sources:
+                return
+            dialog = SeriesVisibilityDialog(
+                self._selector_rows(),
+                self.current_pv_ids(),
+                parent=self,
+            )
+            if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                self.set_visible_pv_ids(dialog.selected_pv_ids())
+
+        def set_visible_pv_ids(self, pv_ids) -> None:
+            visible_ids = {str(pv_id) for pv_id in pv_ids}
+            available_ids = {
+                self._series_key(source) for source in self._series_sources
+            }
+            visible_ids &= available_ids
+            for series_key in self._series_visibility:
+                self._series_visibility[series_key] = series_key in visible_ids
+            self._rebuild_series_menu()
+            self._render_sources()
 
         def _set_series_visibility(
             self,
@@ -389,15 +403,19 @@ if QtWidgets is not None:
         ) -> None:
             if series_key not in self._series_visibility:
                 return
-            self._series_visibility[series_key] = bool(visible)
-            self._rebuild_series_menu()
-            self._render_sources()
+            visible_ids = set(self.current_pv_ids())
+            if visible:
+                visible_ids.add(series_key)
+            else:
+                visible_ids.discard(series_key)
+            self.set_visible_pv_ids(visible_ids)
 
         def _set_all_series_visibility(self, visible: bool) -> None:
-            for key in list(self._series_visibility.keys()):
-                self._series_visibility[key] = bool(visible)
-            self._rebuild_series_menu()
-            self._render_sources()
+            self.set_visible_pv_ids(
+                [self._series_key(source) for source in self._series_sources]
+                if visible
+                else []
+            )
 
         @staticmethod
         def _headers_for_mode(mode: str) -> list[str]:
