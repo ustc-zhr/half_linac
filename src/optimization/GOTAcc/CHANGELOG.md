@@ -2,6 +2,8 @@
 
 ## 1.3.0 - 2026-08-27
 
+- Kept menu hover text aligned with each theme foreground color and preserved
+  muted styling for disabled menu entries.
 - Redesigned GOTAcc Studio around a compact half_linac-style control-room
   shell, including dark/light theme switching, a horizontal workspace status
   strip, simplified log panel, and tighter Run-page monitoring

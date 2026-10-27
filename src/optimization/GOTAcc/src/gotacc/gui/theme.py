@@ -986,6 +986,11 @@ QTabWidget#tabWidget_bottomOutput::pane {
 QMenuBar::item:selected,
 QMenu::item:selected {
     background: $menu_hover_bg;
+    color: $text_main;
+}
+
+QMenu::item:selected:disabled {
+    color: $header_text;
 }
 """
 )
