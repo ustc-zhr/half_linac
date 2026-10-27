@@ -4757,12 +4757,13 @@ class MainWindow(_MainWindowBase):
 
     def _populate_spectrum_view(self) -> None:
         if self.loaded_config is None:
-            self.spectrum_plot.clear_data("Load a PV library to compute spectrum analysis.")
+            self.spectrum_plot.clear_data(
+                "Load a PV library to compute spectrum analysis."
+            )
             return
 
         objects_by_id = {obj.id: obj for obj in self.loaded_config.objects}
         series_sources = []
-        seen_names: set[str] = set()
         total_removed = 0
         affected_variables = 0
         for pv_id, values in self.current_series_values.items():
@@ -4777,70 +4778,33 @@ class MainWindow(_MainWindowBase):
                 affected_variables += 1
             if len(finite_values) < 2:
                 continue
+
             metadata = self.current_series_metadata.get(pv_id, [])
             try:
-                if self._analysis_sample_range is None:
-                    if isinstance(metadata, dict) and "timestamps" not in metadata:
-                        sample_interval_sec = self._estimate_series_sample_interval_from_sample_indices(
-                            finite_sample_indices
-                        )
-                    else:
-                        if isinstance(metadata, dict):
-                            metadata_timestamps = list(metadata.get("timestamps", []))
-                            timestamps = [
-                                timestamp
-                                for value, timestamp in zip(values, metadata_timestamps)
-                                if not math.isnan(float(value)) and timestamp is not None
-                            ]
-                        else:
-                            timestamps = [
-                                item.get("timestamp")
-                                for value, item in zip(values, metadata)
-                                if not math.isnan(float(value)) and item.get("timestamp") is not None
-                            ]
-                        sample_interval_sec = self._estimate_series_sample_interval(timestamps)
-                else:
-                    try:
-                        sample_interval_sec = self._estimate_series_sample_interval_from_sample_indices(
-                            finite_sample_indices
-                        )
-                    except ValueError:
-                        raw_indices = list(filtered["filtered_raw_indices"])
-                        if isinstance(metadata, dict):
-                            metadata_timestamps = list(metadata.get("timestamps", []))
-                            timestamps = [
-                                metadata_timestamps[index]
-                                for index in raw_indices
-                                if (
-                                    index < len(metadata_timestamps)
-                                    and metadata_timestamps[index] is not None
-                                )
-                            ]
-                        else:
-                            timestamps = [
-                                metadata[index].get("timestamp")
-                                for index in raw_indices
-                                if (
-                                    index < len(metadata)
-                                    and metadata[index].get("timestamp") is not None
-                                )
-                            ]
-                        sample_interval_sec = self._estimate_series_sample_interval(timestamps)
-            except ValueError:
+                timestamps = self._filtered_spectrum_timestamps(
+                    filtered,
+                    metadata,
+                )
+                sample_interval_sec = self._estimate_series_sample_interval(
+                    timestamps
+                )
+            except (IndexError, TypeError, ValueError):
                 continue
+            origin = timestamps[0]
+            sample_times_sec = [
+                float((timestamp - origin).total_seconds())
+                for timestamp in timestamps
+            ]
+
             obj = objects_by_id[pv_id]
-            display_name = obj.name
-            if display_name in seen_names:
-                display_name = f"{obj.name} ({pv_id})"
-            seen_names.add(display_name)
             series_sources.append(
                 {
                     "pv_id": pv_id,
                     "name": obj.name,
-                    "display_name": display_name,
                     "unit": obj.unit,
                     "sample_count": len(finite_values),
                     "sample_indices": finite_sample_indices,
+                    "sample_times_sec": sample_times_sec,
                     "series_sample_interval_sec": sample_interval_sec,
                     "values": finite_values,
                     "source_count": int(filtered["source_count"]),
@@ -4850,30 +4814,89 @@ class MainWindow(_MainWindowBase):
             )
 
         if not series_sources:
-            message = "Need at least one read PV with two valid samples and usable timestamps to compute spectrum."
+            message = (
+                "Need at least one read PV with two valid samples and usable "
+                "timestamps to compute spectrum."
+            )
             if self._analysis_sample_range is not None:
-                message = "Need at least two valid timestamped samples in the selected range to compute spectrum."
+                message = (
+                    "Need at least two valid timestamped samples in the "
+                    "selected range to compute spectrum."
+                )
             elif self._jitter_outlier_filter_enabled() and total_removed:
-                message = "All usable spectrum samples were removed by the outlier filter."
+                message = (
+                    "All usable spectrum samples were removed by the "
+                    "outlier filter."
+                )
             range_summary = self._analysis_range_summary_text()
             if range_summary:
                 message += f" | {range_summary}"
             self.spectrum_plot.clear_data(message)
             return
 
-        self.spectrum_plot.set_series_sources(series_sources)
+        context_parts = []
+        range_summary = self._analysis_range_summary_text()
+        if range_summary:
+            context_parts.append(range_summary)
         if self._jitter_outlier_filter_enabled() and total_removed:
-            self.spectrum_plot.info_label.setText(
-                self.spectrum_plot.info_label.text()
-                + f" | Outlier filter removed {total_removed} point(s) across {affected_variables} variable(s)."
+            context_parts.append(
+                f"Outlier filter removed {total_removed} point(s) across "
+                f"{affected_variables} variable(s)."
             )
-        self._append_analysis_range_summary(self.spectrum_plot.info_label)
+        self.spectrum_plot.set_context_summary(" | ".join(context_parts))
+        self.spectrum_plot.set_series_sources(series_sources)
+
+    def _filtered_spectrum_timestamps(self, filtered, metadata):
+        filtered_values = list(filtered["filtered_values"])
+        sample_indices = [
+            int(item) for item in filtered["filtered_sample_indices"]
+        ]
+        timestamps = []
+        if sample_indices and all(
+            0 <= index < len(self.current_run_sample_timestamps)
+            and self.current_run_sample_timestamps[index] is not None
+            for index in sample_indices
+        ):
+            timestamps = [
+                self.current_run_sample_timestamps[index]
+                for index in sample_indices
+            ]
+        else:
+            raw_indices = [
+                int(item) for item in filtered["filtered_raw_indices"]
+            ]
+            if isinstance(metadata, dict):
+                metadata_timestamps = list(metadata.get("timestamps", []))
+                timestamps = [
+                    metadata_timestamps[index]
+                    for index in raw_indices
+                    if index < len(metadata_timestamps)
+                    and metadata_timestamps[index] is not None
+                ]
+            else:
+                timestamps = [
+                    metadata[index].get("timestamp")
+                    for index in raw_indices
+                    if index < len(metadata)
+                    and metadata[index].get("timestamp") is not None
+                ]
+
+        if len(timestamps) != len(filtered_values) or any(
+            timestamp is None for timestamp in timestamps
+        ):
+            raise ValueError(
+                "Filtered spectrum values do not have aligned timestamps."
+            )
+        return timestamps
 
     @staticmethod
     def _estimate_series_sample_interval(timestamps) -> float:
         return estimate_series_sample_interval(timestamps)
 
-    def _estimate_series_sample_interval_from_sample_indices(self, sample_indices) -> float:
+    def _estimate_series_sample_interval_from_sample_indices(
+        self,
+        sample_indices,
+    ) -> float:
         return estimate_series_sample_interval_from_sample_indices(
             sample_indices,
             self.current_run_sample_timestamps,

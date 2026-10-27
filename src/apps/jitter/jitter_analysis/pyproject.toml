@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jitter-analysis"
-version = "0.1.0"
+version = "0.2.0"
 description = "EPICS online acquisition and analysis GUI scaffold"
 requires-python = ">=3.10"
 dependencies = [

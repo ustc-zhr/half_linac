@@ -110,7 +110,13 @@ def test_selected_range_controls_jitter_correlation_and_spectrum_inputs(window):
     assert first_source["values"] == [10.0, 20.0, 30.0]
     assert first_source["sample_indices"] == [1, 2, 3]
     assert first_source["series_sample_interval_sec"] == pytest.approx(0.5)
-    assert "Selected samples 2\N{EN DASH}4 | 1 s" in window.spectrum_plot.info_label.text()
+    assert first_source["sample_times_sec"] == pytest.approx([0.0, 0.4, 1.0])
+    range_summary = "Selected samples 2\N{EN DASH}4 | 1 s"
+    assert range_summary in window.spectrum_plot.info_label.text()
+    window.spectrum_plot.window_combo.setCurrentIndex(
+        window.spectrum_plot.window_combo.findData("boxcar")
+    )
+    assert range_summary in window.spectrum_plot.info_label.text()
     assert window.current_series_values == original_values
 
 

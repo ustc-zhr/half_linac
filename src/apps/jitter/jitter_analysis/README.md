@@ -50,6 +50,20 @@ python main.py
 
 The GUI auto-loads `configs/irfel_pvlist.json` when present. You can load another PV library from the interface.
 
+## Spectrum Analysis
+
+Version 0.2.0 changes FFT amplitude results to physical one-sided peak
+amplitudes. Positive-frequency bins are doubled except for DC and the
+even-length Nyquist bin. Results produced by earlier versions were FFT
+coefficients and are typically half the new peak-amplitude value.
+
+Amplitude FFT now defaults to a Hann window and mean detrending. Welch PSD
+defaults to at most 512 samples per segment. The Spectrum view also provides a
+Periodic Fit mode that uses timestamped samples to estimate or lock a
+frequency while fitting a linear trend, sine, and cosine together. The fit
+reports peak and RMS amplitude, phase relative to the selected range start,
+drift per hour, periodic variance, and residual RMS.
+
 ## Run Tests
 
 ```bash
