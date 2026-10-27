@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from .theme import style_plot_widget
 from .visibility import resolve_initial_visibility
 
@@ -97,15 +99,27 @@ if QtWidgets is not None:
             )
             controls.addWidget(self.x_scale_combo)
 
-            controls.addWidget(QtWidgets.QLabel("Y Scale"))
+            self.y_scale_label = QtWidgets.QLabel("Y Scale")
+            controls.addWidget(self.y_scale_label)
             self.y_scale_combo = QtWidgets.QComboBox(self)
             self.y_scale_combo.addItem("Linear", "linear")
             self.y_scale_combo.addItem("Log10", "log10")
             self.y_scale_combo.setToolTip(
-                "Use a logarithmic Y axis to reveal spectrum components "
-                "across multiple orders of magnitude."
+                "Absolute mode only: use a logarithmic Y axis to reveal "
+                "components across multiple orders of magnitude."
             )
             controls.addWidget(self.y_scale_combo)
+
+            controls.addWidget(QtWidgets.QLabel("Y Display"))
+            self.y_display_combo = QtWidgets.QComboBox(self)
+            self.y_display_combo.addItem("Absolute", "absolute")
+            self.y_display_combo.addItem("Relative (dB)", "relative_db")
+            self.y_display_combo.setToolTip(
+                "Absolute preserves physical amplitudes. Relative (dB) "
+                "normalizes each PV to its own non-DC peak for comparing "
+                "spectral shape; absolute values remain in the table."
+            )
+            controls.addWidget(self.y_display_combo)
 
             controls.addWidget(QtWidgets.QLabel("Window"))
             self.window_combo = QtWidgets.QComboBox(self)
@@ -188,6 +202,9 @@ if QtWidgets is not None:
             self.y_scale_combo.currentIndexChanged.connect(
                 self._handle_axis_scale_changed
             )
+            self.y_display_combo.currentIndexChanged.connect(
+                self._handle_y_display_changed
+            )
             self.window_combo.currentIndexChanged.connect(self._render_sources)
             self.detrend_combo.currentIndexChanged.connect(self._render_sources)
             self.nperseg_spin.valueChanged.connect(self._render_sources)
@@ -238,11 +255,28 @@ if QtWidgets is not None:
         def _handle_axis_scale_changed(self, *_args) -> None:
             self._apply_axis_scales(auto_range=True)
 
+        def _handle_y_display_changed(self, *_args) -> None:
+            if self._is_relative_db():
+                linear_index = self.y_scale_combo.findData("linear")
+                if linear_index >= 0:
+                    self.y_scale_combo.setCurrentIndex(linear_index)
+            self._update_control_state()
+            self._render_sources()
+
         def _is_log_x(self) -> bool:
             return str(self.x_scale_combo.currentData() or "linear") == "log10"
 
+        def _is_relative_db(self) -> bool:
+            return (
+                str(self.y_display_combo.currentData() or "absolute")
+                == "relative_db"
+            )
+
         def _is_log_y(self) -> bool:
-            return str(self.y_scale_combo.currentData() or "linear") == "log10"
+            return (
+                not self._is_relative_db()
+                and str(self.y_scale_combo.currentData() or "linear") == "log10"
+            )
 
         def _x_axis_label(self) -> str:
             if self._is_log_x():
@@ -250,6 +284,11 @@ if QtWidgets is not None:
             return "Frequency [Hz]"
 
         def _y_axis_label(self, mode: str) -> str:
+            if self._is_relative_db():
+                quantity = "PSD" if mode == "welch_psd" else "Amplitude"
+                return (
+                    f"Relative {quantity} [dB; each PV non-DC peak = 0 dB]"
+                )
             label = (
                 "PSD"
                 if mode == "welch_psd"
@@ -274,6 +313,8 @@ if QtWidgets is not None:
             mode = str(self.mode_combo.currentData() or "amplitude")
             is_welch = mode == "welch_psd"
             is_periodic_fit = mode == "periodic_fit"
+            self.y_scale_label.setEnabled(not self._is_relative_db())
+            self.y_scale_combo.setEnabled(not self._is_relative_db())
             self.window_combo.setEnabled(not is_periodic_fit)
             self.detrend_label.setEnabled(not is_periodic_fit)
             self.detrend_combo.setEnabled(not is_periodic_fit)
@@ -343,6 +384,60 @@ if QtWidgets is not None:
         def _psd_unit(unit: str) -> str:
             token = str(unit).strip()
             return f"{token}²/Hz" if token else "1/Hz"
+
+        @staticmethod
+        def _relative_db_value(
+            value: float,
+            reference: float,
+            *,
+            power: bool,
+        ) -> float:
+            floor_db = -120.0
+            numeric_value = float(value)
+            numeric_reference = float(reference)
+            if (
+                not math.isfinite(numeric_value)
+                or not math.isfinite(numeric_reference)
+                or numeric_value <= 0.0
+                or numeric_reference <= 0.0
+            ):
+                return floor_db
+            multiplier = 10.0 if power else 20.0
+            return max(
+                floor_db,
+                multiplier * math.log10(numeric_value / numeric_reference),
+            )
+
+        @classmethod
+        def _relative_db_values(
+            cls,
+            frequencies_hz,
+            values,
+            *,
+            power: bool,
+            reference_value: float | None = None,
+        ) -> tuple[list[float], float]:
+            frequencies = [float(value) for value in frequencies_hz]
+            numeric_values = [float(value) for value in values]
+            candidates = [
+                value
+                for frequency, value in zip(frequencies, numeric_values)
+                if frequency > 0.0 and math.isfinite(value) and value > 0.0
+            ]
+            requested_reference = float(reference_value or 0.0)
+            if (
+                math.isfinite(requested_reference)
+                and requested_reference > 0.0
+            ):
+                candidates.append(requested_reference)
+            reference = max(candidates, default=0.0)
+            return (
+                [
+                    cls._relative_db_value(value, reference, power=power)
+                    for value in numeric_values
+                ],
+                reference,
+            )
 
         def _rebuild_series_menu(self) -> None:
             self.series_button.setEnabled(bool(self._series_sources))
@@ -476,6 +571,7 @@ if QtWidgets is not None:
 
         def _render_sources(self, *_args) -> None:
             mode = str(self.mode_combo.currentData() or "amplitude")
+            relative_db = self._is_relative_db()
             window_name = self._selected_window_name(mode)
             detrend_name = self._selected_detrend_name(mode)
             requested_nperseg = int(self.nperseg_spin.value()) or None
@@ -559,7 +655,10 @@ if QtWidgets is not None:
                 "welch_psd": "Power Spectral Density",
                 "periodic_fit": "Periodic Fit with Spectrum Context",
             }
-            self._clear_plot_for_render(titles.get(mode, "Spectrum"))
+            title = titles.get(mode, "Spectrum")
+            if relative_db:
+                title += " — Relative dB"
+            self._clear_plot_for_render(title)
 
             peak_summaries = []
             for row, item in enumerate(series_items):
@@ -650,6 +749,30 @@ if QtWidgets is not None:
                     )
                     frequencies_hz = result.frequencies_hz
 
+                plot_y_values = y_values
+                plot_peak_value = peak_value
+                plot_name = name
+                if relative_db:
+                    power_quantity = mode == "welch_psd"
+                    plot_y_values, reference = self._relative_db_values(
+                        frequencies_hz,
+                        y_values,
+                        power=power_quantity,
+                        reference_value=peak_value,
+                    )
+                    plot_peak_value = self._relative_db_value(
+                        peak_value,
+                        reference,
+                        power=power_quantity,
+                    )
+                    reference_unit = (
+                        self._psd_unit(unit) if power_quantity else unit
+                    )
+                    reference_text = f"{reference:.4g}"
+                    if reference_unit:
+                        reference_text += f" {reference_unit}"
+                    plot_name = f"{name} (ref {reference_text})"
+
                 for column, value in enumerate(values):
                     self.summary_table.setItem(
                         row,
@@ -664,9 +787,9 @@ if QtWidgets is not None:
                     )
                     self.plot_widget.plot(
                         frequencies_hz,
-                        y_values,
+                        plot_y_values,
                         pen=pg.mkPen(color=color, width=2),
-                        name=name,
+                        name=plot_name,
                     )
                     if mode == "periodic_fit":
                         marker_pen = pg.mkPen(
@@ -684,7 +807,7 @@ if QtWidgets is not None:
                         )
                         self.plot_widget.plot(
                             [peak_frequency],
-                            [peak_value],
+                            [plot_peak_value],
                             pen=None,
                             symbol="o",
                             symbolSize=10,
@@ -732,8 +855,13 @@ if QtWidgets is not None:
             visibility_label = (
                 f"showing {len(series_items)}/{total_sources} PVs"
             )
+            display_label = (
+                "relative dB (each PV non-DC peak=0 dB)"
+                if relative_db
+                else "absolute"
+            )
             message = (
-                f"{mode_label} | {visibility_label}: "
+                f"{mode_label} | y={display_label} | {visibility_label}: "
                 + " | ".join(peak_summaries[:4])
             )
             if failures:

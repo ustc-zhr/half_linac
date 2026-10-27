@@ -64,6 +64,14 @@ frequency while fitting a linear trend, sine, and cosine together. The fit
 reports peak and RMS amplitude, phase relative to the selected range start,
 drift per hour, periodic variance, and residual RMS.
 
+Use Y Display = Absolute to compare physical amplitudes for PVs with
+compatible units. Use Relative (dB) to compare spectral shape when PV
+amplitudes or units differ: each PV is normalized to its own non-DC peak
+(0 dB), using 20 log10 for FFT/Periodic Fit amplitudes and 10 log10 for
+Welch PSD. Relative values below -120 dB are clipped for display. The result
+table and the peak summary always retain absolute values and physical units,
+and each relative-mode legend shows its normalization reference.
+
 ## Run Tests
 
 ```bash
