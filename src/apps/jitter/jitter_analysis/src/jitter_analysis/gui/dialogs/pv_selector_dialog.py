@@ -27,6 +27,12 @@ if QtWidgets is not None:
 
             self._knobs = list(knobs)
             self._objects = list(objects)
+            self._scalar_objects = [
+                entry for entry in self._objects if not self._is_waveform_entry(entry)
+            ]
+            self._waveform_objects = [
+                entry for entry in self._objects if self._is_waveform_entry(entry)
+            ]
             self._group_labels = group_labels or {}
             self._current_knob_ids = current_knob_ids or set()
             self._current_object_ids = current_object_ids or set()
@@ -38,14 +44,16 @@ if QtWidgets is not None:
             self._clear_visible_buttons: dict[str, QtWidgets.QPushButton] = {}
             self._entries = {
                 "knob": self._knobs,
-                "object": self._objects,
+                "scalar": self._scalar_objects,
+                "waveform": self._waveform_objects,
             }
 
             layout = QtWidgets.QVBoxLayout(self)
 
             intro = QtWidgets.QLabel(
-                "Load a PV library if needed, then choose one or more control PVs and one or more read PVs."
-                " Read PVs also include derived control readbacks when a knob defines readback_pv.",
+                "Load a PV library if needed, then choose control PVs, scalar read PVs, and raw waveforms."
+                " Scalar read PVs also include derived control readbacks; raw waveform capture is available"
+                " in Monitor mode only.",
                 self,
             )
             intro.setWordWrap(True)
@@ -58,7 +66,8 @@ if QtWidgets is not None:
 
             self.tabs = QtWidgets.QTabWidget(self)
             self.tabs.addTab(self._build_role_tab("knob"), "Control PVs")
-            self.tabs.addTab(self._build_role_tab("object"), "Read PVs")
+            self.tabs.addTab(self._build_role_tab("scalar"), "Scalar Read PVs")
+            self.tabs.addTab(self._build_role_tab("waveform"), "Waveform PVs · Monitor only")
             layout.addWidget(self.tabs)
 
             button_box = QtWidgets.QDialogButtonBox(
@@ -109,9 +118,15 @@ if QtWidgets is not None:
                 table.setColumnCount(4)
                 table.setHorizontalHeaderLabels(["Name", "Write PV", "Readback", "Group"])
                 table.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
-            else:
+            elif role == "scalar":
                 table.setColumnCount(6)
                 table.setHorizontalHeaderLabels(["Name", "Read PV", "Group", "Unit", "Type", "Tags"])
+                table.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+            else:
+                table.setColumnCount(6)
+                table.setHorizontalHeaderLabels(
+                    ["Name", "Read PV", "Group", "Unit", "Sample Interval", "Tags"]
+                )
                 table.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
             table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
             table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
@@ -160,7 +175,7 @@ if QtWidgets is not None:
                     table.setItem(row, col, QtWidgets.QTableWidgetItem(str(value)))
                 if role == "knob" and entry.id in self._current_knob_ids:
                     table.selectRow(row)
-                if role == "object" and entry.id in self._current_object_ids:
+                if role in {"scalar", "waveform"} and entry.id in self._current_object_ids:
                     table.selectRow(row)
             table.resizeColumnsToContents()
             self._apply_filters(role)
@@ -169,15 +184,43 @@ if QtWidgets is not None:
             group_label = self._group_labels.get(entry.group, entry.group)
             if role == "knob":
                 return [entry.name, entry.write_pv, entry.readback_pv, group_label]
-            capture_mode = str(getattr(entry, "capture_mode", "scalar") or "scalar").lower()
             tags = list(getattr(entry, "tags", []))
-            if capture_mode == "waveform":
-                type_label = "Waveform · Monitor only"
-            elif "knob_readback" in tags:
-                type_label = "Derived"
-            else:
-                type_label = "Scalar"
+            if role == "waveform":
+                return [
+                    entry.name,
+                    entry.read_pv,
+                    group_label,
+                    entry.unit,
+                    self._format_sample_interval(entry),
+                    ", ".join(tags),
+                ]
+            type_label = "Derived" if "knob_readback" in tags else "Scalar"
             return [entry.name, entry.read_pv, group_label, entry.unit, type_label, ", ".join(tags)]
+
+        @staticmethod
+        def _is_waveform_entry(entry) -> bool:
+            capture_mode = str(
+                getattr(entry, "capture_mode", "scalar") or "scalar"
+            ).strip().lower()
+            return capture_mode == "waveform"
+
+        @staticmethod
+        def _format_sample_interval(entry) -> str:
+            try:
+                interval_sec = float(
+                    getattr(entry, "waveform_sample_interval_sec", 0.0) or 0.0
+                )
+            except (TypeError, ValueError):
+                return ""
+            if interval_sec <= 0.0:
+                return ""
+            if interval_sec < 1.0e-6:
+                return f"{interval_sec * 1.0e9:.6g} ns"
+            if interval_sec < 1.0e-3:
+                return f"{interval_sec * 1.0e6:.6g} µs"
+            if interval_sec < 1.0:
+                return f"{interval_sec * 1.0e3:.6g} ms"
+            return f"{interval_sec:.6g} s"
 
         def _entry_search_text(self, role: str, entry) -> str:
             values = self._row_values(role, entry)
@@ -264,7 +307,12 @@ if QtWidgets is not None:
             return [entry.id for entry in self.selected_entries("knob")]
 
         def selected_object_ids(self) -> list[str]:
-            return [entry.id for entry in self.selected_entries("object")]
+            selected_ids = {
+                entry.id
+                for role in ("scalar", "waveform")
+                for entry in self.selected_entries(role)
+            }
+            return [entry.id for entry in self._objects if entry.id in selected_ids]
 
 else:
 

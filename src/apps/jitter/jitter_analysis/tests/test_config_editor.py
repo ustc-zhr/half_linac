@@ -57,6 +57,19 @@ def test_prepare_edited_config_rejects_invalid_waveform():
         prepare_edited_config(_source_text(), [item])
 
 
+def test_prepare_edited_config_accepts_library_waveform_interval():
+    payload = json.loads(_source_text())
+    payload["defaults"]["waveform"] = {"sample_interval_sec": 2.5e-9}
+    item = _object()
+    item["kind"] = "waveform"
+    item["capture_mode"] = "waveform"
+
+    data = prepare_edited_config(json.dumps(payload), [item])
+
+    assert data["defaults"]["waveform"]["sample_interval_sec"] == 2.5e-9
+    assert "waveform_sample_interval_sec" not in data["objects"][0]
+
+
 def test_prepare_edited_config_rejects_scalar_raw_waveform_capture():
     item = _object()
     item["capture_mode"] = "waveform"

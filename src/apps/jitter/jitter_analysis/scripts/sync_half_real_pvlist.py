@@ -24,6 +24,10 @@ ENERGY_SPECTRUM_CHANNELS = (
     ("energy_spread_fwhm", "energy spread FWHM"),
 )
 
+LLRF_CHANNEL_OBJECT_RE = re.compile(
+    r"^(?P<station>llrf(?:pb|\d+))_ch(?P<channel>\d+)_(?P<signal>amp|phase)$"
+)
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -96,6 +100,7 @@ def sync_config(
     ensure_rf_phase_knobs(data["knobs"], elements, channels)
     ensure_llrfpb_phase_object(data, elements, channels)
     ensure_energy_spectrum_objects(data["objects"], elements, channels)
+    ensure_llrf_channel_waveform_objects(data)
     rename_rf_phase_objects(data["objects"])
     return data
 
@@ -292,6 +297,72 @@ def ensure_energy_spectrum_objects(
             }
             objects.append(obj)
             objects_by_id[object_id] = obj
+
+
+def ensure_llrf_channel_waveform_objects(data: dict[str, Any]) -> None:
+    """Add raw amplitude/phase waveforms for every configured LLRF channel scalar."""
+    objects = data["objects"]
+    scalar_objects = [
+        obj
+        for obj in objects
+        if LLRF_CHANNEL_OBJECT_RE.fullmatch(str(obj["id"]))
+    ]
+    if not scalar_objects:
+        return
+
+    try:
+        default_sample_interval = float(
+            data["defaults"]["waveform"]["sample_interval_sec"]
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "LLRF waveform generation requires defaults.waveform.sample_interval_sec."
+        ) from exc
+    if default_sample_interval <= 0.0:
+        raise ValueError("defaults.waveform.sample_interval_sec must be positive.")
+
+    objects_by_id = {obj["id"]: obj for obj in objects}
+    for scalar in scalar_objects:
+        match = LLRF_CHANNEL_OBJECT_RE.fullmatch(str(scalar["id"]))
+        if not match:
+            continue
+
+        station = match.group("station").upper()
+        channel = match.group("channel")
+        signal = match.group("signal")
+        waveform_id = f"{scalar['id']}_waveform"
+        waveform_suffix = "WFAMP" if signal == "amp" else "WFPHA"
+        waveform = {
+            "id": waveform_id,
+            "name": f"{scalar['name']} waveform",
+            "group": scalar["group"],
+            "read_pv": f"IN:WM:{station}:CH{channel}_{waveform_suffix}",
+            "unit": scalar["unit"],
+            "precision": scalar["precision"],
+            "kind": "waveform",
+            "access": "ro",
+            "capture_mode": "waveform",
+            "value_reducer": "none",
+            "analysis": {"jitter": False, "correlation": False, "spectrum": False},
+            "tags": list(dict.fromkeys([*(scalar.get("tags") or []), "waveform"])),
+            "note": "PV follows the HALF LLRF channel waveform naming convention.",
+        }
+        existing = objects_by_id.get(waveform_id)
+        if existing is None:
+            objects.append(waveform)
+            objects_by_id[waveform_id] = waveform
+        else:
+            existing_interval = existing.get("waveform_sample_interval_sec")
+            existing.update(waveform)
+            if existing_interval is not None:
+                try:
+                    uses_library_default = (
+                        float(existing_interval) == default_sample_interval
+                    )
+                except (TypeError, ValueError):
+                    uses_library_default = False
+                if uses_library_default:
+                    existing.pop("waveform_sample_interval_sec", None)
 
 
 def rename_rf_phase_objects(objects: list[dict[str, Any]]) -> None:

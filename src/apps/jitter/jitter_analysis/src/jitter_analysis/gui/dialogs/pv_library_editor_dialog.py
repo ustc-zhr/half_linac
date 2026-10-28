@@ -206,7 +206,7 @@ if QtWidgets is not None:
             self.waveform_interval_edit = QtWidgets.QLineEdit()
             interval = self._object_data.get("waveform_sample_interval_sec")
             self.waveform_interval_edit.setText("" if interval is None else f"{float(interval):.12g}")
-            self.waveform_interval_edit.setPlaceholderText("e.g. 2.5e-9")
+            self.waveform_interval_edit.setPlaceholderText("Blank: use library default")
             self.tags_edit = QtWidgets.QLineEdit(", ".join(self._object_data.get("tags", [])))
             self.note_edit = QtWidgets.QPlainTextEdit(str(self._object_data.get("note", "")))
             self.note_edit.setMaximumHeight(90)
@@ -314,14 +314,16 @@ if QtWidgets is not None:
                     "capture_mode": "waveform" if self._captures_raw_waveform() else "scalar",
                     "waveform_sample_interval_sec": (
                         float(self.waveform_interval_edit.text().strip())
-                        if self._captures_raw_waveform() else None
+                        if self._captures_raw_waveform()
+                        and self.waveform_interval_edit.text().strip()
+                        else None
                     ),
                     "tags": [item.strip() for item in self.tags_edit.text().split(",") if item.strip()],
                     "note": self.note_edit.toPlainText().strip(),
                     "analysis": {key: check.isChecked() for key, check in self.analysis_checks.items()},
                 }
             )
-            if data["capture_mode"] != "waveform":
+            if data["waveform_sample_interval_sec"] is None:
                 data.pop("waveform_sample_interval_sec", None)
             return data
 

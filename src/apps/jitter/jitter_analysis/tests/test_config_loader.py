@@ -376,6 +376,37 @@ def _write_config(tmp_path: Path, payload: dict) -> Path:
     return config_path
 
 
+def test_waveform_interval_uses_object_override_then_library_default(tmp_path):
+    payload = _minimal_config()
+    payload["defaults"]["waveform"] = {"sample_interval_sec": 1.25e-9}
+    waveform = payload["objects"][0]
+    waveform["kind"] = "waveform"
+    waveform["capture_mode"] = "waveform"
+    waveform["value_reducer"] = "none"
+    waveform["waveform_sample_interval_sec"] = 2.5e-9
+
+    overridden = load_config(_write_config(tmp_path, payload))
+
+    assert overridden.defaults.waveform.sample_interval_sec == 1.25e-9
+    assert overridden.objects[0].waveform_sample_interval_sec == 2.5e-9
+
+    del waveform["waveform_sample_interval_sec"]
+    inherited = load_config(_write_config(tmp_path, payload))
+
+    assert inherited.objects[0].waveform_sample_interval_sec == 1.25e-9
+
+
+def test_waveform_interval_requires_object_value_or_library_default(tmp_path):
+    payload = _minimal_config()
+    waveform = payload["objects"][0]
+    waveform["kind"] = "waveform"
+    waveform["capture_mode"] = "waveform"
+    waveform["value_reducer"] = "none"
+
+    with pytest.raises(ValueError, match="defaults\\.waveform\\.sample_interval_sec"):
+        load_config(_write_config(tmp_path, payload))
+
+
 def test_config_validation_rejects_missing_nested_fields_with_value_error(tmp_path):
     payload = _minimal_config()
     del payload["objects"][0]["analysis"]

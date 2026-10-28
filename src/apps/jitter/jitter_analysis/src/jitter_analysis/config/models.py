@@ -41,11 +41,17 @@ class SafetyDefaults:
 
 
 @dataclass(slots=True)
+class WaveformDefaults:
+    sample_interval_sec: float | None = None
+
+
+@dataclass(slots=True)
 class DefaultsSpec:
     acquisition: AcquisitionDefaults
     scan: ScanDefaults
     storage: StorageDefaults
     safety: SafetyDefaults
+    waveform: WaveformDefaults = field(default_factory=WaveformDefaults)
 
 
 @dataclass(slots=True)

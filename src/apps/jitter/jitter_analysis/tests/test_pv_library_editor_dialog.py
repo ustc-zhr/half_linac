@@ -45,6 +45,18 @@ def test_raw_waveform_maps_to_existing_config_fields(qt_app):
     assert data["waveform_sample_interval_sec"] == pytest.approx(2.5e-9)
 
 
+def test_raw_waveform_allows_inherited_library_interval(qt_app):
+    dialog = editor_module.PVObjectEditorDialog(group_labels={"user": "User PVs"})
+    dialog.kind_box.setCurrentIndex(dialog.kind_box.findData("waveform"))
+    dialog.waveform_handling_box.setCurrentIndex(dialog.waveform_handling_box.findData("raw"))
+    dialog.waveform_interval_edit.clear()
+
+    data = dialog.object_data()
+
+    assert data["capture_mode"] == "waveform"
+    assert "waveform_sample_interval_sec" not in data
+
+
 def test_mean_waveform_maps_to_scalar_capture_without_interval(qt_app):
     dialog = editor_module.PVObjectEditorDialog(group_labels={"user": "User PVs"})
     dialog.kind_box.setCurrentIndex(dialog.kind_box.findData("waveform"))

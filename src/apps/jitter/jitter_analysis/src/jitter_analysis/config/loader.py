@@ -19,6 +19,7 @@ from .models import (
     ScanDefaults,
     SettleSpec,
     StorageDefaults,
+    WaveformDefaults,
 )
 from .validator import validate_config_dict
 
@@ -67,6 +68,7 @@ def _build_config(data: dict, source: Path, *, source_text: str) -> PvListConfig
         scan=ScanDefaults(**data["defaults"]["scan"]),
         storage=StorageDefaults(**data["defaults"]["storage"]),
         safety=SafetyDefaults(**data["defaults"]["safety"]),
+        waveform=WaveformDefaults(**data["defaults"].get("waveform", {})),
     )
 
     groups = [GroupSpec(**item) for item in data["groups"]]
@@ -102,7 +104,7 @@ def _build_config(data: dict, source: Path, *, source_text: str) -> PvListConfig
             analysis=AnalysisFlags(**item["analysis"]),
             value_reducer=item.get("value_reducer", "none"),
             capture_mode=item.get("capture_mode", "scalar"),
-            waveform_sample_interval_sec=item.get("waveform_sample_interval_sec"),
+            waveform_sample_interval_sec=_resolve_waveform_sample_interval(item, defaults),
             tags=list(item.get("tags", [])),
             note=item.get("note", ""),
         )
@@ -137,6 +139,15 @@ def _build_config(data: dict, source: Path, *, source_text: str) -> PvListConfig
         source_path=str(source.resolve()),
         source_text=source_text,
     )
+
+
+def _resolve_waveform_sample_interval(item: dict, defaults: DefaultsSpec) -> float | None:
+    if "waveform_sample_interval_sec" in item:
+        return item.get("waveform_sample_interval_sec")
+    capture_mode = str(item.get("capture_mode", "scalar")).strip().lower().replace("-", "_")
+    if capture_mode == "waveform":
+        return defaults.waveform.sample_interval_sec
+    return None
 
 
 def _derive_knob_readback_objects(knobs: list[KnobSpec], existing_objects: list[ObjectSpec]) -> list[ObjectSpec]:

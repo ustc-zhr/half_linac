@@ -40,6 +40,7 @@ REQUIRED_SCAN_DEFAULT_KEYS = {
 }
 REQUIRED_STORAGE_DEFAULT_KEYS = {"format", "save_raw_data", "save_analysis_summary"}
 REQUIRED_SAFETY_DEFAULT_KEYS = {"confirm_before_write", "abort_on_disconnection"}
+REQUIRED_WAVEFORM_DEFAULT_KEYS = {"sample_interval_sec"}
 REQUIRED_GROUP_KEYS = {"id", "label", "kind", "color", "order"}
 REQUIRED_KNOB_KEYS = {
     "id",
@@ -98,6 +99,15 @@ def validate_config_dict(data: dict[str, Any]) -> dict[str, Any]:
     _require_nonnegative_float(scan_defaults["settle_delay_sec"], "defaults.scan.settle_delay_sec")
     _require_positive_int(scan_defaults["sample_count_per_step"], "defaults.scan.sample_count_per_step")
     _require_nonnegative_float(scan_defaults["max_wait_sec"], "defaults.scan.max_wait_sec")
+
+    default_waveform_sample_interval = None
+    if "waveform" in defaults:
+        waveform_defaults = _require_mapping(defaults, "defaults.waveform", key="waveform")
+        _require_keys(waveform_defaults, REQUIRED_WAVEFORM_DEFAULT_KEYS, "defaults.waveform")
+        default_waveform_sample_interval = _require_positive_float(
+            waveform_defaults["sample_interval_sec"],
+            "defaults.waveform.sample_interval_sec",
+        )
 
     groups = _require_list(data, "groups")
     knobs = _require_list(data, "knobs")
@@ -175,16 +185,15 @@ def validate_config_dict(data: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError(
                     f"Waveform object {obj['id']} must use value_reducer 'none', got {obj.get('value_reducer')!r}"
                 )
-            raw_sample_interval = obj.get("waveform_sample_interval_sec")
-            if raw_sample_interval is None:
-                raise ValueError(f"Waveform object {obj['id']} requires waveform_sample_interval_sec.")
-            sample_interval = _require_float(
-                raw_sample_interval,
-                f"objects[{index}].waveform_sample_interval_sec",
-            )
-            if sample_interval <= 0.0:
+            if "waveform_sample_interval_sec" in obj:
+                _require_positive_float(
+                    obj["waveform_sample_interval_sec"],
+                    f"objects[{index}].waveform_sample_interval_sec",
+                )
+            elif default_waveform_sample_interval is None:
                 raise ValueError(
-                    f"Waveform object {obj['id']} waveform_sample_interval_sec must be positive."
+                    f"Waveform object {obj['id']} requires waveform_sample_interval_sec "
+                    "or defaults.waveform.sample_interval_sec."
                 )
     _raise_if_duplicates([item["id"] for item in objects], "object id")
 
