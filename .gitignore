@@ -29,6 +29,7 @@ gui_old.ui
 bo_state.json
 bo_record.json
 jitterfile_*.txt
+/scripts/analyze_half_jitter.py
 
 # Local control-system source material; keep the tracked provenance README only.
 configs/machines/half/references/control_system/
