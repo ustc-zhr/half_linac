@@ -35,6 +35,10 @@ if __package__ in {None, ""}:
         WaveformRecord,
     )
     from jitter_analysis.epics.client import PyEpicsClient, require_pyepics
+    from jitter_analysis.gui.dialogs.epics_connection_dialog import (
+        ConnectionFailure,
+        EpicsConnectionResultsDialog,
+    )
     from jitter_analysis.gui.dialogs.pv_selector_dialog import PVSelectorDialog
     from jitter_analysis.gui.dialogs.pv_library_editor_dialog import PVLibraryEditorDialog
     from jitter_analysis.gui.dialogs.random_knob_config_dialog import RandomKnobConfigDialog
@@ -129,6 +133,10 @@ else:
         WaveformRecord,
     )
     from ..epics.client import PyEpicsClient, require_pyepics
+    from .dialogs.epics_connection_dialog import (
+        ConnectionFailure,
+        EpicsConnectionResultsDialog,
+    )
     from .dialogs.pv_selector_dialog import PVSelectorDialog
     from .dialogs.pv_library_editor_dialog import PVLibraryEditorDialog
     from .dialogs.random_knob_config_dialog import RandomKnobConfigDialog
@@ -3179,11 +3187,21 @@ class MainWindow(_MainWindowBase):
             return
         selected_objects = self._selected_objects()
         selected_knobs = self._selected_knobs()
-        knob_pv_names = []
+        group_labels = (
+            {group.id: group.label for group in self.loaded_config.groups}
+            if self.loaded_config is not None
+            else {}
+        )
+        knob_endpoints = []
         for knob in selected_knobs:
-            knob_pv_names.append((knob.write_pv, f"{knob.name} write"))
+            group_label = group_labels.get(knob.group, knob.group)
+            knob_endpoints.append(
+                (knob.write_pv, "Control Write", knob.name, group_label)
+            )
             if knob.readback_pv:
-                knob_pv_names.append((knob.readback_pv, f"{knob.name} readback"))
+                knob_endpoints.append(
+                    (knob.readback_pv, "Control Readback", knob.name, group_label)
+                )
         if not selected_objects and not selected_knobs:
             QtWidgets.QMessageBox.information(
                 self,
@@ -3193,28 +3211,57 @@ class MainWindow(_MainWindowBase):
             return
 
         connected = 0
-        failed_names = []
+        failures: list[ConnectionFailure] = []
         try:
             for obj in selected_objects:
                 if self.epics_client.is_connected(obj.read_pv):
                     connected += 1
                 else:
-                    failed_names.append(obj.name)
-            for pv_name, label in knob_pv_names:
+                    failures.append(
+                        ConnectionFailure(
+                            endpoint_type="Read",
+                            name=obj.name,
+                            pv_name=obj.read_pv,
+                            group=group_labels.get(obj.group, obj.group),
+                        )
+                    )
+            for pv_name, endpoint_type, name, group in knob_endpoints:
                 if self.epics_client.is_connected(pv_name):
                     connected += 1
                 else:
-                    failed_names.append(label)
+                    failures.append(
+                        ConnectionFailure(
+                            endpoint_type=endpoint_type,
+                            name=name,
+                            pv_name=pv_name,
+                            group=group,
+                        )
+                    )
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Check EPICS", str(exc))
             self.append_log(f"Connection check failed: {exc}")
             return
 
-        total = len(selected_objects) + len(knob_pv_names)
+        total = len(selected_objects) + len(knob_endpoints)
         self._last_connection_key = self._selection_key()
         self._set_connection_summary(connected, total)
-        if failed_names:
-            self.append_log("Disconnected PVs: " + ", ".join(failed_names))
+        if failures:
+            self.append_log(
+                f"Check EPICS found {len(failures)} disconnected endpoint(s) "
+                f"({connected}/{total} connected)."
+            )
+            for failure in failures:
+                self.append_log(
+                    f"Disconnected PV: {failure.name} [{failure.endpoint_type}] "
+                    f"— {failure.pv_name}"
+                )
+            dialog = EpicsConnectionResultsDialog(
+                connected=connected,
+                total=total,
+                failures=failures,
+                parent=self,
+            )
+            dialog.exec_()
         else:
             self.append_log(f"All {connected} selected PV endpoint(s) are connected.")
 
