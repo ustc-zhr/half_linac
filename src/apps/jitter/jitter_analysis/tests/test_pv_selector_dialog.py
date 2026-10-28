@@ -55,3 +55,23 @@ def test_select_visible_respects_search_filter_and_type_labels(qt_app):
     assert dialog._status_labels["object"].text() == "Visible: 1/3    Selected: 1"
 
     dialog.close()
+
+
+def test_clear_visible_preserves_hidden_selection(qt_app):
+    dialog = selector_module.PVSelectorDialog(
+        knobs=[],
+        objects=[
+            _object("bpm_x", "BPM X", "bpm"),
+            _object("scope", "Scope", "diag", capture_mode="waveform"),
+            _object("hc_rb", "HC Readback", "corrector", tags=("knob_readback",)),
+        ],
+        current_object_ids={"bpm_x", "scope", "hc_rb"},
+    )
+
+    dialog._search_boxes["object"].setText("scope")
+    dialog._clear_visible_buttons["object"].click()
+
+    assert dialog.selected_object_ids() == ["bpm_x", "hc_rb"]
+    assert dialog._status_labels["object"].text() == "Visible: 1/3    Selected: 2"
+
+    dialog.close()

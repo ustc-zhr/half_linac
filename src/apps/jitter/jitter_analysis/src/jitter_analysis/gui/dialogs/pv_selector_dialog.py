@@ -35,6 +35,7 @@ if QtWidgets is not None:
             self._group_boxes: dict[str, QtWidgets.QComboBox] = {}
             self._status_labels: dict[str, QtWidgets.QLabel] = {}
             self._select_visible_buttons: dict[str, QtWidgets.QPushButton] = {}
+            self._clear_visible_buttons: dict[str, QtWidgets.QPushButton] = {}
             self._entries = {
                 "knob": self._knobs,
                 "object": self._objects,
@@ -93,9 +94,13 @@ if QtWidgets is not None:
             select_visible_button = QtWidgets.QPushButton("Select Visible", tab)
             select_visible_button.setProperty("role", "diagnostic")
             select_visible_button.setMinimumHeight(40)
+            clear_visible_button = QtWidgets.QPushButton("Clear Visible", tab)
+            clear_visible_button.setProperty("role", "subtle")
+            clear_visible_button.setMinimumHeight(40)
             filters.addWidget(search, 1)
             filters.addWidget(group_box)
             filters.addWidget(select_visible_button)
+            filters.addWidget(clear_visible_button)
             filters.addWidget(clear_button)
             layout.addLayout(filters)
 
@@ -123,6 +128,7 @@ if QtWidgets is not None:
             self._tables[role] = table
             self._status_labels[role] = status
             self._select_visible_buttons[role] = select_visible_button
+            self._clear_visible_buttons[role] = clear_visible_button
 
             search.textChanged.connect(lambda _text, target=role: self._apply_filters(target))
             group_box.currentIndexChanged.connect(lambda _index, target=role: self._apply_filters(target))
@@ -132,6 +138,9 @@ if QtWidgets is not None:
             )
             select_visible_button.clicked.connect(
                 lambda _checked=False, target=role: self._select_visible(target)
+            )
+            clear_visible_button.clicked.connect(
+                lambda _checked=False, target=role: self._clear_visible(target)
             )
             clear_button.clicked.connect(lambda _checked=False, target=role: self._clear_selection(target))
 
@@ -213,6 +222,20 @@ if QtWidgets is not None:
                     selection_model.select(
                         model.index(row, 0),
                         QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows,
+                    )
+            self._update_status(role)
+
+        def _clear_visible(self, role: str) -> None:
+            table = self._tables[role]
+            selection_model = table.selectionModel()
+            model = table.model()
+            if selection_model is None or model is None:
+                return
+            for row in range(table.rowCount()):
+                if not table.isRowHidden(row):
+                    selection_model.select(
+                        model.index(row, 0),
+                        QtCore.QItemSelectionModel.Deselect | QtCore.QItemSelectionModel.Rows,
                     )
             self._update_status(role)
 

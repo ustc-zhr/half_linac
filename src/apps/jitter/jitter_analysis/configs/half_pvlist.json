@@ -8,7 +8,7 @@
   "source": {
     "machine_definition": "../../half_linac/configs/machines/half/machine.json",
     "control_backend": "../../half_linac/configs/machines/half/control_backends/real.json",
-    "scope": "All scalar BPM, current-transformer, LLRF, energy, profile-size, microwave-cabinet temperature, accelerating-structure temperature, and ambient-temperature diagnostics; all magnetic-current and klystron-HV write/readback pairs. Raw camera image arrays are intentionally excluded."
+    "scope": "All scalar BPM, current-transformer, LLRF, energy, profile-size, microwave-cabinet temperature, accelerating-structure temperature, klystron-waveguide temperature, accelerating-structure-inlet-waveguide temperature, and ambient-temperature diagnostics; all magnetic-current and klystron-HV write/readback pairs. Raw camera image arrays are intentionally excluded."
   },
   "defaults": {
     "acquisition": {
@@ -160,6 +160,20 @@
       "kind": "object",
       "color": "#e76f51",
       "order": 135
+    },
+    {
+      "id": "klystron_waveguide_temperature",
+      "label": "Klystron Waveguide Temperature",
+      "kind": "object",
+      "color": "#f3722c",
+      "order": 136
+    },
+    {
+      "id": "accelerating_structure_inlet_waveguide_temperature",
+      "label": "Accelerating Structure Inlet Waveguide Temperature",
+      "kind": "object",
+      "color": "#f8961e",
+      "order": 137
     },
     {
       "id": "ambient_temperature",
@@ -22608,6 +22622,1570 @@
         "t002"
       ],
       "note": "Accelerating structure temperature probe."
+    },
+    {
+      "id": "pbbd01_t001_temperature",
+      "name": "PBBD01 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD01_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd01",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd02_t001_temperature",
+      "name": "PBBD02 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD02_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd02",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd03_t001_temperature",
+      "name": "PBBD03 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD03_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd03",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd04_t001_temperature",
+      "name": "PBBD04 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD04_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd04",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd05_t001_temperature",
+      "name": "PBBD05 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD05_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd05",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd06_t001_temperature",
+      "name": "PBBD06 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD06_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd06",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd07_t001_temperature",
+      "name": "PBBD07 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD07_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd07",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd08_t001_temperature",
+      "name": "PBBD08 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD08_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd08",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd09_t001_temperature",
+      "name": "PBBD09 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD09_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd09",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd10_t001_temperature",
+      "name": "PBBD10 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD10_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd10",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd11_t001_temperature",
+      "name": "PBBD11 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD11_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd11",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd12_t001_temperature",
+      "name": "PBBD12 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD12_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd12",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd13_t001_temperature",
+      "name": "PBBD13 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD13_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd13",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd14_t001_temperature",
+      "name": "PBBD14 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD14_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd14",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd15_t001_temperature",
+      "name": "PBBD15 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD15_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd15",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd16_t001_temperature",
+      "name": "PBBD16 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD16_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd16",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd17_t001_temperature",
+      "name": "PBBD17 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD17_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd17",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd18_t001_temperature",
+      "name": "PBBD18 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD18_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd18",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd19_t001_temperature",
+      "name": "PBBD19 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD19_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd19",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "pbbd20_t001_temperature",
+      "name": "PBBD20 T001 klystron waveguide temperature",
+      "group": "klystron_waveguide_temperature",
+      "read_pv": "PF:WC:PBBD20_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "klystron",
+        "pbbd20",
+        "t001"
+      ],
+      "note": "Klystron waveguide temperature probe."
+    },
+    {
+      "id": "bd01_t001_temperature",
+      "name": "Buncher (BD01) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD01_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "inlet",
+        "buncher",
+        "bd01",
+        "t001"
+      ],
+      "note": "Buncher inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd02_t001_temperature",
+      "name": "L01A (BD02) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD02_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l01",
+        "section_a",
+        "bd02",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd03_t001_temperature",
+      "name": "L01B (BD03) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD03_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l01",
+        "section_b",
+        "bd03",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd04_t001_temperature",
+      "name": "L02A (BD04) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD04_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l02",
+        "section_a",
+        "bd04",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd05_t001_temperature",
+      "name": "L02B (BD05) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD05_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l02",
+        "section_b",
+        "bd05",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd06_t001_temperature",
+      "name": "L03A (BD06) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD06_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l03",
+        "section_a",
+        "bd06",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd07_t001_temperature",
+      "name": "L03B (BD07) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD07_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l03",
+        "section_b",
+        "bd07",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd08_t001_temperature",
+      "name": "L04A (BD08) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD08_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l04",
+        "section_a",
+        "bd08",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd09_t001_temperature",
+      "name": "L04B (BD09) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD09_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l04",
+        "section_b",
+        "bd09",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd10_t001_temperature",
+      "name": "L05A (BD10) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD10_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l05",
+        "section_a",
+        "bd10",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd11_t001_temperature",
+      "name": "L05B (BD11) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD11_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l05",
+        "section_b",
+        "bd11",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd12_t001_temperature",
+      "name": "L06A (BD12) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD12_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l06",
+        "section_a",
+        "bd12",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd13_t001_temperature",
+      "name": "L06B (BD13) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD13_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l06",
+        "section_b",
+        "bd13",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd14_t001_temperature",
+      "name": "L07A (BD14) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD14_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l07",
+        "section_a",
+        "bd14",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd15_t001_temperature",
+      "name": "L07B (BD15) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD15_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l07",
+        "section_b",
+        "bd15",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd16_t001_temperature",
+      "name": "L08A (BD16) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD16_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l08",
+        "section_a",
+        "bd16",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd17_t001_temperature",
+      "name": "L08B (BD17) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD17_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l08",
+        "section_b",
+        "bd17",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd18_t001_temperature",
+      "name": "L09A (BD18) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD18_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l09",
+        "section_a",
+        "bd18",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd19_t001_temperature",
+      "name": "L09B (BD19) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD19_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l09",
+        "section_b",
+        "bd19",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd20_t001_temperature",
+      "name": "L10A (BD20) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD20_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l10",
+        "section_a",
+        "bd20",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd21_t001_temperature",
+      "name": "L10B (BD21) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD21_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l10",
+        "section_b",
+        "bd21",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd22_t001_temperature",
+      "name": "L11A (BD22) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD22_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l11",
+        "section_a",
+        "bd22",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd23_t001_temperature",
+      "name": "L11B (BD23) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD23_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l11",
+        "section_b",
+        "bd23",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd24_t001_temperature",
+      "name": "L12A (BD24) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD24_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l12",
+        "section_a",
+        "bd24",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd25_t001_temperature",
+      "name": "L12B (BD25) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD25_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l12",
+        "section_b",
+        "bd25",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd26_t001_temperature",
+      "name": "L13A (BD26) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD26_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l13",
+        "section_a",
+        "bd26",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd27_t001_temperature",
+      "name": "L13B (BD27) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD27_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l13",
+        "section_b",
+        "bd27",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd28_t001_temperature",
+      "name": "L14A (BD28) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD28_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l14",
+        "section_a",
+        "bd28",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd29_t001_temperature",
+      "name": "L14B (BD29) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD29_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l14",
+        "section_b",
+        "bd29",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd30_t001_temperature",
+      "name": "L15A (BD30) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD30_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l15",
+        "section_a",
+        "bd30",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd31_t001_temperature",
+      "name": "L15B (BD31) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD31_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l15",
+        "section_b",
+        "bd31",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd32_t001_temperature",
+      "name": "L16A (BD32) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD32_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l16",
+        "section_a",
+        "bd32",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd33_t001_temperature",
+      "name": "L16B (BD33) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD33_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l16",
+        "section_b",
+        "bd33",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd34_t001_temperature",
+      "name": "L17A (BD34) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD34_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l17",
+        "section_a",
+        "bd34",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd35_t001_temperature",
+      "name": "L17B (BD35) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD35_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l17",
+        "section_b",
+        "bd35",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd36_t001_temperature",
+      "name": "L18A (BD36) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD36_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l18",
+        "section_a",
+        "bd36",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd37_t001_temperature",
+      "name": "L18B (BD37) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD37_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l18",
+        "section_b",
+        "bd37",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd38_t001_temperature",
+      "name": "L19A (BD38) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD38_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l19",
+        "section_a",
+        "bd38",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd39_t001_temperature",
+      "name": "L19B (BD39) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD39_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l19",
+        "section_b",
+        "bd39",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd40_t001_temperature",
+      "name": "L20A (BD40) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD40_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l20",
+        "section_a",
+        "bd40",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
+    },
+    {
+      "id": "bd41_t001_temperature",
+      "name": "L20B (BD41) inlet waveguide T001 temperature",
+      "group": "accelerating_structure_inlet_waveguide_temperature",
+      "read_pv": "PF:WC:BD41_T001:ai",
+      "unit": "degC",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "temperature",
+        "waveguide",
+        "accelerator",
+        "accelerating_structure",
+        "inlet",
+        "l20",
+        "section_b",
+        "bd41",
+        "t001"
+      ],
+      "note": "Accelerating structure inlet waveguide temperature probe."
     },
     {
       "id": "klystron_gallery_ambient_temperature",
