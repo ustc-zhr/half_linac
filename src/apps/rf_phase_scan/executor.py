@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-import numpy as np
 from epics import caget, caput
 
 from half_linac.src.apps.rf_phase_scan.energy_match_tuner import RFPhaseEnergyMatcher
@@ -216,13 +216,9 @@ class RFPhaseScanExecutor:
         request = self.request
         if not caput(request.energy_pv, float(value), wait=True, timeout=10):
             raise RuntimeError("Coordinated energy setpoint write failed.")
-        echo = caget(request.energy_pv)
-        if echo is None or not np.isclose(
-            float(echo), float(value), atol=0.01, rtol=0
-        ):
-            raise RuntimeError(
-                "Coordinated energy setpoint echo verification failed."
-            )
+        settle_time_s = max(float(self.scan.get("settle_time_s", 3.0)), 0.0)
+        if settle_time_s:
+            time.sleep(settle_time_s)
 
     def _match(self, center: float, low: float, high: float, attempt: int):
         request = self.request
@@ -255,7 +251,7 @@ class RFPhaseScanExecutor:
             bg_image=request.bg_image,
             roi=self.acquisition.roi,
             flip_y=bool(scan.get("image_flip_y", False)),
-            settle_time_s=float(scan.get("settle_time_s", 1)),
+            settle_time_s=float(scan.get("settle_time_s", 3)),
             restore_initial_on_failure=bool(
                 scan.get("restore_initial_on_failure", True)
             ),

@@ -64,7 +64,7 @@
     "range": {
       "low": 0,
       "high": 2450,
-      "settle_time_s": 1,
+      "settle_time_s": 3,
       "unit": "MeV",
       "mode": "absolute",
       "restore_initial_on_failure": true

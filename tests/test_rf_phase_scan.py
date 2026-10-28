@@ -12,6 +12,7 @@ from half_linac.src.apps.rf_phase_scan.energy_match_tuner import (
     RFPhaseEnergyMatcher,
     center_out_values,
 )
+from half_linac.src.apps.rf_phase_scan.executor import RFPhaseScanExecutor
 from half_linac.src.apps.rf_phase_scan.spectrum_profile import (
     ProfileFit,
     project_image_profiles,
@@ -246,6 +247,57 @@ def test_phase_readback_verification_reports_target_and_actual():
             timeout_s=0.0,
             poll_interval_s=0.05,
         )
+
+
+@pytest.mark.parametrize(
+    ("scan", "expected_settle_time_s"),
+    [({"settle_time_s": 1.25}, 1.25), ({}, 3.0)],
+)
+def test_energy_command_uses_configured_or_default_settle_time_without_echo(
+    monkeypatch, scan, expected_settle_time_s,
+):
+    import half_linac.src.apps.rf_phase_scan.executor as executor_module
+
+    writes = []
+    sleeps = []
+    executor = object.__new__(RFPhaseScanExecutor)
+    executor.request = type("Request", (), {"energy_pv": "ENERGY"})()
+    executor.scan = scan
+    monkeypatch.setattr(
+        executor_module,
+        "caput",
+        lambda pv, value, **options: writes.append((pv, value, options)) or True,
+    )
+    monkeypatch.setattr(
+        executor_module,
+        "caget",
+        lambda _pv: pytest.fail("energy command PV must not be used as a readback"),
+    )
+    monkeypatch.setattr(executor_module.time, "sleep", sleeps.append)
+
+    executor.set_energy(2212.9)
+
+    assert writes == [
+        ("ENERGY", 2212.9, {"wait": True, "timeout": 10}),
+    ]
+    assert sleeps == [expected_settle_time_s]
+
+
+def test_energy_command_failure_does_not_wait(monkeypatch):
+    import half_linac.src.apps.rf_phase_scan.executor as executor_module
+
+    executor = object.__new__(RFPhaseScanExecutor)
+    executor.request = type("Request", (), {"energy_pv": "ENERGY"})()
+    executor.scan = {"settle_time_s": 1.25}
+    monkeypatch.setattr(executor_module, "caput", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        executor_module.time,
+        "sleep",
+        lambda _duration: pytest.fail("failed commands must not enter settle wait"),
+    )
+
+    with pytest.raises(RuntimeError, match="setpoint write failed"):
+        executor.set_energy(2212.9)
 
 
 def test_energy_match_progress_includes_the_measured_image():

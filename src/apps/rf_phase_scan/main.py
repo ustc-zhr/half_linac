@@ -262,7 +262,7 @@ def _factory(*, image_pv, image_shape, pixel_width_mm, bend_pv, scan, progress, 
         design_eta_m=float(scan["design_eta_m"]),
         progress_callback=progress, remove_bg=remove_bg, bg_image=bg_image, roi=roi,
         flip_y=bool(scan.get("image_flip_y", False)),
-        settle_time_s=float(scan.get("settle_time_s", 1)),
+        settle_time_s=float(scan.get("settle_time_s", 3)),
         restore_initial_on_failure=bool(scan.get("restore_initial_on_failure", True)),
         cancel_requested=cancel,
         restore_initial_on_cancel=True,
@@ -527,13 +527,6 @@ class ScanThread(QThread):
             timeout_s=float(self.phase_verification["timeout_s"]),
             poll_interval_s=float(self.phase_verification["poll_interval_s"]),
         )
-
-    def _set_energy(self, value):
-        if not caput(self.energy_pv, float(value), wait=True, timeout=10):
-            raise RuntimeError("Coordinated energy setpoint write failed.")
-        echo = caget(self.energy_pv)
-        if echo is None or not np.isclose(float(echo), float(value), atol=0.01, rtol=0):
-            raise RuntimeError("Coordinated energy setpoint echo verification failed.")
 
     def _progress(self, payload, log):
         event = str(payload.get("event", ""))

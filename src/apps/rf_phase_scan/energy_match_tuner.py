@@ -56,7 +56,7 @@ class RFPhaseEnergyMatcher:
         bg_image=None,
         roi=None,
         flip_y=False,
-        settle_time_s=1,
+        settle_time_s=3,
         restore_initial_on_failure=True,
         cancel_requested=None,
         restore_initial_on_cancel=True,
