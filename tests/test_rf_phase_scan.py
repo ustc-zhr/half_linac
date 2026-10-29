@@ -1,3 +1,5 @@
+import json
+
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import (
     EnergyMatchResult,
     PhaseEnergyScanner,
@@ -13,6 +15,10 @@ from half_linac.src.apps.rf_phase_scan.energy_match_tuner import (
     center_out_values,
 )
 from half_linac.src.apps.rf_phase_scan.executor import RFPhaseScanExecutor
+from half_linac.src.apps.rf_phase_scan.history import (
+    format_peak_history,
+    load_peak_history,
+)
 from half_linac.src.apps.rf_phase_scan.spectrum_profile import (
     ProfileFit,
     project_image_profiles,
@@ -681,6 +687,65 @@ def test_frame_energy_samples_are_converted_and_grouped_by_phase():
     assert excluded_energy == pytest.approx([energies[1], energies[2]])
 
 
+def test_scan_history_loads_original_and_reviewed_peak(tmp_path):
+    source_path = tmp_path / "phase_energy_scan_20261029_120000.json"
+    source_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "phase_energy_scan_v2",
+                "created_at": "2026-10-29T12:00:00+08:00",
+                "machine_id": "half",
+                "backend": "real",
+                "element_id": "LLRF03",
+                "status": "DONE",
+                "fit": {
+                    "crest_phase_command_deg": -12.5,
+                    "crest_phase_unwrapped_deg": 347.5,
+                    "amplitude_mev": 18.25,
+                    "r_squared": 0.9876,
+                    "points_used": 7,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    original = load_peak_history(source_path)
+
+    assert original.element_id == "LLRF03"
+    assert original.crest_phase_command_deg == pytest.approx(-12.5)
+    assert original.energy_gain_mev == pytest.approx(18.25)
+    assert not original.reviewed
+    assert "Crest phase (command): -12.50°" in format_peak_history(original)
+
+    review_path = tmp_path / "phase_energy_scan_20261029_120000_review.json"
+    review_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "phase_energy_review_v1",
+                "created_at": "2026-10-29T12:05:00+08:00",
+                "source_json_path": source_path.name,
+                "fit": {
+                    "crest_phase_command_deg": -11.75,
+                    "crest_phase_unwrapped_deg": 348.25,
+                    "amplitude_mev": 18.0,
+                    "r_squared": 0.995,
+                    "points_used": 6,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    reviewed = load_peak_history(review_path)
+
+    assert reviewed.reviewed
+    assert reviewed.status == "REVIEWED"
+    assert reviewed.element_id == "LLRF03"
+    assert reviewed.crest_phase_command_deg == pytest.approx(-11.75)
+    assert reviewed.source_json_path == source_path
+
+
 def test_rf_phase_scan_window_starts_and_reviews_frame_selection(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("HALF_LINAC_MACHINE_ID", "half")
@@ -691,6 +756,7 @@ def test_rf_phase_scan_window_starts_and_reviews_frame_selection(monkeypatch):
 
     app = QApplication.instance() or QApplication([])
     window = RFPhaseScanWindow()
+    assert window.history_button.isEnabled()
     window.points_data = [
         dict(vars(PhaseScanPoint(
             index=index,

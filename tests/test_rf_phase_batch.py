@@ -16,6 +16,7 @@ from half_linac.src.apps.rf_phase_scan.batch import (
     evaluate_crest_quality,
 )
 from half_linac.src.apps.rf_phase_scan.executor import RFPhaseScanRequest
+from half_linac.src.apps.rf_phase_scan.history import load_batch_history
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import PhaseScanSettings
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
@@ -67,6 +68,65 @@ def test_crest_quality_accepts_valid_fit_and_one_step_boundary():
     assert assessment.accepted
     assert assessment.crest_phase_deg == pytest.approx(-20.0)
     assert assessment.crest_energy_mev == pytest.approx(1010.0)
+
+
+def test_batch_history_loads_fitted_and_applied_crests(tmp_path):
+    batch_path = tmp_path / "batch.json"
+    batch_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "rf_crest_batch_v1",
+                "machine_id": "half",
+                "backend": "real",
+                "status": "completed_with_skips",
+                "updated_at": "2026-10-29T12:30:00+08:00",
+                "error": None,
+                "items": [
+                    {
+                        "element_id": "LLRF01",
+                        "display_name": "LLRF 01",
+                        "status": "applied",
+                        "applied_phase_deg": 5.0,
+                        "json_path": "001_LLRF01/phase_energy_scan.json",
+                        "quality": {
+                            "accepted": True,
+                            "reasons": [],
+                            "crest_phase_deg": 5.0,
+                            "energy_gain_mev": 15.0,
+                            "r_squared": 0.99,
+                        },
+                    },
+                    {
+                        "element_id": "LLRF02",
+                        "display_name": "LLRF 02",
+                        "status": "skipped",
+                        "quality": {
+                            "accepted": False,
+                            "reasons": ["Curve R2 is below threshold."],
+                            "crest_phase_deg": -8.0,
+                            "energy_gain_mev": 9.0,
+                            "r_squared": 0.75,
+                        },
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    history = load_batch_history(batch_path)
+
+    assert history.status == "completed_with_skips"
+    assert len(history.items) == 2
+    assert history.items[0].crest_phase_deg == pytest.approx(5.0)
+    assert history.items[0].applied_phase_deg == pytest.approx(5.0)
+    assert history.items[0].json_path == (
+        tmp_path / "001_LLRF01/phase_energy_scan.json"
+    )
+    assert history.items[1].crest_phase_deg == pytest.approx(-8.0)
+    assert history.items[1].applied_phase_deg is None
+    assert history.items[1].accepted is False
+    assert history.items[1].reasons == ("Curve R2 is below threshold.",)
 
 
 @pytest.mark.parametrize(
@@ -162,10 +222,12 @@ def test_batch_dialog_defaults_to_all_and_disables_controls_while_running(
     dialog._set_running(True)
     assert not dialog.table.isEnabled()
     assert not dialog.start_button.isEnabled()
+    assert not dialog.history_button.isEnabled()
     assert dialog.stop_button.isEnabled()
     assert not window.start.isEnabled()
     dialog._set_running(False)
     assert dialog.table.isEnabled()
+    assert dialog.history_button.isEnabled()
 
     dialog.close()
     window.close()

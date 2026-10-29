@@ -34,6 +34,12 @@ from half_linac.src.apps.rf_phase_scan.executor import (
     RFPhaseScanRequest,
 )
 from half_linac.src.apps.rf_phase_scan.image_acquisition import RFImageAcquisition
+from half_linac.src.apps.rf_phase_scan.history import (
+    RFPhaseHistoryError,
+    format_peak_history,
+    latest_scan_history_path,
+    load_peak_history,
+)
 from half_linac.src.apps.rf_phase_scan.mplwidget import MplWidget
 from half_linac.src.apps.rf_phase_scan.spectrum_profile import (
     SpectrumProfileError, fit_projection_profile, project_image_profiles,
@@ -727,6 +733,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.start.setObjectName("startButton")
         self.batch_button = QPushButton("Batch…")
         self.stop = QPushButton("Stop")
+        self.history_button = QPushButton("History...")
         self.review_button = QPushButton("Review data...")
         self.review_button.setEnabled(False)
         self.stop.setObjectName("stopButton")
@@ -735,6 +742,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.batch_button.clicked.connect(self._show_batch_dialog)
         self.batch_button.setVisible(bool(self.batch_config.get("enabled", False)))
         self.stop.clicked.connect(self.stop_scan)
+        self.history_button.clicked.connect(self._show_peak_history)
         self.load_background_button.clicked.connect(self.load_background_file)
         self.capture_background_button.clicked.connect(self.capture_background)
         self.use_background.toggled.connect(self._background_toggled)
@@ -862,6 +870,7 @@ class RFPhaseScanWindow(QMainWindow):
         phase_plot_header = QHBoxLayout()
         phase_plot_header.addWidget(self._section_title("Phase-Energy"))
         phase_plot_header.addStretch(1)
+        phase_plot_header.addWidget(self.history_button)
         phase_plot_header.addWidget(self.review_button)
         plot_layout.addLayout(phase_plot_header)
         plot_layout.addWidget(self.plot, 2)
@@ -1277,6 +1286,28 @@ class RFPhaseScanWindow(QMainWindow):
         self.review_dialog.show()
         self.review_dialog.raise_()
         self.review_dialog.activateWindow()
+
+    def _show_peak_history(self):
+        latest = latest_scan_history_path(self.runtime_paths["runs_dir"])
+        start = latest or self.runtime_paths["runs_dir"]
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "View Historical RF Crest",
+            str(start),
+            "RF phase scan JSON (phase_energy_scan_*.json);;JSON files (*.json)",
+        )
+        if not path:
+            return
+        try:
+            history = load_peak_history(path)
+        except RFPhaseHistoryError as exc:
+            QMessageBox.warning(self, "Historical RF Crest", str(exc))
+            return
+        QMessageBox.information(
+            self,
+            "Historical RF Crest",
+            format_peak_history(history),
+        )
 
     def _build_auto_tune_dialog(self):
         self.auto_tune_settings_dialog = QDialog(self)

@@ -13,6 +13,8 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QDialog,
+    QDialogButtonBox,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -28,6 +30,12 @@ from half_linac.src.apps.rf_phase_scan.executor import (
     RFPhaseScanCallbacks,
     RFPhaseScanExecutor,
     RFPhaseScanRequest,
+)
+from half_linac.src.apps.rf_phase_scan.history import (
+    BatchHistory,
+    RFPhaseHistoryError,
+    latest_batch_history_path,
+    load_batch_history,
 )
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import phase_difference_deg
 from half_linac.src.shared.machine_profile import (
@@ -675,6 +683,71 @@ class RFPhaseBatchThread(QThread):
         self.done.emit(asdict(self.runner.run()))
 
 
+class RFPhaseBatchHistoryDialog(QDialog):
+    COLUMNS = ("LLRF", "Fitted Crest", "Applied", "Gain", "R²", "Status")
+
+    def __init__(self, history: BatchHistory, parent=None):
+        super().__init__(parent)
+        self.setModal(True)
+        self.setWindowTitle("Historical RF Crest Batch")
+        self.resize(900, 520)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(9)
+
+        identity = " / ".join(
+            value for value in (history.machine_id, history.backend) if value
+        ) or "Unknown source"
+        detail = (
+            f"Historical result · read-only\n{identity} · "
+            f"{history.status.replace('_', ' ').title()} · "
+            f"updated {history.updated_at or '—'}\n{history.path}"
+        )
+        if history.error:
+            detail += f"\nError: {history.error}"
+        summary = QLabel(detail, self)
+        summary.setWordWrap(True)
+        layout.addWidget(summary)
+
+        table = QTableWidget(len(history.items), len(self.COLUMNS), self)
+        table.setHorizontalHeaderLabels(self.COLUMNS)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().hide()
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        table.horizontalHeader().setStretchLastSection(True)
+        for row, item in enumerate(history.items):
+            values = (
+                item.display_name,
+                self._number(item.crest_phase_deg, "°"),
+                self._number(item.applied_phase_deg, "°"),
+                self._number(item.energy_gain_mev, " MeV"),
+                self._number(item.r_squared, precision=4),
+                item.status.replace("_", " ").title(),
+            )
+            for column, value in enumerate(values):
+                table.setItem(row, column, QTableWidgetItem(value))
+            notes = list(item.reasons)
+            if item.json_path is not None:
+                notes.append(f"Scan JSON: {item.json_path}")
+            if item.accepted is False and not item.reasons:
+                notes.append("Fit was not accepted by batch quality checks.")
+            tooltip = "\n".join(notes)
+            for column in range(len(self.COLUMNS)):
+                table.item(row, column).setToolTip(tooltip)
+        layout.addWidget(table, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close, self)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @staticmethod
+    def _number(value, suffix="", precision=2):
+        if value is None:
+            return "—"
+        return f"{float(value):.{precision}f}{suffix}"
+
+
 class RFPhaseBatchDialog(QDialog):
     COLUMNS = (
         "Use",
@@ -739,10 +812,12 @@ class RFPhaseBatchDialog(QDialog):
         actions = QHBoxLayout()
         self.start_button = QPushButton("Start Selected", self)
         self.stop_button = QPushButton("Stop", self)
+        self.history_button = QPushButton("View History...", self)
         self.close_button = QPushButton("Close", self)
         self.stop_button.setEnabled(False)
         actions.addWidget(self.start_button)
         actions.addWidget(self.stop_button)
+        actions.addWidget(self.history_button)
         actions.addStretch(1)
         actions.addWidget(self.close_button)
         layout.addLayout(actions)
@@ -750,6 +825,7 @@ class RFPhaseBatchDialog(QDialog):
         self.clear_button.clicked.connect(lambda: self._select(False))
         self.table.itemChanged.connect(lambda _item: self._update_summary())
         self.start_button.clicked.connect(self._start)
+        self.history_button.clicked.connect(self._show_history)
         self.stop_button.clicked.connect(self._stop)
         self.close_button.clicked.connect(self.close)
         self._update_summary()
@@ -791,9 +867,28 @@ class RFPhaseBatchDialog(QDialog):
         self.all_button.setEnabled(not running)
         self.clear_button.setEnabled(not running)
         self.start_button.setEnabled(not running and bool(self._rows()))
+        self.history_button.setEnabled(not running)
         self.stop_button.setEnabled(running)
         self.close_button.setEnabled(not running)
         self.window._set_batch_running(running)
+
+    def _show_history(self):
+        latest = latest_batch_history_path(self.window.runtime_paths["runs_dir"])
+        start = latest or self.window.runtime_paths["runs_dir"]
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "View Historical RF Crest Batch",
+            str(start),
+            "RF Crest Batch (batch.json);;JSON files (*.json)",
+        )
+        if not path:
+            return
+        try:
+            history = load_batch_history(path)
+        except RFPhaseHistoryError as exc:
+            QMessageBox.warning(self, "Historical RF Crest Batch", str(exc))
+            return
+        RFPhaseBatchHistoryDialog(history, self).exec_()
 
     def _start(self):
         rows = self._rows()
