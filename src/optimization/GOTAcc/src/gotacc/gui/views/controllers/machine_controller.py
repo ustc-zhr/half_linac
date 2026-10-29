@@ -545,7 +545,7 @@ class MachineController:
         preset_actions.addWidget(rename_button)
         preset_actions.addWidget(delete_button)
         preset_layout.addLayout(preset_actions)
-        advanced_tabs.addTab(preset_page, "Templates")
+        advanced_tabs.addTab(preset_page, "Template Catalog")
         main_tabs.addTab(safeguards_page, "Run Safeguards")
         main_tabs.addTab(advanced_page, "Policies")
         main_tabs.setCurrentWidget(ui.tab_mapping)

@@ -1252,6 +1252,67 @@ class TaskBuilderController:
         self._sync_write_link_target_row(table, row, target_name)
         self.refresh_task_preview()
 
+    def _delta_link_follower_names(self) -> set[str]:
+        if self.window.task_ui.comboBox_mode.currentText().strip().lower() != "online epics":
+            return set()
+        if self.window.machine_ui.comboBox_policy.currentText().strip().lower() != "delta_link":
+            return set()
+
+        followers: set[str] = set()
+        for record in TaskService.table_to_records(
+            self.window.machine_ui.tableWidget_writeLinks
+        ):
+            enabled = str(record.get("Enabled", "")).strip()
+            if enabled and not TaskService._is_enabled(enabled):
+                continue
+            target_name = str(record.get("Target Knob", "")).strip()
+            if target_name:
+                followers.add(target_name)
+        return followers
+
+    def _refresh_delta_link_follower_cells(self) -> None:
+        table = self.window.task_ui.tableWidget_variables
+        headers = self.table_headers(table)
+        required_headers = {"Name", "Lower", "Upper", "Initial"}
+        if not required_headers.issubset(headers):
+            return
+
+        followers = self._delta_link_follower_names()
+        name_col = headers.index("Name")
+        locked_columns = [headers.index(header) for header in ("Lower", "Upper", "Initial")]
+        locked_tooltip = (
+            "Controlled by delta_link. Follower bounds and Initial are not used by "
+            "the optimizer; the runtime baseline comes from the target readback."
+        )
+        palette = table.palette()
+        disabled_background = palette.brush(palette.Disabled, palette.Base)
+        disabled_foreground = palette.brush(palette.Disabled, palette.Text)
+
+        old_state = table.blockSignals(True)
+        try:
+            for row in range(table.rowCount()):
+                name_item = table.item(row, name_col)
+                name = name_item.text().strip() if name_item is not None else ""
+                locked = name in followers
+                for column in locked_columns:
+                    item = table.item(row, column)
+                    if item is None:
+                        continue
+                    flags = item.flags()
+                    if locked:
+                        item.setFlags(flags & ~Qt.ItemIsEditable)
+                        item.setData(Qt.BackgroundRole, disabled_background)
+                        item.setData(Qt.ForegroundRole, disabled_foreground)
+                        item.setToolTip(locked_tooltip)
+                    else:
+                        item.setFlags(flags | Qt.ItemIsEditable)
+                        item.setData(Qt.BackgroundRole, None)
+                        item.setData(Qt.ForegroundRole, None)
+                        if item.toolTip() == locked_tooltip:
+                            item.setToolTip(item.text())
+        finally:
+            table.blockSignals(old_state)
+
     def _install_write_link_target_widgets(self, table) -> None:
         if table is not self.window.machine_ui.tableWidget_writeLinks:
             return
@@ -1354,6 +1415,7 @@ class TaskBuilderController:
         self._install_write_link_source_widgets(table)
         self._install_write_link_target_widgets(table)
         self._install_write_link_enabled_widgets(table)
+        self._refresh_delta_link_follower_cells()
 
     def init_bounds_tool(self) -> None:
         return
@@ -1471,7 +1533,12 @@ class TaskBuilderController:
         if ui is None:
             raise ValueError("Bounds Tools dialog is not open.")
         table = self.window.task_ui.tableWidget_variables
-        rows = self._table_records_with_row_indices(table)
+        follower_names = self._delta_link_follower_names()
+        rows = [
+            (row_index, row)
+            for row_index, row in self._table_records_with_row_indices(table)
+            if str(row.get("Name", "")).strip() not in follower_names
+        ]
         if ui.checkBox_boundsSelectedOnly.isChecked():
             selected_rows = {index.row() for index in table.selectionModel().selectedRows()}
             if not selected_rows:

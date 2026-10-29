@@ -894,7 +894,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert [
             window.machine_ui.tabWidget_machineAdvanced.tabText(index)
             for index in range(window.machine_ui.tabWidget_machineAdvanced.count())
-        ] == ["Write Policy", "Templates"]
+        ] == ["Write Policy", "Template Catalog"]
         assert window.machine_ui.tableWidget_policyPresets.rowCount() == 3
         assert {
             window.machine_ui.tableWidget_policyPresets.item(row, 1).text()

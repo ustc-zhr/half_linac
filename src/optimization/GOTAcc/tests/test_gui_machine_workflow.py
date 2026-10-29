@@ -5,6 +5,7 @@ import pytest
 
 pytest.importorskip("PyQt5")
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QDialog, QMessageBox
 
 from gotacc.gui.services.task_service import TaskService
@@ -936,6 +937,60 @@ def test_delta_link_editors_select_mapped_knobs_and_resolve_pvs(tmp_path, window
     row = TaskService.table_to_records(table)[0]
     assert row["Target PV"] == "TEST:Q2:SET"
     assert row["Target Readback"] == "TEST:Q2:RB"
+
+
+def test_delta_link_follower_fields_are_locked_and_skipped_by_bounds_tool(
+    tmp_path, window
+):
+    task = _online_task(tmp_path)
+    task["machine"]["write_policy"] = "delta_link"
+    task["machine"]["write_links"] = [
+        {
+            "Source Knob": "Q1",
+            "Target Knob": "Q2",
+            "Scale": "1.0",
+            "Readback Tol": "",
+            "Enabled": "True",
+        }
+    ]
+
+    window._apply_task_payload(task, goto_builder=False)
+    controller = window.task_builder_controller
+    table = window.task_ui.tableWidget_variables
+    headers = controller.table_headers(table)
+    rows_by_name = {
+        table.item(row, headers.index("Name")).text(): row
+        for row in range(table.rowCount())
+    }
+    source_row = rows_by_name["Q1"]
+    follower_row = rows_by_name["Q2"]
+
+    for header in ("Lower", "Upper", "Initial"):
+        column = headers.index(header)
+        assert table.item(source_row, column).flags() & Qt.ItemIsEditable
+        follower_item = table.item(follower_row, column)
+        assert not follower_item.flags() & Qt.ItemIsEditable
+        assert "Controlled by delta_link" in follower_item.toolTip()
+
+    dialog = BoundsToolsDialog(window)
+    controller._bounds_dialog = dialog
+    try:
+        dialog.ui.checkBox_boundsSelectedOnly.setChecked(False)
+        targets = controller._target_variable_rows()
+        assert [record["Name"] for _, record in targets] == ["Q1"]
+    finally:
+        controller._bounds_dialog = None
+        dialog.close()
+
+    window.machine_ui.comboBox_policy.setCurrentText("equal")
+    QApplication.processEvents()
+
+    for header in ("Lower", "Upper", "Initial"):
+        item = table.item(follower_row, headers.index(header))
+        assert item.flags() & Qt.ItemIsEditable
+    variables = TaskService.table_to_records(table)
+    q2 = next(record for record in variables if record["Name"] == "Q2")
+    assert (q2["Lower"], q2["Upper"], q2["Initial"]) == ("-2", "2", "0.2")
 
 
 def test_delta_link_gui_rows_build_declarative_policy_kwargs(tmp_path):
