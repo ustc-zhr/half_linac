@@ -99,7 +99,9 @@ if QtWidgets is not None:
             self._y_data = {}
             self._labels = {}
             self._pv_order = []
+            self._series_rows = []
             self._series_visibility = {}
+            self._group_labels = {}
             self._sample_elapsed_seconds = []
             self._time_origin = None
             self._time_origin_epoch_seconds = None
@@ -112,11 +114,8 @@ if QtWidgets is not None:
             controls.addWidget(QtWidgets.QLabel("Show"))
             self.series_button = QtWidgets.QToolButton(self)
             self.series_button.setText("Visible Variables")
-            self.series_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
             self.series_button.setProperty("plotToolbarControl", "true")
             self.series_button.setFixedHeight(28)
-            self.series_menu = QtWidgets.QMenu(self.series_button)
-            self.series_button.setMenu(self.series_menu)
             self.series_button.setEnabled(False)
             controls.addWidget(self.series_button, 0)
             controls.addWidget(QtWidgets.QLabel("X Axis"))
@@ -166,12 +165,33 @@ if QtWidgets is not None:
             self.axis_combo.currentIndexChanged.connect(self._handle_window_mode_changed)
             self.range_combo.currentIndexChanged.connect(self._handle_window_mode_changed)
             self.recent_points_spin.valueChanged.connect(self._handle_window_mode_changed)
+            self.series_button.clicked.connect(self._open_series_selector)
             self._update_window_control_state()
+
+        def set_group_labels(self, group_labels) -> None:
+            self._group_labels = {
+                str(group_id): str(label)
+                for group_id, label in dict(group_labels or {}).items()
+            }
 
         def reset_channels(self, objects) -> None:
             previous_visibility = dict(self._series_visibility)
             self._labels = {obj.id: obj.name for obj in objects}
             self._pv_order = [obj.id for obj in objects]
+            self._series_rows = [
+                {
+                    "pv_id": obj.id,
+                    "label": obj.name,
+                    "group_id": str(getattr(obj, "group", "")),
+                    "group_label": self._group_labels.get(
+                        str(getattr(obj, "group", "")),
+                        str(getattr(obj, "group", "")),
+                    ),
+                    "read_pv": str(getattr(obj, "read_pv", "")),
+                    "tags": list(getattr(obj, "tags", [])),
+                }
+                for obj in objects
+            ]
             self._x_data = {obj.id: [] for obj in objects}
             self._y_data = {obj.id: [] for obj in objects}
             self._sample_elapsed_seconds = []
@@ -185,7 +205,7 @@ if QtWidgets is not None:
             self._highlight_region = None
             self._highlight_range = None
             self._highlight_label = ""
-            self._rebuild_series_menu()
+            self._rebuild_series_button()
             self._rebuild_plot_items()
 
         def append_batch(self, sample_index: int, samples) -> None:
@@ -260,46 +280,57 @@ if QtWidgets is not None:
             self._apply_recent_x_window()
             self._update_info_label()
 
-        def _rebuild_series_menu(self) -> None:
-            self.series_menu.clear()
+        def _rebuild_series_button(self) -> None:
             self.series_button.setEnabled(bool(self._pv_order))
             if not self._pv_order:
                 self.series_button.setText("Visible Variables")
                 return
-
-            show_all_action = self.series_menu.addAction("Show All")
-            show_all_action.triggered.connect(lambda: self._set_all_series_visibility(True))
-            hide_all_action = self.series_menu.addAction("Hide All")
-            hide_all_action.triggered.connect(lambda: self._set_all_series_visibility(False))
-            self.series_menu.addSeparator()
-
-            visible_count = 0
-            total_count = len(self._pv_order)
-            for pv_id in self._pv_order:
-                label = str(self._labels.get(pv_id, pv_id))
-                visible = bool(self._series_visibility.get(pv_id, False))
-                if visible:
-                    visible_count += 1
-                action = self.series_menu.addAction(label)
-                action.setCheckable(True)
-                action.setChecked(visible)
-                action.toggled.connect(lambda checked, target_pv_id=pv_id: self._set_series_visibility(target_pv_id, checked))
-
-            self.series_button.setText(f"Visible Variables ({visible_count}/{total_count})")
+            self.series_button.setText(
+                f"Visible Variables ({len(self.current_pv_ids())}/{len(self._pv_order)})"
+            )
             self._update_info_label()
+
+        def current_pv_ids(self) -> list[str]:
+            return [
+                pv_id
+                for pv_id in self._pv_order
+                if self._series_visibility.get(pv_id, False)
+            ]
+
+        def _open_series_selector(self) -> None:
+            if not self._series_rows:
+                return
+            from .jitter_plot import SeriesVisibilityDialog
+
+            dialog = SeriesVisibilityDialog(
+                self._series_rows,
+                self.current_pv_ids(),
+                parent=self,
+            )
+            if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                self.set_visible_pv_ids(dialog.selected_pv_ids())
+
+        def set_visible_pv_ids(self, pv_ids) -> None:
+            visible_ids = {str(pv_id) for pv_id in pv_ids}
+            available_ids = set(self._pv_order)
+            visible_ids &= available_ids
+            for pv_id in self._series_visibility:
+                self._series_visibility[pv_id] = pv_id in visible_ids
+            self._rebuild_series_button()
+            self._rebuild_plot_items()
 
         def _set_series_visibility(self, pv_id: str, visible: bool) -> None:
             if pv_id not in self._series_visibility:
                 return
-            self._series_visibility[pv_id] = bool(visible)
-            self._rebuild_series_menu()
-            self._rebuild_plot_items()
+            visible_ids = set(self.current_pv_ids())
+            if visible:
+                visible_ids.add(pv_id)
+            else:
+                visible_ids.discard(pv_id)
+            self.set_visible_pv_ids(visible_ids)
 
         def _set_all_series_visibility(self, visible: bool) -> None:
-            for pv_id in list(self._series_visibility.keys()):
-                self._series_visibility[pv_id] = bool(visible)
-            self._rebuild_series_menu()
-            self._rebuild_plot_items()
+            self.set_visible_pv_ids(self._pv_order if visible else [])
 
         def _update_info_label(self) -> None:
             total_count = len(self._pv_order)

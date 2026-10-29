@@ -39,9 +39,18 @@ if QtWidgets is not None:
             self.summary_label.setWordWrap(True)
             layout.addWidget(self.summary_label)
 
-            self.table = QtWidgets.QTableWidget(0, 7, self)
+            self.table = QtWidgets.QTableWidget(0, 8, self)
             self.table.setHorizontalHeaderLabels(
-                ["Saved", "Task Mode", "Operator", "Read PVs", "Control PVs", "Save Dir", "PV Library"]
+                [
+                    "Name",
+                    "Saved",
+                    "Task Mode",
+                    "Operator",
+                    "Read PVs",
+                    "Control PVs",
+                    "Save Dir",
+                    "PV Library",
+                ]
             )
             self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
             self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -86,7 +95,9 @@ if QtWidgets is not None:
             self.table.clearContents()
 
             for row_index, entry in enumerate(self._entries):
+                setup_path = str(entry.get("path", ""))
                 values = [
+                    str(entry.get("name", "")) or Path(setup_path).stem,
                     str(entry.get("saved_at_text", "")),
                     str(entry.get("task_mode", "")),
                     str(entry.get("operator", "")),
@@ -135,6 +146,7 @@ if QtWidgets is not None:
             entry = self._entries[row_index]
             self.open_button.setEnabled(True)
             details = [
+                f"Name: {entry.get('name', '') or Path(str(entry.get('path', ''))).stem}",
                 f"Saved: {entry.get('saved_at_text', '')}",
                 f"Task Mode: {entry.get('task_mode', '')}",
                 f"Operator: {entry.get('operator', '') or '--'}",

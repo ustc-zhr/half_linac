@@ -36,6 +36,7 @@ def list_saved_setups(
         entries.append(
             {
                 "path": str(path.resolve()),
+                "name": path.stem,
                 "saved_at": saved_at,
                 "saved_at_text": saved_at.strftime("%Y-%m-%d %H:%M:%S") if saved_at else path.stem,
                 "task_mode": mode_display_name(str(payload.get("task_mode", ""))),

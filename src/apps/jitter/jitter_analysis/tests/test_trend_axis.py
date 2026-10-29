@@ -1,10 +1,12 @@
 import os
+from types import SimpleNamespace
 
 import pytest
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from jitter_analysis.gui.plots import jitter_plot as jitter_plot_module
 from jitter_analysis.gui.plots import trend_plot as trend_plot_module
 
 
@@ -46,3 +48,73 @@ def test_custom_time_axis_disables_pyqtgraph_exponent_scale(qt_app):
     assert axis.autoSIPrefix is False
     assert axis.autoSIPrefixScale == 1.0
     assert "(x" not in axis.labelString()
+
+
+def test_run_trend_show_uses_analysis_variable_selector(qt_app, monkeypatch):
+    captured = {}
+
+    class FakeVisibilityDialog:
+        def __init__(self, rows, visible_pv_ids, parent=None):
+            captured["rows"] = rows
+            captured["visible_pv_ids"] = list(visible_pv_ids)
+            captured["parent"] = parent
+
+        def exec_(self):
+            return trend_plot_module.QtWidgets.QDialog.Accepted
+
+        def selected_pv_ids(self):
+            return ["llrf_phase"]
+
+    monkeypatch.setattr(
+        jitter_plot_module,
+        "SeriesVisibilityDialog",
+        FakeVisibilityDialog,
+    )
+    plot = trend_plot_module.TrendPlot()
+    plot.set_group_labels(
+        {
+            "bpm": "BPM",
+            "llrf": "LLRF",
+        }
+    )
+    plot.reset_channels(
+        [
+            SimpleNamespace(
+                id="bpm_x",
+                name="BPM X",
+                group="bpm",
+                read_pv="TEST:BPM:X",
+                tags=["orbit"],
+            ),
+            SimpleNamespace(
+                id="llrf_phase",
+                name="LLRF Phase",
+                group="llrf",
+                read_pv="TEST:LLRF:PHASE",
+                tags=["phase"],
+            ),
+        ]
+    )
+
+    assert plot.series_button.menu() is None
+    assert plot.series_button.text() == "Visible Variables (1/2)"
+    assert plot.current_pv_ids() == ["bpm_x"]
+
+    plot.series_button.click()
+
+    assert captured["visible_pv_ids"] == ["bpm_x"]
+    assert captured["parent"] is plot
+    assert captured["rows"][1] == {
+        "pv_id": "llrf_phase",
+        "label": "LLRF Phase",
+        "group_id": "llrf",
+        "group_label": "LLRF",
+        "read_pv": "TEST:LLRF:PHASE",
+        "tags": ["phase"],
+    }
+    assert plot.current_pv_ids() == ["llrf_phase"]
+    assert plot.series_button.text() == "Visible Variables (1/2)"
+
+    plot.close()
+    plot.deleteLater()
+    qt_app.processEvents()

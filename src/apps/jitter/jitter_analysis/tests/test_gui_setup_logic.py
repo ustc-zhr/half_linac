@@ -72,11 +72,13 @@ def test_list_saved_setups_filters_and_sorts_entries(tmp_path):
         str(invalid_time.resolve()),
     ]
     assert entries[0]["saved_at_text"] == "2026-07-01 10:00:00"
+    assert entries[0]["name"] == "newer"
     assert entries[0]["task_mode"] == "Single Knob"
     assert entries[0]["knob_count"] == 2
     assert entries[1]["task_mode"] == "Monitor"
     assert entries[1]["object_count"] == 2
     assert entries[2]["saved_at_text"] == "manual_name"
+    assert entries[2]["name"] == "manual_name"
 
 
 def test_list_saved_setups_returns_empty_list_for_missing_root(tmp_path):

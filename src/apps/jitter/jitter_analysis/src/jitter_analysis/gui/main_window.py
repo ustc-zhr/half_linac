@@ -1989,6 +1989,7 @@ class MainWindow(_MainWindowBase):
 
         group_labels = {group.id: group.label for group in self.loaded_config.groups}
         self.object_panel.set_library_objects(self.loaded_config.objects, group_labels)
+        self.trend_plot.set_group_labels(group_labels)
         self.scan_panel.interval_spin.setValue(self.loaded_config.defaults.acquisition.shot_interval_sec)
         self.scan_panel.count_spin.setValue(self.loaded_config.defaults.acquisition.sample_count)
         self.scan_panel.settle_spin.setValue(self.loaded_config.defaults.scan.settle_delay_sec)
