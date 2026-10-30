@@ -66,10 +66,93 @@ def test_relative_phase_scan_uses_initial_phase_and_wraps_commands():
     result = scanner.run()
 
     assert [point.requested_phase_unwrapped_deg for point in result.points] == [
-        175.0, 165.0, 185.0,
+        175.0, 185.0, 165.0,
     ]
-    assert [point.command_phase_deg for point in result.points] == [175.0, 165.0, -175.0]
+    assert [point.command_phase_deg for point in result.points] == [
+        175.0, -175.0, 165.0,
+    ]
     assert commands[-1] == 175.0
+
+
+def test_two_branch_scan_returns_to_center_energy_before_negative_branch(monkeypatch):
+    phase_commands = []
+    center_energy_commands = []
+    restore_energy_commands = []
+    events = []
+    waits = []
+
+    def match(_center, _low, _high, _attempt):
+        phase = phase_commands[-1]
+        return EnergyMatchResult(
+            True,
+            "DONE",
+            energy_mev=2200.0 + phase,
+            energy_setpoint_mev=2198.0 if phase == 0.0 else 2200.0 + phase,
+        )
+
+    scanner = PhaseEnergyScanner(
+        settings=_settings(start=-10.0, stop=10.0),
+        read_phase=lambda: 0.0,
+        set_phase=phase_commands.append,
+        read_energy=lambda: 2200.0,
+        set_energy=restore_energy_commands.append,
+        match_energy=match,
+        set_center_energy=center_energy_commands.append,
+        center_return_settle_time_s=6.0,
+        progress_callback=events.append,
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_wait",
+        lambda duration_s, *, cancellable=True: waits.append(
+            (float(duration_s), bool(cancellable))
+        ),
+    )
+
+    result = scanner.run()
+
+    assert result.status == "DONE"
+    assert [point.offset_deg for point in result.points] == [0.0, 10.0, -10.0]
+    assert phase_commands == [0.0, 10.0, 0.0, -10.0, 0.0]
+    assert center_energy_commands == [2198.0]
+    assert restore_energy_commands == [2200.0]
+    assert (6.0, True) in waits
+    center_events = [event for event in events if event["event"] == "center_return"]
+    assert len(center_events) == 1
+    assert center_events[0]["energy_setpoint_mev"] == 2198.0
+    assert center_events[0]["settle_time_s"] == 6.0
+
+
+def test_center_return_settle_can_be_cancelled():
+    phase_commands = []
+    center_energy_commands = []
+    restore_energy_commands = []
+
+    scanner = PhaseEnergyScanner(
+        settings=_settings(start=-10.0, stop=10.0),
+        read_phase=lambda: 0.0,
+        set_phase=phase_commands.append,
+        read_energy=lambda: 2200.0,
+        set_energy=restore_energy_commands.append,
+        match_energy=lambda *_args: EnergyMatchResult(
+            True,
+            "DONE",
+            energy_mev=2200.0,
+            energy_setpoint_mev=2200.0,
+        ),
+        set_center_energy=center_energy_commands.append,
+        center_return_settle_time_s=6.0,
+        cancel_requested=lambda: bool(center_energy_commands),
+    )
+
+    result = scanner.run()
+
+    assert result.status == "CANCELLED"
+    assert [point.offset_deg for point in result.points] == [0.0, 10.0]
+    assert center_energy_commands == [2200.0]
+    assert restore_energy_commands == [2200.0]
+    assert result.phase_restored is True
+    assert result.energy_restored is True
 
 
 def test_absolute_phase_scan_preserves_continuous_targets():

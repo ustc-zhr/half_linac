@@ -316,6 +316,8 @@ class PhaseEnergyScanner:
         read_energy: Callable[[], float | None],
         set_energy: Callable[[float], None],
         match_energy: Callable[[float, float, float, int], EnergyMatchResult],
+        set_center_energy: Callable[[float], None] | None = None,
+        center_return_settle_time_s: float = 0.0,
         cancel_requested: Callable[[], bool] | None = None,
         progress_callback: Callable[[Mapping[str, Any]], None] | None = None,
     ) -> None:
@@ -325,6 +327,10 @@ class PhaseEnergyScanner:
         self.read_energy = read_energy
         self.set_energy = set_energy
         self.match_energy = match_energy
+        self.set_center_energy = set_center_energy or set_energy
+        self.center_return_settle_time_s = max(
+            float(center_return_settle_time_s), 0.0
+        )
         self.cancel_requested = cancel_requested or (lambda: False)
         self.progress_callback = progress_callback
 
@@ -377,10 +383,49 @@ class PhaseEnergyScanner:
                 requested = float(scan_value)
                 offset = requested - initial_phase
             targets.append((curve_index, offset, requested))
-        return sorted(
-            targets,
-            key=lambda item: (abs(item[2] - initial_phase), item[2]),
+        tolerance = 1e-9
+        center = [
+            item for item in targets
+            if abs(item[2] - initial_phase) <= tolerance
+        ]
+        positive = sorted(
+            (
+                item for item in targets
+                if item[2] > initial_phase + tolerance
+            ),
+            key=lambda item: item[2],
         )
+        negative = sorted(
+            (
+                item for item in targets
+                if item[2] < initial_phase - tolerance
+            ),
+            key=lambda item: item[2],
+            reverse=True,
+        )
+        return center + positive + negative
+
+    def _return_to_center(
+        self,
+        *,
+        initial_phase: float,
+        center_energy: float,
+    ) -> None:
+        command_phase = wrap_phase_deg(initial_phase)
+        self._emit(
+            "center_return",
+            command_phase_deg=command_phase,
+            energy_setpoint_mev=float(center_energy),
+            settle_time_s=self.center_return_settle_time_s,
+            message=(
+                "Returning to the center between phase branches; "
+                f"stabilizing for {self.center_return_settle_time_s:g} s."
+            ),
+        )
+        self.set_phase(command_phase)
+        self._wait(self.settings.phase_settle_time_s)
+        self.set_center_energy(float(center_energy))
+        self._wait(self.center_return_settle_time_s)
 
     def run(self) -> PhaseScanResult:
         initial_phase = None
@@ -403,9 +448,24 @@ class PhaseEnergyScanner:
             scan_targets = self._scan_targets(initial_phase)
             valid_matches: list[tuple[float, float]] = []
             reference_brightness = None
+            center_energy = initial_energy
+            positive_branch_started = False
+            center_returned = False
 
             for acquisition_index, (index, offset, requested_phase) in enumerate(scan_targets):
                 self._raise_if_cancelled()
+                if requested_phase > initial_phase + 1e-9:
+                    positive_branch_started = True
+                elif (
+                    requested_phase < initial_phase - 1e-9
+                    and positive_branch_started
+                    and not center_returned
+                ):
+                    self._return_to_center(
+                        initial_phase=initial_phase,
+                        center_energy=center_energy,
+                    )
+                    center_returned = True
                 command_phase = wrap_phase_deg(requested_phase)
                 self.set_phase(command_phase)
                 self._wait(self.settings.phase_settle_time_s)
@@ -477,6 +537,14 @@ class PhaseEnergyScanner:
                             (requested_phase, float(match.energy_mev))
                         )
                         point_status = "ok"
+                        if abs(requested_phase - initial_phase) <= 1e-9:
+                            matched_center_energy = (
+                                match.energy_setpoint_mev
+                                if match.energy_setpoint_mev is not None
+                                else match.energy_mev
+                            )
+                            if math.isfinite(float(matched_center_energy)):
+                                center_energy = float(matched_center_energy)
                 else:
                     point_status = "failed"
 

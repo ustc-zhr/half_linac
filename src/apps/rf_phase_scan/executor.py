@@ -177,6 +177,8 @@ class RFPhaseScanExecutor:
                 read_energy=lambda: caget(request.energy_pv),
                 set_energy=self.set_energy,
                 match_energy=self._match,
+                set_center_energy=self.write_energy,
+                center_return_settle_time_s=2.0 * self.energy_settle_time_s(),
                 cancel_requested=self.cancel_requested,
                 progress_callback=lambda payload: self._progress(payload, log),
             )
@@ -212,11 +214,17 @@ class RFPhaseScanExecutor:
             poll_interval_s=float(request.phase_verification["poll_interval_s"]),
         )
 
-    def set_energy(self, value: float) -> None:
+    def energy_settle_time_s(self) -> float:
+        return max(float(self.scan.get("settle_time_s", 3.0)), 0.0)
+
+    def write_energy(self, value: float) -> None:
         request = self.request
         if not caput(request.energy_pv, float(value), wait=True, timeout=10):
             raise RuntimeError("Coordinated energy setpoint write failed.")
-        settle_time_s = max(float(self.scan.get("settle_time_s", 3.0)), 0.0)
+
+    def set_energy(self, value: float) -> None:
+        self.write_energy(value)
+        settle_time_s = self.energy_settle_time_s()
         if settle_time_s:
             time.sleep(settle_time_s)
 
@@ -412,9 +420,14 @@ class RFPhaseScanExecutor:
         event = str(payload.get("event", ""))
         if event in {"phase_set", "match_start"}:
             self.callbacks.state("Running")
+        elif event == "center_return":
+            settle_time_s = float(payload.get("settle_time_s", 0.0))
+            self.callbacks.state(
+                f"Stabilizing at center ({settle_time_s:g} s)"
+            )
         elif event == "restore":
             self.callbacks.state("Restoring")
-        if event in {"phase_set", "match_start", "restore"}:
+        if event in {"phase_set", "match_start", "center_return", "restore"}:
             log.write(
                 event,
                 **{key: value for key, value in payload.items() if key != "event"},

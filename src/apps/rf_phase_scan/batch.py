@@ -855,7 +855,16 @@ class RFPhaseBatchDialog(QDialog):
             * self.window.measurement_interval.value()
             + self.window.auto_tune_settle.value()
         )
-        minutes = len(rows) * points * per_point / 60.0
+        center_transition = 0.0
+        if (
+            self.window.phase_mode.currentData() == "relative"
+            and self.window.low.value() < 0 < self.window.high.value()
+        ):
+            center_transition = (
+                self.window.settle.value()
+                + 2.0 * self.window.auto_tune_settle.value()
+            )
+        minutes = len(rows) * (points * per_point + center_transition) / 60.0
         self.summary.setText(
             f"{len(rows)} selected · approximately {minutes:.1f} min · "
             "qualified results will be applied to crest and LINAC_ENERGY."
