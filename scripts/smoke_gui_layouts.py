@@ -714,8 +714,8 @@ def _run_child(app_name: str) -> None:
 
     if app_name == "launcher":
         # App cards render their title in a child label, not QPushButton.text().
-        if window.rf_phase_scan_button.title_label.text() != "RF Crest & Gain":
-            raise AssertionError("Launcher did not expose the updated RF app label.")
+        if window.rf_phase_scan_button.title_label.text() != "RF Phase Tuning":
+            raise AssertionError("Launcher did not expose the RF Phase Tuning label.")
         window._apply_runtime_selection("irfel", "real")
         switched_log = window.textEdit.toPlainText()
         if "Runtime: machine=irfel, backend=real." not in switched_log:

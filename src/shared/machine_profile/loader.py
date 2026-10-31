@@ -1548,6 +1548,158 @@ def _validate_basic_app_support(
                     raise MachineProfileError(
                         "workflows.rf_phase_scan.batch.apply.follow_energy must be true."
                     )
+        recovery = workflow.get("transmission_recovery")
+        if recovery is not None:
+            location = "workflows.rf_phase_scan.transmission_recovery"
+            recovery = _expect_mapping(recovery, location)
+            enabled = recovery.get("enabled", False)
+            if not isinstance(enabled, bool):
+                raise MachineProfileError(f"{location}.enabled must be boolean.")
+            if enabled:
+                recovery_scan = _expect_mapping(
+                    recovery.get("phase_scan"), f"{location}.phase_scan"
+                )
+                half_range = _expect_finite_number(
+                    recovery_scan.get("half_range_deg"),
+                    f"{location}.phase_scan.half_range_deg",
+                )
+                recovery_points = _expect_int(
+                    recovery_scan.get("points"), f"{location}.phase_scan.points"
+                )
+                recovery_settle = _expect_finite_number(
+                    recovery_scan.get("settle_time_s"),
+                    f"{location}.phase_scan.settle_time_s",
+                )
+                if not 0 < half_range <= 180:
+                    raise MachineProfileError(
+                        f"{location}.phase_scan.half_range_deg must be in (0, 180]."
+                    )
+                if recovery_points < 3 or recovery_points % 2 == 0:
+                    raise MachineProfileError(
+                        f"{location}.phase_scan.points must be an odd integer of at least 3."
+                    )
+                if recovery_settle < 0:
+                    raise MachineProfileError(
+                        f"{location}.phase_scan.settle_time_s must not be negative."
+                    )
+
+                verification = _expect_mapping(
+                    recovery_scan.get("readback_verification", {}),
+                    f"{location}.phase_scan.readback_verification",
+                )
+                readback_channel = _expect_non_empty_string(
+                    verification.get("channel", "phase_readback"),
+                    f"{location}.phase_scan.readback_verification.channel",
+                )
+                tolerance = _expect_finite_number(
+                    verification.get("tolerance_deg", 0.1),
+                    f"{location}.phase_scan.readback_verification.tolerance_deg",
+                )
+                timeout = _expect_finite_number(
+                    verification.get("timeout_s", 2.0),
+                    f"{location}.phase_scan.readback_verification.timeout_s",
+                )
+                poll_interval = _expect_finite_number(
+                    verification.get("poll_interval_s", 0.05),
+                    f"{location}.phase_scan.readback_verification.poll_interval_s",
+                )
+                if tolerance < 0 or timeout < 0 or poll_interval <= 0:
+                    raise MachineProfileError(
+                        f"{location} phase readback verification values are invalid."
+                    )
+
+                measurement = _expect_mapping(
+                    recovery.get("measurement"), f"{location}.measurement"
+                )
+                signal_channel = _expect_non_empty_string(
+                    measurement.get("channel", "sum"),
+                    f"{location}.measurement.channel",
+                )
+                samples = _expect_int(
+                    measurement.get("samples_per_point"),
+                    f"{location}.measurement.samples_per_point",
+                )
+                minimum_samples = _expect_int(
+                    measurement.get("min_valid_samples"),
+                    f"{location}.measurement.min_valid_samples",
+                )
+                sample_interval = _expect_finite_number(
+                    measurement.get("sample_interval_s"),
+                    f"{location}.measurement.sample_interval_s",
+                )
+                if samples < 1 or minimum_samples < 1 or minimum_samples > samples:
+                    raise MachineProfileError(
+                        f"{location}.measurement sample counts are invalid."
+                    )
+                if sample_interval < 0:
+                    raise MachineProfileError(
+                        f"{location}.measurement.sample_interval_s must not be negative."
+                    )
+
+                stages = recovery.get("stages")
+                if not isinstance(stages, list) or not stages:
+                    raise MachineProfileError(
+                        f"{location}.stages must be a non-empty list."
+                    )
+                required_backends = write_backends or backends
+                seen_rf: set[str] = set()
+                rf_orders: list[int] = []
+                for index, raw_stage in enumerate(stages):
+                    stage_location = f"{location}.stages[{index}]"
+                    stage = _expect_mapping(raw_stage, stage_location)
+                    rf_id = _expect_non_empty_string(
+                        stage.get("rf_element"), f"{stage_location}.rf_element"
+                    )
+                    bpm_id = _expect_non_empty_string(
+                        stage.get("target_bpm"), f"{stage_location}.target_bpm"
+                    )
+                    if rf_id in seen_rf:
+                        raise MachineProfileError(
+                            f"{location}.stages contains duplicate RF {rf_id}."
+                        )
+                    seen_rf.add(rf_id)
+                    try:
+                        rf_element = profile.get_element(rf_id)
+                        bpm_element = profile.get_element(bpm_id)
+                    except MachineProfileError as exc:
+                        raise MachineProfileError(
+                            f"{stage_location} references an unknown element: {exc}"
+                        ) from exc
+                    if (
+                        rf_element.kind != "rf"
+                        or "llrf" not in rf_element.tags
+                        or "wrapped_phase" not in rf_element.tags
+                    ):
+                        raise MachineProfileError(
+                            f"{stage_location}.rf_element must be a wrapped-phase LLRF."
+                        )
+                    if bpm_element.kind != "bpm":
+                        raise MachineProfileError(
+                            f"{stage_location}.target_bpm must be a BPM element."
+                        )
+                    for backend in required_backends:
+                        if (
+                            "phase_set" not in rf_element.channels
+                            or backend not in rf_element.channels["phase_set"]
+                            or readback_channel not in rf_element.channels
+                            or backend not in rf_element.channels[readback_channel]
+                        ):
+                            raise MachineProfileError(
+                                f"{stage_location}.rf_element is missing phase channels for {backend}."
+                            )
+                        if (
+                            signal_channel not in bpm_element.channels
+                            or backend not in bpm_element.channels[signal_channel]
+                        ):
+                            raise MachineProfileError(
+                                f"{stage_location}.target_bpm is missing "
+                                f"{signal_channel!r} for {backend}."
+                            )
+                    rf_orders.append(rf_element.order)
+                if rf_orders != sorted(rf_orders):
+                    raise MachineProfileError(
+                        f"{location}.stages must follow RF machine order."
+                    )
         return
 
     if app_name == "solenoid_centering":

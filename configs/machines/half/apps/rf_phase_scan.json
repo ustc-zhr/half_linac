@@ -83,6 +83,47 @@
       "follow_energy": true
     }
   },
+  "transmission_recovery": {
+    "enabled": true,
+    "phase_scan": {
+      "half_range_deg": 90,
+      "points": 13,
+      "settle_time_s": 1,
+      "readback_verification": {
+        "channel": "phase_readback",
+        "tolerance_deg": 0.1,
+        "timeout_s": 2,
+        "poll_interval_s": 0.05
+      }
+    },
+    "measurement": {
+      "channel": "sum",
+      "samples_per_point": 5,
+      "sample_interval_s": 1,
+      "min_valid_samples": 2
+    },
+    "stages": [
+      {"rf_element": "LLRF02", "target_bpm": "BPM08"},
+      {"rf_element": "LLRF03", "target_bpm": "BPM12"},
+      {"rf_element": "LLRF04", "target_bpm": "BPM12"},
+      {"rf_element": "LLRF05", "target_bpm": "BPM13"},
+      {"rf_element": "LLRF06", "target_bpm": "BPM13"},
+      {"rf_element": "LLRF07", "target_bpm": "BPM14"},
+      {"rf_element": "LLRF08", "target_bpm": "BPM14"},
+      {"rf_element": "LLRF09", "target_bpm": "BPM15"},
+      {"rf_element": "LLRF10", "target_bpm": "BPM15"},
+      {"rf_element": "LLRF11", "target_bpm": "BPM16"},
+      {"rf_element": "LLRF12", "target_bpm": "BPM16"},
+      {"rf_element": "LLRF13", "target_bpm": "BPM17"},
+      {"rf_element": "LLRF14", "target_bpm": "BPM17"},
+      {"rf_element": "LLRF15", "target_bpm": "BPM18"},
+      {"rf_element": "LLRF16", "target_bpm": "BPM18"},
+      {"rf_element": "LLRF17", "target_bpm": "BPM19"},
+      {"rf_element": "LLRF18", "target_bpm": "BPM19"},
+      {"rf_element": "LLRF19", "target_bpm": "BPM20"},
+      {"rf_element": "LLRF20", "target_bpm": "BPM20"}
+    ]
+  },
   "write_control": {"vm": "blocked", "real": "allowed"},
   "real_status": "write_smoke_passed"
 }

@@ -21,7 +21,8 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox,
     QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
     QMessageBox, QProgressBar, QPushButton, QSizePolicy, QSpinBox, QSplitter,
-    QTableWidget, QTableWidgetItem, QToolBar, QToolButton, QVBoxLayout, QWidget,
+    QTableWidget, QTableWidgetItem, QTabWidget, QToolBar, QToolButton,
+    QVBoxLayout, QWidget,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
 
@@ -41,6 +42,9 @@ from half_linac.src.apps.rf_phase_scan.history import (
     load_peak_history,
 )
 from half_linac.src.apps.rf_phase_scan.mplwidget import MplWidget
+from half_linac.src.apps.rf_phase_scan.transmission_recovery_ui import (
+    TransmissionRecoveryPage,
+)
 from half_linac.src.apps.rf_phase_scan.spectrum_profile import (
     SpectrumProfileError, fit_projection_profile, project_image_profiles,
 )
@@ -121,6 +125,14 @@ def _excluded_frame_sample_plot_data(points, phase_mode):
 def build_style(p):
     return f"""
 QMainWindow, QDialog, QWidget#centralwidget {{ background: {p['window']}; color: {p['text']}; font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif; }}
+QTabWidget#modeTabs {{ background: {p['window']}; }}
+QTabWidget#modeTabs::pane {{ background: {p['window']}; border: none; }}
+QTabBar#modeTabBar {{ background: {p['window']}; }}
+QTabBar#modeTabBar::tab {{ background: {p['panel']}; color: {p['muted']}; border: 1px solid {p['border']}; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; min-width: 170px; padding: 7px 22px; margin-right: 4px; font-weight: 700; }}
+QTabBar#modeTabBar::tab:hover {{ background: {p['button_hover']}; color: {p['text']}; }}
+QTabBar#modeTabBar::tab:selected {{ background: {p['summary']}; color: {p['text']}; border-bottom: 2px solid {p['accent']}; }}
+QSplitter#recoverySplitter::handle {{ background: {p['window']}; }}
+QSplitter#recoverySplitter::handle:hover {{ background: {p['border']}; }}
 QFrame#summaryPanel {{ background: {p['summary']}; border: 1px solid {p['border']}; border-radius: 14px; }}
 QFrame#workspaceCard, QFrame#plotCard {{ background: {p['panel']}; border: 1px solid {p['border']}; border-radius: 14px; }}
 QFrame#parameterCard {{ background: {p['panel']}; border: 1px solid {p['border']}; border-radius: 10px; }}
@@ -155,6 +167,9 @@ QHeaderView::section {{ background: {p['summary']}; color: {p['text']}; border: 
 QCheckBox {{ color: {p['text']}; font-size: 12px; font-weight: 600; spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {p['border']}; border-radius: 4px; background-color: {p['input']}; }}
 QCheckBox::indicator:checked {{ background-color: {p['accent']}; border: 2px solid {p['text']}; }}
+QCheckBox[stageSelector="true"] {{ background: transparent; border: none; spacing: 0; }}
+QCheckBox[stageSelector="true"]::indicator {{ width: 16px; height: 16px; border: 1px solid {p['border']}; border-radius: 4px; background-color: {p['input']}; }}
+QCheckBox[stageSelector="true"]::indicator:checked {{ background-color: {p['accent']}; border: 1px solid {p['accent']}; }}
 QProgressBar {{ background: {p['input']}; border: 1px solid {p['border']}; border-radius: 7px; color: {p['text']}; min-height: 12px; text-align: center; }}
 QProgressBar::chunk {{ background: {p['accent']}; border-radius: 6px; }}
 """
@@ -560,7 +575,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.context = load_app_context("rf_phase_scan")
         self.current_theme = resolve_initial_theme()
         self.setWindowTitle(
-            f"{self.context.machine.display_name} RF Phase-Energy Gain Scan"
+            f"{self.context.machine.display_name} RF Phase Tuning"
         )
         self.config = dict(get_workflow(self.context.profile, "rf_phase_scan"))
         self.station = self.config
@@ -760,7 +775,7 @@ class RFPhaseScanWindow(QMainWindow):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
-        title = QLabel("RF Phase-Energy Gain Scan")
+        title = QLabel("Crest & Gain")
         title.setObjectName("summaryTitle")
         runtime_context = RuntimeContextWidget(
             machine_id=self.context.machine.id,
@@ -900,9 +915,34 @@ class RFPhaseScanWindow(QMainWindow):
         workspace.addLayout(control_column)
         workspace.addWidget(plot_card, 1)
         root.addLayout(workspace, 1)
-        self.setCentralWidget(body)
         self.thread = None
         self.batch_dialog = None
+        self.mode_tabs = QTabWidget(self)
+        self.mode_tabs.setObjectName("modeTabs")
+        mode_tab_bar = self.mode_tabs.tabBar()
+        mode_tab_bar.setObjectName("modeTabBar")
+        mode_tab_bar.setElideMode(Qt.ElideNone)
+        mode_tab_bar.setUsesScrollButtons(False)
+        self.recovery_page = None
+        recovery_config = self.config.get("transmission_recovery")
+        if (
+            isinstance(recovery_config, dict)
+            and recovery_config.get("enabled", False)
+        ):
+            self.recovery_page = TransmissionRecoveryPage(
+                window=self,
+                context=self.context,
+                workflow=self.config,
+                runtime_paths=self.runtime_paths,
+                write_enabled=self.scan_enabled,
+                parent=self.mode_tabs,
+            )
+            self.mode_tabs.addTab(
+                self.recovery_page, "  Transmission Recovery  "
+            )
+        self.mode_tabs.addTab(body, "Crest && Gain")
+        self.mode_tabs.setCurrentIndex(0)
+        self.setCentralWidget(self.mode_tabs)
         self.points_data = []
         self.last_result = {}
         self.last_review_path = None
@@ -1486,6 +1526,8 @@ class RFPhaseScanWindow(QMainWindow):
                 spine.set_color(palette["border"])
             axes.xaxis.label.set_color(palette["muted"])
             axes.yaxis.label.set_color(palette["muted"])
+        if self.recovery_page is not None:
+            self.recovery_page.apply_theme(palette)
         self._update_theme_button()
 
     def _set_scan_status(self, text, tooltip=None):
@@ -2249,7 +2291,10 @@ class RFPhaseScanWindow(QMainWindow):
         )
 
     def _show_batch_dialog(self):
-        if self.thread is not None:
+        if self.thread is not None or (
+            self.recovery_page is not None
+            and self.recovery_page.is_running()
+        ):
             return
         from half_linac.src.apps.rf_phase_scan.batch import RFPhaseBatchDialog
 
@@ -2275,6 +2320,18 @@ class RFPhaseScanWindow(QMainWindow):
             and bool(self.batch_config.get("enabled", False))
         )
         self.review_button.setEnabled(not running and bool(self.points_data))
+
+    def _set_recovery_running(self, running):
+        self.mode_tabs.setTabEnabled(1, not running)
+        self.start.setEnabled(
+            not running and self.thread is None and bool(self.targets)
+        )
+        self.batch_button.setEnabled(
+            not running
+            and self.thread is None
+            and bool(self.targets)
+            and bool(self.batch_config.get("enabled", False))
+        )
 
     def _begin_batch_item(self, element_id):
         index = self.combo.findText(str(element_id))
@@ -2323,6 +2380,11 @@ class RFPhaseScanWindow(QMainWindow):
 
     def start_scan(self):
         if not self.targets or self.thread is not None: return
+        if (
+            self.recovery_page is not None
+            and self.recovery_page.is_running()
+        ):
+            return
         if self.batch_dialog is not None and self.batch_dialog.worker is not None:
             return
         target = self.targets[self.combo.currentIndex()]
@@ -2528,6 +2590,18 @@ class RFPhaseScanWindow(QMainWindow):
             widget.setEnabled(True)
 
     def closeEvent(self, event):
+        if (
+            self.recovery_page is not None
+            and self.recovery_page.is_running()
+        ):
+            if not self.recovery_page.stop_and_wait(15000):
+                self._set_scan_status(
+                    "Restoring",
+                    "Transmission Recovery phase restore is still in progress; "
+                    "close deferred.",
+                )
+                event.ignore()
+                return
         if (
             self.batch_dialog is not None
             and self.batch_dialog.worker is not None
