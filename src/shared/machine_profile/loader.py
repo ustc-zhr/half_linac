@@ -919,6 +919,416 @@ def resolve_machine_id(machine_id: str | None) -> str:
     return profile_id
 
 
+def _validate_screen_energy_match_config(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+    *,
+    image_backends: tuple[str, ...],
+    energy_backends: tuple[str, ...],
+    location: str,
+) -> None:
+    """Validate the shared ENY acquisition and Energy Match contract."""
+
+    diagnostics = _expect_mapping(
+        workflow.get("diagnostics"), f"{location}.diagnostics"
+    )
+    flag_element = _expect_non_empty_string(
+        diagnostics.get("flag_element"), f"{location}.diagnostics.flag_element"
+    )
+    flag_channel = _expect_non_empty_string(
+        diagnostics.get("flag_image_channel"),
+        f"{location}.diagnostics.flag_image_channel",
+    )
+    flag = profile.get_element(flag_element)
+    if flag_channel not in flag.channels or any(
+        backend not in flag.channels[flag_channel] for backend in image_backends
+    ):
+        raise MachineProfileError(f"{location} flag image channel is unavailable.")
+    _expect_finite_number(
+        diagnostics.get("x_reference_mm"),
+        f"{location}.diagnostics.x_reference_mm",
+    )
+    if _expect_finite_number(
+        diagnostics.get("design_eta_m"),
+        f"{location}.diagnostics.design_eta_m",
+    ) == 0:
+        raise MachineProfileError(
+            f"{location}.diagnostics.design_eta_m must not be zero."
+        )
+
+    energy_element = _expect_non_empty_string(
+        workflow.get("energy_element"), f"{location}.energy_element"
+    )
+    energy_channel = _expect_non_empty_string(
+        workflow.get("energy_set_channel"), f"{location}.energy_set_channel"
+    )
+    energy = profile.get_element(energy_element)
+    if energy_channel not in energy.channels or any(
+        backend not in energy.channels[energy_channel]
+        for backend in energy_backends
+    ):
+        raise MachineProfileError(
+            f"{location} coordinated energy channel is unavailable."
+        )
+    raw_energy_limit = energy.limits_for(energy_channel)
+    if not raw_energy_limit:
+        raise MachineProfileError(
+            f"{energy_element}.{energy_channel} requires machine energy limits."
+        )
+    machine_energy_limit = LimitRange.from_mapping(raw_energy_limit)
+    if (
+        machine_energy_limit.low is None
+        or machine_energy_limit.high is None
+        or machine_energy_limit.low >= machine_energy_limit.high
+    ):
+        raise MachineProfileError(
+            f"{energy_element}.{energy_channel} machine energy limits are invalid."
+        )
+
+    scan = _expect_mapping(workflow.get("scan"), f"{location}.scan")
+    tracking = _expect_mapping(
+        scan.get("energy_tracking"), f"{location}.scan.energy_tracking"
+    )
+    if _expect_finite_number(
+        tracking.get("tracking_half_window_mev"),
+        f"{location}.scan.energy_tracking.tracking_half_window_mev",
+    ) <= 0:
+        raise MachineProfileError(
+            f"{location} energy tracking window must be positive."
+        )
+    sampling = _expect_mapping(
+        scan.get("point_measurement"), f"{location}.scan.point_measurement"
+    )
+    samples = _expect_int(
+        sampling.get("samples_per_point"),
+        f"{location}.scan.point_measurement.samples_per_point",
+    )
+    min_valid = _expect_int(
+        sampling.get("min_valid_samples"),
+        f"{location}.scan.point_measurement.min_valid_samples",
+    )
+    if samples < 1 or min_valid < 1 or min_valid > samples:
+        raise MachineProfileError(
+            f"{location} point measurement sample counts are invalid."
+        )
+    if _expect_finite_number(
+        sampling.get("sample_interval_s"),
+        f"{location}.scan.point_measurement.sample_interval_s",
+    ) < 0:
+        raise MachineProfileError(
+            f"{location}.scan.point_measurement.sample_interval_s "
+            "must not be negative."
+        )
+    relative_brightness = _expect_finite_number(
+        sampling.get("fit_min_relative_brightness", 0.05),
+        f"{location}.scan.point_measurement.fit_min_relative_brightness",
+    )
+    if not 0 <= relative_brightness <= 1:
+        raise MachineProfileError(
+            f"{location} minimum relative brightness must be in [0, 1]."
+        )
+
+    energy_match = _expect_mapping(
+        workflow.get("energy_match"), f"{location}.energy_match"
+    )
+    if not isinstance(energy_match.get("initial_brightness_search", False), bool):
+        raise MachineProfileError(
+            f"{location}.energy_match.initial_brightness_search must be boolean."
+        )
+    match_defaults = _expect_mapping(
+        workflow.get("energy_match_defaults"),
+        f"{location}.energy_match_defaults",
+    )
+    stages = _expect_mapping(
+        match_defaults.get("stages", match_defaults),
+        f"{location}.energy_match_defaults.stages",
+    )
+    brightness_peak = _expect_mapping(
+        stages.get("brightness_peak", {}),
+        f"{location}.energy_match_defaults.stages.brightness_peak",
+    )
+    center_lock = _expect_mapping(
+        stages.get("center_lock"),
+        f"{location}.energy_match_defaults.stages.center_lock",
+    )
+    if (
+        str(brightness_peak.get("strategy", "center_outward")).strip()
+        != "center_outward"
+    ):
+        raise MachineProfileError(
+            "Energy Match brightness_peak strategy must be 'center_outward'."
+        )
+    if (
+        str(center_lock.get("strategy", "secant_dispersion")).strip()
+        != "secant_dispersion"
+    ):
+        raise MachineProfileError(
+            "Energy Match center_lock strategy must be 'secant_dispersion'."
+        )
+
+    configured_pipelines = energy_match.get("pipelines", {})
+    if configured_pipelines is None:
+        configured_pipelines = {}
+    if not isinstance(configured_pipelines, Mapping):
+        raise MachineProfileError(
+            f"{location}.energy_match.pipelines must be a mapping."
+        )
+    for pipeline_key, objective_key in (
+        ("initial_pipeline", "initial_objective"),
+        ("tracking_pipeline", "tracking_objective"),
+        ("fallback_pipeline", "fallback_objective"),
+    ):
+        pipeline_name = pipeline_key.removesuffix("_pipeline")
+        configured = configured_pipelines.get(pipeline_name)
+        if configured is None:
+            configured = energy_match.get(pipeline_key)
+        if configured is None:
+            continue
+        try:
+            normalize_pipeline(
+                configured,
+                legacy_objective=energy_match.get(objective_key),
+            )
+        except EnergyTuningPipelineError as exc:
+            raise MachineProfileError(
+                f"{location}.energy_match.{pipeline_key} is invalid: {exc}"
+            ) from exc
+
+    search = _expect_mapping(
+        energy_match.get("range"), f"{location}.energy_match.range"
+    )
+    match_low = _expect_finite_number(
+        search.get("low"), f"{location}.energy_match.range.low"
+    )
+    match_high = _expect_finite_number(
+        search.get("high"), f"{location}.energy_match.range.high"
+    )
+    if match_low >= match_high:
+        raise MachineProfileError(
+            f"{location}.energy_match.range.low must be less than high."
+        )
+    if (
+        match_low < machine_energy_limit.low
+        or match_high > machine_energy_limit.high
+    ):
+        raise MachineProfileError(
+            f"{location}.energy_match.range must stay within "
+            "the machine energy limits."
+        )
+    if _expect_finite_number(
+        search.get("settle_time_s"),
+        f"{location}.energy_match.range.settle_time_s",
+    ) < 0:
+        raise MachineProfileError(
+            f"{location}.energy_match.range.settle_time_s must not be negative."
+        )
+    if str(search.get("unit", "")).strip().lower() != "mev":
+        raise MachineProfileError(
+            f"{location}.energy_match.range.unit must be 'MeV'."
+        )
+    if str(search.get("mode", "")).strip().lower() != "absolute":
+        raise MachineProfileError(
+            f"{location}.energy_match.range.mode must be 'absolute'."
+        )
+    if not isinstance(search.get("restore_initial_on_failure"), bool):
+        raise MachineProfileError(
+            f"{location}.energy_match.range.restore_initial_on_failure "
+            "must be boolean."
+        )
+
+    measurement = _expect_mapping(
+        match_defaults.get("measurement", match_defaults),
+        f"{location}.energy_match_defaults.measurement",
+    )
+    profile_fit_method = measurement.get(
+        "profile_fit_method", match_defaults.get("profile_fit_method")
+    )
+    if str(profile_fit_method or "").strip() != "Gauss fit":
+        raise MachineProfileError(
+            f"{location}.energy_match_defaults.measurement.profile_fit_method "
+            "must be 'Gauss fit'."
+        )
+    min_fit_r_squared = _expect_finite_number(
+        measurement.get(
+            "min_fit_r_squared", center_lock.get("min_fit_r_squared")
+        ),
+        f"{location}.energy_match_defaults.measurement.min_fit_r_squared",
+    )
+    if not 0 <= min_fit_r_squared <= 1:
+        raise MachineProfileError(
+            f"{location}.energy_match_defaults.measurement.min_fit_r_squared "
+            "must be in [0, 1]."
+        )
+    beam_presence = _expect_mapping(
+        measurement.get("beam_presence", {}),
+        f"{location}.energy_match_defaults.measurement.beam_presence",
+    )
+    sigma_threshold = _expect_finite_number(
+        beam_presence.get("sigma_threshold", 6.0),
+        f"{location}.energy_match_defaults.measurement."
+        "beam_presence.sigma_threshold",
+    )
+    min_area_px = _expect_int(
+        beam_presence.get("min_area_px", 50),
+        f"{location}.energy_match_defaults.measurement.beam_presence.min_area_px",
+    )
+    if sigma_threshold <= 0 or min_area_px < 1:
+        raise MachineProfileError(
+            f"{location}.energy_match_defaults.measurement.beam_presence "
+            "values are invalid."
+        )
+    for key in (
+        "max_correction_step_mev",
+        "center_lock_trigger_mm",
+        "center_tolerance_mm",
+    ):
+        if _expect_finite_number(
+            center_lock.get(key),
+            f"{location}.energy_match_defaults.stages.center_lock.{key}",
+        ) <= 0:
+            raise MachineProfileError(
+                f"{location}.energy_match_defaults.stages.center_lock.{key} "
+                "must be positive."
+            )
+    if float(center_lock["center_lock_trigger_mm"]) < float(
+        center_lock["center_tolerance_mm"]
+    ):
+        raise MachineProfileError(
+            f"{location}.energy_match_defaults.stages.center_lock."
+            "center_lock_trigger_mm must be greater than or equal to "
+            "center_tolerance_mm."
+        )
+    if _expect_int(
+        center_lock.get("max_iterations"),
+        f"{location}.energy_match_defaults.stages.center_lock.max_iterations",
+    ) < 1:
+        raise MachineProfileError(
+            f"{location}.energy_match_defaults.stages.center_lock."
+            "max_iterations must be at least 1."
+        )
+
+
+def _validate_linked_timing_energy_scan(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+    *,
+    backends: tuple[str, ...],
+) -> None:
+    location = "workflows.power_source_timing.linked_energy_scan"
+    raw = workflow.get("linked_energy_scan")
+    if raw is None:
+        return
+    linked = _expect_mapping(raw, location)
+    enabled = linked.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise MachineProfileError(f"{location}.enabled must be boolean.")
+    if not enabled:
+        return
+
+    required_devices = tuple(
+        value.lower()
+        for value in _expect_string_list(
+            linked.get("required_devices"), f"{location}.required_devices"
+        )
+    )
+    expected_devices = ("hv", "llrf", "ssa", "kly")
+    if len(required_devices) != len(expected_devices) or set(
+        required_devices
+    ) != set(expected_devices):
+        raise MachineProfileError(
+            f"{location}.required_devices must contain exactly "
+            "hv, llrf, ssa, and kly."
+        )
+
+    offset = _expect_mapping(linked.get("offset"), f"{location}.offset")
+    low = _expect_finite_number(offset.get("low"), f"{location}.offset.low")
+    high = _expect_finite_number(offset.get("high"), f"{location}.offset.high")
+    step = _expect_finite_number(offset.get("step"), f"{location}.offset.step")
+    hard_limit = _expect_finite_number(
+        offset.get("hard_limit"), f"{location}.offset.hard_limit"
+    )
+    if str(offset.get("unit", "")).strip().lower() != "us":
+        raise MachineProfileError(f"{location}.offset.unit must be 'us'.")
+    if not low < 0 < high:
+        raise MachineProfileError(
+            f"{location}.offset range must contain positive, zero, and negative points."
+        )
+    if step <= 0 or hard_limit <= 0 or hard_limit > 1.0:
+        raise MachineProfileError(
+            f"{location}.offset step and hard_limit are invalid."
+        )
+    if low < -hard_limit or high > hard_limit:
+        raise MachineProfileError(
+            f"{location}.offset range exceeds its hard limit."
+        )
+    for name, value in (("low", low), ("high", high)):
+        grid_index = value / step
+        if not math.isclose(
+            grid_index, round(grid_index), rel_tol=0.0, abs_tol=1e-9
+        ):
+            raise MachineProfileError(
+                f"{location}.offset.{name} must lie on the step grid."
+            )
+
+    timing = _expect_mapping(linked.get("timing"), f"{location}.timing")
+    if _expect_finite_number(
+        timing.get("settle_time_s"), f"{location}.timing.settle_time_s"
+    ) < 0:
+        raise MachineProfileError(
+            f"{location}.timing.settle_time_s must not be negative."
+        )
+    readback = _expect_mapping(
+        timing.get("readback_verification"),
+        f"{location}.timing.readback_verification",
+    )
+    timeout = _expect_finite_number(
+        readback.get("timeout_s"),
+        f"{location}.timing.readback_verification.timeout_s",
+    )
+    poll = _expect_finite_number(
+        readback.get("poll_interval_s"),
+        f"{location}.timing.readback_verification.poll_interval_s",
+    )
+    if timeout <= 0 or poll <= 0:
+        raise MachineProfileError(
+            f"{location}.timing readback verification values must be positive."
+        )
+
+    tag = _expect_non_empty_string(
+        workflow.get("element_tag"),
+        "workflows.power_source_timing.element_tag",
+    )
+    required_channels = tuple(
+        f"{device}_{suffix}"
+        for device in expected_devices
+        for suffix in ("delay_set", "delay_readback", "enable")
+    )
+    complete_groups = [
+        element
+        for element in profile.elements
+        if tag in element.tags
+        and all(
+            channel in element.channels
+            and all(
+                backend in element.channels[channel] for backend in backends
+            )
+            for channel in required_channels
+        )
+    ]
+    if not complete_groups:
+        raise MachineProfileError(
+            f"{location} requires at least one complete HV/LLRF/SSA/KLY group."
+        )
+
+    _validate_screen_energy_match_config(
+        profile,
+        linked,
+        image_backends=backends,
+        energy_backends=backends,
+        location=location,
+    )
+
+
 def _validate_basic_app_support(
     profile: MachineProfile,
     app_name: str,
@@ -991,22 +1401,18 @@ def _validate_basic_app_support(
             or str(write_control.get(backend, write_control.get("default", "allowed"))).strip().lower()
             in {"allowed", "allow", "enabled", "enable", "write", "yes", "true"}
         )
+        _validate_screen_energy_match_config(
+            profile,
+            workflow,
+            image_backends=backends,
+            energy_backends=write_backends,
+            location="workflows.rf_phase_scan",
+        )
         candidates = [e for e in profile.elements if e.kind == "rf" and "llrf" in e.tags and "wrapped_phase" in e.tags and all("phase_set" in e.channels and b in e.channels["phase_set"] for b in write_backends)]
         if not candidates:
             raise MachineProfileError("rf_phase_scan requires configured LLRF phase_set elements.")
         if str(workflow.get("default_element", "")) not in {e.id for e in candidates}:
             raise MachineProfileError("workflows.rf_phase_scan.default_element is not an eligible LLRF.")
-        diagnostics = _expect_mapping(workflow.get("diagnostics"), "workflows.rf_phase_scan.diagnostics")
-        flag_element = _expect_non_empty_string(diagnostics.get("flag_element"), "workflows.rf_phase_scan.diagnostics.flag_element")
-        flag_channel = _expect_non_empty_string(diagnostics.get("flag_image_channel"), "workflows.rf_phase_scan.diagnostics.flag_image_channel")
-        flag = profile.get_element(flag_element)
-        if flag_channel not in flag.channels or any(backend not in flag.channels[flag_channel] for backend in backends):
-            raise MachineProfileError("workflows.rf_phase_scan flag image channel is unavailable.")
-        energy_element = _expect_non_empty_string(workflow.get("energy_element"), "workflows.rf_phase_scan.energy_element")
-        energy_channel = _expect_non_empty_string(workflow.get("energy_set_channel"), "workflows.rf_phase_scan.energy_set_channel")
-        energy = profile.get_element(energy_element)
-        if energy_channel not in energy.channels or any(backend not in energy.channels[energy_channel] for backend in write_backends):
-            raise MachineProfileError("workflows.rf_phase_scan coordinated energy channel is unavailable.")
         if _expect_finite_number(
             workflow.get("preview_energy_mev"),
             "workflows.rf_phase_scan.preview_energy_mev",
@@ -1014,9 +1420,6 @@ def _validate_basic_app_support(
             raise MachineProfileError(
                 "workflows.rf_phase_scan.preview_energy_mev must be positive."
             )
-        _expect_finite_number(diagnostics.get("x_reference_mm"), "workflows.rf_phase_scan.diagnostics.x_reference_mm")
-        if _expect_finite_number(diagnostics.get("design_eta_m"), "workflows.rf_phase_scan.diagnostics.design_eta_m") == 0:
-            raise MachineProfileError("workflows.rf_phase_scan.diagnostics.design_eta_m must not be zero.")
         scan = _expect_mapping(workflow.get("scan"), "workflows.rf_phase_scan.scan")
         phase_scan = _expect_mapping(scan.get("phase"), "workflows.rf_phase_scan.scan.phase")
         phase_mode = str(phase_scan.get("mode", "")).strip().lower()
@@ -1070,179 +1473,6 @@ def _validate_basic_app_support(
             raise MachineProfileError(
                 "workflows.rf_phase_scan phase readback verification values are invalid."
             )
-        tracking = _expect_mapping(scan.get("energy_tracking"), "workflows.rf_phase_scan.scan.energy_tracking")
-        tracking_window = _expect_finite_number(
-            tracking.get("tracking_half_window_mev"),
-            "workflows.rf_phase_scan.scan.energy_tracking.tracking_half_window_mev",
-        )
-        if tracking_window <= 0:
-            raise MachineProfileError(
-                "workflows.rf_phase_scan energy tracking window must be positive."
-            )
-        sampling = _expect_mapping(scan.get("point_measurement"), "workflows.rf_phase_scan.scan.point_measurement")
-        samples = int(sampling.get("samples_per_point", 0))
-        min_valid = int(sampling.get("min_valid_samples", 0))
-        if samples < 1 or min_valid < 1 or min_valid > samples:
-            raise MachineProfileError("workflows.rf_phase_scan point measurement sample counts are invalid.")
-        if float(sampling.get("sample_interval_s", -1)) < 0:
-            raise MachineProfileError("workflows.rf_phase_scan.scan.point_measurement.sample_interval_s must not be negative.")
-        relative_brightness = _expect_finite_number(
-            sampling.get("fit_min_relative_brightness", 0.05),
-            "workflows.rf_phase_scan.scan.point_measurement.fit_min_relative_brightness",
-        )
-        if not 0 <= relative_brightness <= 1:
-            raise MachineProfileError(
-                "workflows.rf_phase_scan minimum relative brightness must be in [0, 1]."
-            )
-        energy_match = _expect_mapping(workflow.get("energy_match"), "workflows.rf_phase_scan.energy_match")
-        if not isinstance(energy_match.get("initial_brightness_search", False), bool):
-            raise MachineProfileError(
-                "workflows.rf_phase_scan.energy_match.initial_brightness_search must be boolean."
-            )
-        stage_defaults = _expect_mapping(
-            workflow.get("energy_match_defaults"),
-            "workflows.rf_phase_scan.energy_match_defaults",
-        )
-        stage_config = stage_defaults.get("stages", stage_defaults)
-        stage_config = _expect_mapping(
-            stage_config,
-            "workflows.rf_phase_scan.energy_match_defaults.stages",
-        )
-        brightness_peak = _expect_mapping(
-            stage_config.get("brightness_peak", {}),
-            "workflows.rf_phase_scan.energy_match_defaults.brightness_peak",
-        )
-        center_lock_stage = _expect_mapping(
-            stage_config.get("center_lock", {}),
-            "workflows.rf_phase_scan.energy_match_defaults.center_lock",
-        )
-        if str(brightness_peak.get("strategy", "center_outward")).strip() != "center_outward":
-            raise MachineProfileError(
-                "RF brightness_peak strategy must be 'center_outward'."
-            )
-        if str(center_lock_stage.get("strategy", "secant_dispersion")).strip() != "secant_dispersion":
-            raise MachineProfileError(
-                "RF center_lock strategy must be 'secant_dispersion'."
-            )
-        configured_pipelines = energy_match.get("pipelines", {})
-        if configured_pipelines is None:
-            configured_pipelines = {}
-        if not isinstance(configured_pipelines, Mapping):
-            raise MachineProfileError(
-                "workflows.rf_phase_scan.energy_match.pipelines must be a mapping."
-            )
-        for pipeline_key, objective_key in (
-            ("initial_pipeline", "initial_objective"),
-            ("tracking_pipeline", "tracking_objective"),
-            ("fallback_pipeline", "fallback_objective"),
-        ):
-            pipeline_name = pipeline_key.removesuffix("_pipeline")
-            configured = configured_pipelines.get(pipeline_name)
-            if configured is None:
-                configured = energy_match.get(pipeline_key)
-            if configured is not None:
-                try:
-                    normalize_pipeline(
-                        configured,
-                        legacy_objective=energy_match.get(objective_key),
-                    )
-                except EnergyTuningPipelineError as exc:
-                    raise MachineProfileError(
-                        f"workflows.rf_phase_scan.energy_match.{pipeline_key} is invalid: {exc}"
-                    ) from exc
-        search = _expect_mapping(energy_match.get("range"), "workflows.rf_phase_scan.energy_match.range")
-        match_location = "workflows.rf_phase_scan.energy_match"
-        defaults_location = "workflows.rf_phase_scan.energy_match_defaults"
-        match_defaults = stage_defaults
-        measurement_defaults = _expect_mapping(
-            match_defaults.get("measurement", match_defaults),
-            f"{defaults_location}.measurement",
-        )
-        raw_energy_limit = energy.limits_for(energy_channel)
-        if not raw_energy_limit:
-            raise MachineProfileError(
-                f"{energy_element}.{energy_channel} requires machine energy limits."
-            )
-        machine_energy_limit = LimitRange.from_mapping(raw_energy_limit)
-        if (
-            machine_energy_limit.low is None
-            or machine_energy_limit.high is None
-            or machine_energy_limit.low >= machine_energy_limit.high
-        ):
-            raise MachineProfileError(
-                f"{energy_element}.{energy_channel} machine energy limits are invalid."
-            )
-        match_low = _expect_finite_number(
-            search.get("low"), f"{match_location}.range.low"
-        )
-        match_high = _expect_finite_number(
-            search.get("high"), f"{match_location}.range.high"
-        )
-        if match_low >= match_high:
-            raise MachineProfileError(
-                f"{match_location}.range.low must be less than high."
-            )
-        if (
-            match_low < machine_energy_limit.low
-            or match_high > machine_energy_limit.high
-        ):
-            raise MachineProfileError(
-                f"{match_location}.range must stay within the machine energy limits."
-            )
-        if _expect_finite_number(search.get("settle_time_s"), f"{match_location}.range.settle_time_s") < 0:
-            raise MachineProfileError(f"{match_location}.range.settle_time_s must not be negative.")
-        if str(search.get("unit", "")).strip().lower() != "mev":
-            raise MachineProfileError(f"{match_location}.range.unit must be 'MeV'.")
-        if str(search.get("mode", "")).strip().lower() != "absolute":
-            raise MachineProfileError(f"{match_location}.range.mode must be 'absolute'.")
-        if not isinstance(search.get("restore_initial_on_failure"), bool):
-            raise MachineProfileError(f"{match_location}.search.restore_initial_on_failure must be boolean.")
-        profile_fit_method = measurement_defaults.get(
-            "profile_fit_method", match_defaults.get("profile_fit_method")
-        )
-        if str(profile_fit_method or "").strip() != "Gauss fit":
-            raise MachineProfileError(
-                f"{defaults_location}.measurement.profile_fit_method must be 'Gauss fit'."
-            )
-        center_lock = _expect_mapping(stage_config.get("center_lock"), f"{defaults_location}.stages.center_lock")
-        min_fit_r_squared = _expect_finite_number(
-            measurement_defaults.get("min_fit_r_squared", center_lock.get("min_fit_r_squared")),
-            f"{defaults_location}.measurement.min_fit_r_squared",
-        )
-        if not 0 <= min_fit_r_squared <= 1:
-            raise MachineProfileError(
-                f"{defaults_location}.center_lock.min_fit_r_squared must be in [0, 1]."
-            )
-        beam_presence = _expect_mapping(
-            measurement_defaults.get("beam_presence", {}),
-            f"{defaults_location}.measurement.beam_presence",
-        )
-        sigma_threshold = _expect_finite_number(
-            beam_presence.get("sigma_threshold", 6.0),
-            f"{defaults_location}.measurement.beam_presence.sigma_threshold",
-        )
-        min_area_px = _expect_int(
-            beam_presence.get("min_area_px", 50),
-            f"{defaults_location}.measurement.beam_presence.min_area_px",
-        )
-        if sigma_threshold <= 0 or min_area_px < 1:
-            raise MachineProfileError(
-                f"{defaults_location}.measurement.beam_presence values are invalid."
-            )
-        for key in (
-            "max_correction_step_mev",
-            "center_lock_trigger_mm",
-            "center_tolerance_mm",
-        ):
-            if _expect_finite_number(center_lock.get(key), f"{defaults_location}.center_lock.{key}") <= 0:
-                raise MachineProfileError(f"{defaults_location}.center_lock.{key} must be positive.")
-        if float(center_lock["center_lock_trigger_mm"]) < float(center_lock["center_tolerance_mm"]):
-            raise MachineProfileError(
-                f"{defaults_location}.center_lock.center_lock_trigger_mm must be greater "
-                "than or equal to center_tolerance_mm."
-            )
-        if _expect_int(center_lock.get("max_iterations"), f"{defaults_location}.center_lock.max_iterations") < 1:
-            raise MachineProfileError(f"{defaults_location}.center_lock.max_iterations must be at least 1.")
         batch = workflow.get("batch")
         if batch is not None:
             batch = _expect_mapping(
@@ -1524,6 +1754,7 @@ def _validate_basic_app_support(
                 raise MachineProfileError(
                     "power_source_timing waveform stale_after_s must be positive."
                 )
+        _validate_linked_timing_energy_scan(profile, workflow, backends=configured_backends)
         return
 
 

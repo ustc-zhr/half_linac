@@ -7,14 +7,17 @@ from typing import Any, Callable, Mapping
 
 from epics import caget, caput
 
-from half_linac.src.apps.rf_phase_scan.energy_match_tuner import RFPhaseEnergyMatcher
-from half_linac.src.apps.rf_phase_scan.image_acquisition import RFImageAcquisition
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import (
     EnergyMatchResult,
     PhaseEnergyScanner,
     PhaseScanSettings,
-    aggregate_frame_energies,
     wait_for_phase_readback,
+)
+from half_linac.src.shared.energy_tuning.screen import (
+    ScreenEnergyMatcher as RFPhaseEnergyMatcher,
+    ScreenImageAcquisition as RFImageAcquisition,
+    aggregate_frame_energies,
+    frame_energies_mev,
 )
 from half_linac.src.apps.rf_phase_scan.phase_scan_log import PhaseEnergyScanLog
 from half_linac.src.shared.energy_tuning import normalize_pipeline
@@ -24,22 +27,6 @@ from half_linac.src.shared.machine_profile import (
 )
 from half_linac.src.shared.machine_profile.app_runtime import resolve_app_runtime_paths
 
-
-def frame_energies_mev(
-    energy_setpoint: float,
-    frame_centers_mm,
-    x_reference_mm: float,
-    design_eta_m: float,
-) -> list[float]:
-    if not frame_centers_mm:
-        return []
-    setpoint = float(energy_setpoint)
-    reference = float(x_reference_mm)
-    eta = float(design_eta_m)
-    return [
-        float(setpoint * (1.0 + (float(center) - reference) * 1e-3 / eta))
-        for center in frame_centers_mm
-    ]
 
 
 @dataclass(frozen=True)

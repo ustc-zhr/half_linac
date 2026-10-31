@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import epics
+from half_linac.src.shared.machine_profile import TimingControlLock
+
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 
 from .model import ValueKey
@@ -168,10 +170,12 @@ class BatchWriteWorker(QThread):
         self,
         pv_values: Mapping[ValueKey, tuple[str, float]],
         *,
+        machine_id: str | None = None,
         connection_timeout: float = 2.0,
         put_timeout: float = 5.0,
         parent: QObject | None = None,
     ) -> None:
+        self._machine_id = machine_id
         super().__init__(parent)
         self._pv_values = dict(pv_values)
         self._connection_timeout = float(connection_timeout)
@@ -181,7 +185,17 @@ class BatchWriteWorker(QThread):
         keys = list(self._pv_values)
         names = [self._pv_values[key][0] for key in keys]
         values = [self._pv_values[key][1] for key in keys]
+        lock = None
         try:
+            if self._machine_id is not None:
+                lock = TimingControlLock.for_machine(
+                    self._machine_id,
+                    {
+                        "app": "power_source_timing",
+                        "operation": "Manual timing write",
+                    },
+                )
+                lock.acquire()
             raw_results = epics.caput_many(
                 names,
                 values,
@@ -198,6 +212,9 @@ class BatchWriteWorker(QThread):
         except Exception as exc:
             results = {key: False for key in keys}
             error = str(exc)
+        finally:
+            if lock is not None:
+                lock.release()
         self.completed.emit(results, error)
 
 
@@ -223,7 +240,17 @@ class SnapshotWorker(QThread):
         attempted = False
         index = -1
         restoring = self.data is not None
+        lock = None
         try:
+            if restoring:
+                lock = TimingControlLock.for_machine(
+                    self.runtime.context.machine.id,
+                    {
+                        "app": "power_source_timing",
+                        "operation": "Timing snapshot restore",
+                    },
+                )
+                lock.acquire()
             values = validate_snapshot(self.runtime, self.data) if restoring else []
             epics.ca.use_initial_context()
             for index, (group, device, quantity, pv_name) in enumerate(entries):
@@ -289,3 +316,6 @@ class SnapshotWorker(QThread):
                 + "\n\nNot executed:\n"
                 + ("\n".join(remaining) or "None")
             )
+        finally:
+            if lock is not None:
+                lock.release()

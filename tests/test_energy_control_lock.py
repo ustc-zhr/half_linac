@@ -12,10 +12,9 @@ if str(PARENT) not in sys.path:
 
 from half_linac.src.shared.machine_profile.control_lock import (
     ControlLockError,
+    TimingControlLock,
     EnergyControlLock,
 )
-
-
 class EnergyControlLockTests(unittest.TestCase):
     def test_exclusive(self):
         import tempfile
@@ -34,7 +33,6 @@ class EnergyControlLockTests(unittest.TestCase):
         second.acquire()
         second.release()
 
-
     def test_context_release(self):
         import tempfile
         from pathlib import Path
@@ -45,3 +43,23 @@ class EnergyControlLockTests(unittest.TestCase):
         other = EnergyControlLock(path, {"operation": "next"})
         other.acquire()
         other.release()
+
+    def test_timing_lock_is_machine_wide(self):
+        machine_id = "unit-test-timing-lock"
+        first = TimingControlLock.for_machine(
+            machine_id, {"operation": "linked scan"}
+        )
+        second = TimingControlLock.for_machine(
+            machine_id, {"operation": "manual restore"}
+        )
+        self.assertEqual(first.path, second.path)
+        self.assertNotEqual(
+            first.path,
+            EnergyControlLock.for_machine(machine_id, {}).path,
+        )
+        first.acquire()
+        try:
+            with self.assertRaises(ControlLockError):
+                second.acquire()
+        finally:
+            first.release()

@@ -6,9 +6,13 @@ from typing import Any, Mapping
 
 from half_linac.src.shared.machine_profile import (
     AppContext,
+    FlagPixelGeometry,
     MachineProfileError,
     load_app_context,
     require_workflow_write_allowed,
+    resolve_channel,
+    resolve_element_image_geometry,
+    resolve_write_target,
 )
 
 from .model import DEVICES, WAVEFORM_DEVICES
@@ -56,6 +60,38 @@ class WaveformAlignmentConfig:
 
 
 @dataclass(frozen=True)
+class TimingEnergyScanConfig:
+    enabled: bool
+    required_devices: tuple[str, ...]
+    offset_low_us: float
+    offset_high_us: float
+    offset_step_us: float
+    hard_limit_us: float
+    timing_settle_time_s: float
+    readback_timeout_s: float
+    readback_poll_interval_s: float
+    tracking_half_window_mev: float
+    samples_per_point: int
+    sample_interval_s: float
+    min_valid_samples: int
+    min_relative_brightness: float
+    energy_element: str
+    energy_channel: str
+    energy_pv: str
+    energy_low_mev: float
+    energy_high_mev: float
+    flag_element: str
+    flag_image_channel: str
+    flag_image_pv: str
+    flag_exposure_pv: str | None
+    image_geometry: FlagPixelGeometry
+    x_reference_mm: float
+    design_eta_m: float
+    energy_match: Mapping[str, Any]
+    energy_match_defaults: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
 class TimingRuntime:
     context: AppContext
     groups: tuple[TimingGroup, ...]
@@ -68,6 +104,7 @@ class TimingRuntime:
     button_repeat_delay_ms: int
     button_repeat_interval_ms: int
     waveform_alignment: WaveformAlignmentConfig
+    linked_energy_scan: "TimingEnergyScanConfig | None" = None
 
 
 def load_timing_runtime() -> TimingRuntime:
@@ -169,6 +206,7 @@ def load_timing_runtime() -> TimingRuntime:
             "waveform_alignment.stale_after_s",
         ),
     )
+    linked_energy_scan = _parse_linked_energy_scan(context, raw)
     return TimingRuntime(
         context=context,
         groups=tuple(groups),
@@ -187,8 +225,220 @@ def load_timing_runtime() -> TimingRuntime:
             raw.get("button_repeat_interval_ms"), "button_repeat_interval_ms"
         ),
         waveform_alignment=alignment,
+        linked_energy_scan=linked_energy_scan,
     )
 
+
+
+def _parse_linked_energy_scan(
+    context: AppContext,
+    workflow: Mapping[str, Any],
+) -> TimingEnergyScanConfig | None:
+    raw = workflow.get("linked_energy_scan")
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise MachineProfileError(
+            "power_source_timing.linked_energy_scan must be a mapping."
+        )
+    enabled = _boolean(
+        raw.get("enabled", True),
+        "power_source_timing.linked_energy_scan.enabled",
+    )
+    required_raw = raw.get("required_devices", list(DEVICES))
+    if not isinstance(required_raw, list):
+        raise MachineProfileError(
+            "power_source_timing.linked_energy_scan.required_devices must be a list."
+        )
+    required_devices = tuple(str(value).strip().lower() for value in required_raw)
+    if required_devices != DEVICES:
+        raise MachineProfileError(
+            "power_source_timing linked scan requires hv, llrf, ssa, and kly."
+        )
+
+    offset = raw.get("offset")
+    if not isinstance(offset, Mapping):
+        raise MachineProfileError(
+            "power_source_timing.linked_energy_scan.offset must be a mapping."
+        )
+    low = _number(offset.get("low"), "linked_energy_scan.offset.low")
+    high = _number(offset.get("high"), "linked_energy_scan.offset.high")
+    step = _positive(offset.get("step"), "linked_energy_scan.offset.step")
+    hard_limit = _positive(
+        offset.get("hard_limit"), "linked_energy_scan.offset.hard_limit"
+    )
+    if str(offset.get("unit", "")).strip().lower() not in {"us", "μs"}:
+        raise MachineProfileError(
+            "power_source_timing.linked_energy_scan.offset.unit must be 'us'."
+        )
+    if not (-hard_limit <= low <= 0 <= high <= hard_limit) or low >= high:
+        raise MachineProfileError(
+            "power_source_timing linked scan range must contain zero and remain "
+            "inside the configured hard limit."
+        )
+    for endpoint in (abs(low), abs(high)):
+        if not math.isclose(endpoint / step, round(endpoint / step), abs_tol=1e-9):
+            raise MachineProfileError(
+                "power_source_timing linked scan endpoints must lie on the step grid."
+            )
+
+    timing = raw.get("timing")
+    if not isinstance(timing, Mapping):
+        raise MachineProfileError(
+            "power_source_timing.linked_energy_scan.timing must be a mapping."
+        )
+    verification = timing.get("readback_verification", {})
+    if not isinstance(verification, Mapping):
+        raise MachineProfileError(
+            "power_source_timing linked scan readback_verification must be a mapping."
+        )
+    timing_settle = _nonnegative(
+        timing.get("settle_time_s"), "linked_energy_scan.timing.settle_time_s"
+    )
+    readback_timeout = _positive(
+        verification.get("timeout_s"),
+        "linked_energy_scan.timing.readback_verification.timeout_s",
+    )
+    readback_poll = _positive(
+        verification.get("poll_interval_s"),
+        "linked_energy_scan.timing.readback_verification.poll_interval_s",
+    )
+
+    scan = raw.get("scan")
+    if not isinstance(scan, Mapping):
+        raise MachineProfileError(
+            "power_source_timing.linked_energy_scan.scan must be a mapping."
+        )
+    tracking = scan.get("energy_tracking")
+    sampling = scan.get("point_measurement")
+    if not isinstance(tracking, Mapping) or not isinstance(sampling, Mapping):
+        raise MachineProfileError(
+            "power_source_timing linked scan requires energy_tracking and "
+            "point_measurement mappings."
+        )
+    tracking_half_window = _positive(
+        tracking.get("tracking_half_window_mev"),
+        "linked_energy_scan.scan.energy_tracking.tracking_half_window_mev",
+    )
+    samples = _positive_int(
+        sampling.get("samples_per_point"),
+        "linked_energy_scan.scan.point_measurement.samples_per_point",
+    )
+    min_valid = _positive_int(
+        sampling.get("min_valid_samples"),
+        "linked_energy_scan.scan.point_measurement.min_valid_samples",
+    )
+    if min_valid > samples:
+        raise MachineProfileError(
+            "power_source_timing linked scan min_valid_samples exceeds samples_per_point."
+        )
+    sample_interval = _nonnegative(
+        sampling.get("sample_interval_s"),
+        "linked_energy_scan.scan.point_measurement.sample_interval_s",
+    )
+    min_relative_brightness = _number(
+        sampling.get("fit_min_relative_brightness", 0.05),
+        "linked_energy_scan.scan.point_measurement.fit_min_relative_brightness",
+    )
+    if not 0 <= min_relative_brightness <= 1:
+        raise MachineProfileError(
+            "power_source_timing linked scan relative brightness must be in [0, 1]."
+        )
+
+    diagnostics = raw.get("diagnostics")
+    if not isinstance(diagnostics, Mapping):
+        raise MachineProfileError(
+            "power_source_timing.linked_energy_scan.diagnostics must be a mapping."
+        )
+    flag_element = str(diagnostics.get("flag_element", "")).strip()
+    flag_channel = str(diagnostics.get("flag_image_channel", "")).strip()
+    energy_element = str(raw.get("energy_element", "")).strip()
+    energy_channel = str(raw.get("energy_set_channel", "")).strip()
+    if not all((flag_element, flag_channel, energy_element, energy_channel)):
+        raise MachineProfileError(
+            "power_source_timing linked scan diagnostic and energy channels are required."
+        )
+    geometry = resolve_element_image_geometry(
+        context, flag_element, context.control_backend.name
+    )
+    flag_image_pv = resolve_channel(context, flag_element, flag_channel)
+    try:
+        flag_exposure_pv = resolve_channel(context, flag_element, "exposure_time")
+    except MachineProfileError:
+        flag_exposure_pv = None
+    energy_target = resolve_write_target(
+        context,
+        energy_element,
+        logical_channel=energy_channel,
+        unit="MeV",
+    )
+    if energy_target.machine_limit.low is None or energy_target.machine_limit.high is None:
+        raise MachineProfileError(
+            f"{energy_element}.{energy_channel} requires finite machine limits."
+        )
+
+    energy_match = raw.get("energy_match")
+    defaults = raw.get("energy_match_defaults")
+    if not isinstance(energy_match, Mapping) or not isinstance(defaults, Mapping):
+        raise MachineProfileError(
+            "power_source_timing linked scan requires Energy Match configuration."
+        )
+    search = energy_match.get("range")
+    if not isinstance(search, Mapping):
+        raise MachineProfileError(
+            "power_source_timing linked scan Energy Match range is required."
+        )
+    energy_low = max(
+        float(energy_target.machine_limit.low),
+        _number(search.get("low"), "linked_energy_scan.energy_match.range.low"),
+    )
+    energy_high = min(
+        float(energy_target.machine_limit.high),
+        _number(search.get("high"), "linked_energy_scan.energy_match.range.high"),
+    )
+    if energy_low >= energy_high:
+        raise MachineProfileError(
+            "power_source_timing Energy Match range does not overlap machine limits."
+        )
+
+    return TimingEnergyScanConfig(
+        enabled=enabled,
+        required_devices=required_devices,
+        offset_low_us=low,
+        offset_high_us=high,
+        offset_step_us=step,
+        hard_limit_us=hard_limit,
+        timing_settle_time_s=timing_settle,
+        readback_timeout_s=readback_timeout,
+        readback_poll_interval_s=readback_poll,
+        tracking_half_window_mev=tracking_half_window,
+        samples_per_point=samples,
+        sample_interval_s=sample_interval,
+        min_valid_samples=min_valid,
+        min_relative_brightness=min_relative_brightness,
+        energy_element=energy_element,
+        energy_channel=energy_channel,
+        energy_pv=energy_target.pv_name,
+        energy_low_mev=energy_low,
+        energy_high_mev=energy_high,
+        flag_element=flag_element,
+        flag_image_channel=flag_channel,
+        flag_image_pv=flag_image_pv,
+        flag_exposure_pv=flag_exposure_pv,
+        image_geometry=geometry,
+        x_reference_mm=_number(
+            diagnostics.get("x_reference_mm"),
+            "linked_energy_scan.diagnostics.x_reference_mm",
+        ),
+        design_eta_m=geometry.model_x_to_image_x(
+            _number(
+                diagnostics.get("design_eta_m"),
+                "linked_energy_scan.diagnostics.design_eta_m",
+            )
+        ),
+        energy_match=dict(energy_match),
+        energy_match_defaults=dict(defaults),
+    )
 
 def _number(value: Any, name: str) -> float:
     try:

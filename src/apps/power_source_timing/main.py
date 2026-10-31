@@ -191,6 +191,8 @@ class TimingWindow(QMainWindow):
         self._worker: BatchWriteWorker | None = None
         self._snapshot_worker: SnapshotWorker | None = None
         self._snapshot_dialog = False
+        self._scan_active = False
+        self._scan_dialog = None
         self._batch_results: dict[ValueKey, bool] = {}
         self._batch_error = ""
         self.monitor = GroupMonitor(self)
@@ -223,12 +225,18 @@ class TimingWindow(QMainWindow):
         title_box.addWidget(title)
         heading.addLayout(title_box)
         heading.addStretch(1)
+        self.scan_button = QPushButton("Linked Energy Scan", root)
+        self.scan_button.setToolTip(
+            "Scan the selected HV/LLRF/SSA/KLY timing chain against ENY energy"
+        )
+        self.scan_button.clicked.connect(self._open_linked_energy_scan)
         self.save_button = QPushButton("Save", root)
         self.restore_button = QPushButton("Restore", root)
         self.save_button.setToolTip("Save all RF timing delay and width AO values")
         self.restore_button.setToolTip("Restore all RF timing delay and width AO values")
         self.save_button.clicked.connect(self._save_snapshot)
         self.restore_button.clicked.connect(self._restore_snapshot)
+        heading.addWidget(self.scan_button)
         heading.addWidget(self.save_button)
         heading.addWidget(self.restore_button)
         heading.addWidget(
@@ -406,6 +414,93 @@ class TimingWindow(QMainWindow):
         )
         self.waveform_view.apply_theme(palette)
 
+
+    def _scan_unavailable_reason(self) -> str | None:
+        config = self.runtime.linked_energy_scan
+        if config is None or not config.enabled:
+            return "Linked timing-energy scan is not configured for this machine."
+        if self.current_group is None:
+            return "Select a power-source group first."
+        if tuple(self.current_group.devices) != DEVICES:
+            return "Linked scan requires a complete HV / LLRF / SSA / KLY chain."
+        if self._scan_active:
+            return "A linked timing-energy scan is running."
+        if (
+            self._worker is not None
+            or self.queue.busy
+            or self.queue.pending
+            or self._snapshot_busy()
+        ):
+            return "Wait for the current timing operation to finish."
+        required_fields = ("delay_set", "delay_readback", "enable")
+        missing = [
+            f"{device.upper()} {field}"
+            for device in DEVICES
+            for field in required_fields
+            if not self.connected.get((device, field), False)
+        ]
+        if missing:
+            return "Waiting for scan channels: " + ", ".join(missing)
+        if any((device, "delay") not in self.values.setpoint for device in DEVICES):
+            return "Waiting for initial delay setpoints."
+        if any((device, "delay") not in self.values.readback for device in DEVICES):
+            return "Waiting for initial delay readbacks."
+        if any(device not in self.values.enabled for device in DEVICES):
+            return "Waiting for timing trigger states."
+        return None
+
+    def _refresh_scan_button(self) -> None:
+        reason = self._scan_unavailable_reason()
+        self.scan_button.setEnabled(reason is None)
+        self.scan_button.setToolTip(
+            reason
+            or (
+                "Open the linked HV/LLRF/SSA/KLY timing-energy scan for "
+                f"{self.current_group.element_id}"
+            )
+        )
+
+    def _open_linked_energy_scan(self) -> None:
+        reason = self._scan_unavailable_reason()
+        if reason is not None:
+            self.statusBar().showMessage(reason)
+            return
+        from half_linac.src.apps.power_source_timing.scan_dialog import (
+            LinkedTimingEnergyScanDialog,
+        )
+
+        dialog = LinkedTimingEnergyScanDialog(
+            self.runtime,
+            self.current_group,
+            theme=self._theme,
+            parent=self,
+        )
+        self._scan_dialog = dialog
+        dialog.scanActiveChanged.connect(self._set_scan_active)
+        try:
+            dialog.exec_()
+        finally:
+            self._set_scan_active(False)
+            self._scan_dialog = None
+            if self.current_group is not None:
+                self._select_group(self.current_group.element_id)
+            self._refresh_scan_button()
+
+    def _set_scan_active(self, active: bool) -> None:
+        self._scan_active = bool(active)
+        self._adjustments_suspended = self._scan_active
+        idle = (
+            not self._scan_active
+            and not self._snapshot_busy()
+            and self._worker is None
+            and not self.queue.busy
+            and not self.queue.pending
+        )
+        self._set_group_selection_enabled(idle)
+        for device in DEVICES:
+            self._refresh_row(device)
+        self._refresh_scan_button()
+
     def _build_channel_row(self, device: str, parent: QWidget) -> ChannelWidgets:
         channel_label = QLabel(DEVICE_LABELS[device], parent)
         channel_label.setStyleSheet(
@@ -520,7 +615,12 @@ class TimingWindow(QMainWindow):
         return label
 
     def _select_group(self, element_id: str) -> None:
-        if self.queue.busy or self.queue.pending or self._snapshot_busy():
+        if (
+            self.queue.busy
+            or self.queue.pending
+            or self._snapshot_busy()
+            or self._scan_active
+        ):
             return
         group = self.groups[element_id]
         self.current_group = group
@@ -544,6 +644,7 @@ class TimingWindow(QMainWindow):
             self.group_buttons[element_id].setChecked(True)
         self.monitor.bind(group)
         self.waveform_view.bind(group)
+        self._refresh_scan_button()
         self.statusBar().showMessage(f"Selected {element_id}; connecting PVs")
 
     def _clear_row(self, device: str) -> None:
@@ -591,6 +692,7 @@ class TimingWindow(QMainWindow):
         self.connected[(device, field)] = connected
         if not connected:
             self._cancel_unavailable_pending()
+        self._refresh_scan_button()
         self._refresh_row(device)
 
     def _on_pv_value(self, device: str, field: str, raw_value: object) -> None:
@@ -636,6 +738,7 @@ class TimingWindow(QMainWindow):
             quantity = field.removesuffix("_readback")
             self.values.sync_readback(device, quantity, value)
         self._refresh_row(device)
+        self._refresh_scan_button()
 
     def _refresh_row(self, device: str) -> None:
         row = self.channel_widgets[device]
@@ -651,6 +754,7 @@ class TimingWindow(QMainWindow):
                 key in self.values.target
                 and self.connected.get((device, f"{quantity}_set"), False)
                 and not self._snapshot_busy()
+                and not self._adjustments_suspended
             )
             set_label.setText(self._format_value(self.values.setpoint.get(key)))
             read_label.setText(self._format_value(self.values.readback.get(key)))
@@ -802,7 +906,10 @@ class TimingWindow(QMainWindow):
             button,
             text="Enabled" if actual else "Disabled",
             checked=actual,
-            enabled=not self._snapshot_busy(),
+            enabled=(
+                not self._snapshot_busy()
+                and not self._adjustments_suspended
+            ),
             state="enabled" if actual else "disabled",
             tooltip=(
                 "Click to disable the timing trigger. This does not switch off the "
@@ -956,7 +1063,11 @@ class TimingWindow(QMainWindow):
         self._set_group_selection_enabled(False)
         self._batch_results = {}
         self._batch_error = ""
-        worker = BatchWriteWorker(pv_values, parent=self)
+        worker = BatchWriteWorker(
+            pv_values,
+            machine_id=self.runtime.context.machine.id,
+            parent=self,
+        )
         self._worker = worker
         worker.completed.connect(self._on_batch_completed)
         worker.finished.connect(self._on_worker_finished)
@@ -1008,11 +1119,16 @@ class TimingWindow(QMainWindow):
             self.statusBar().showMessage("Write complete; waiting for readback")
 
     def _set_group_selection_enabled(self, enabled: bool) -> None:
-        enabled = enabled and not self._snapshot_busy()
+        enabled = (
+            enabled
+            and not self._snapshot_busy()
+            and not self._scan_active
+        )
         for button in self.group_buttons.values():
             button.setEnabled(enabled)
         self.save_button.setEnabled(enabled)
         self.restore_button.setEnabled(enabled)
+        self._refresh_scan_button()
 
     def _snapshot_busy(self) -> bool:
         return self._snapshot_dialog or self._snapshot_worker is not None
@@ -1020,6 +1136,7 @@ class TimingWindow(QMainWindow):
     def _snapshot_lock(self) -> None:
         idle = (
             not self._snapshot_busy()
+            and not self._scan_active
             and self._worker is None
             and not self.queue.busy
             and not self.queue.pending
@@ -1155,10 +1272,17 @@ class TimingWindow(QMainWindow):
         QTimer.singleShot(200, self._resume_adjust_buttons)
 
     def _resume_adjust_buttons(self) -> None:
-        self._adjustments_suspended = False
+        self._adjustments_suspended = self._scan_active
         self._refresh_adjustment_controls()
 
     def closeEvent(self, event) -> None:
+        if self._scan_active and self._scan_dialog is not None:
+            self._scan_dialog.close()
+            self.statusBar().showMessage(
+                "Stopping linked scan and restoring machine state before closing"
+            )
+            event.ignore()
+            return
         if self._snapshot_busy():
             self.statusBar().showMessage(
                 "Wait for the snapshot operation to finish before closing"

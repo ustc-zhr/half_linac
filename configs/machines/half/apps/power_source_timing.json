@@ -19,5 +19,76 @@
     "refresh_interval_ms": 200,
     "stale_after_s": 2.0
   },
+  "linked_energy_scan": {
+    "enabled": true,
+    "required_devices": ["hv", "llrf", "ssa", "kly"],
+    "offset": {
+      "low": -1.0,
+      "high": 1.0,
+      "step": 0.1,
+      "hard_limit": 1.0,
+      "unit": "us"
+    },
+    "timing": {
+      "settle_time_s": 1.0,
+      "readback_verification": {
+        "timeout_s": 2.0,
+        "poll_interval_s": 0.05
+      }
+    },
+    "scan": {
+      "energy_tracking": {
+        "tracking_half_window_mev": 50
+      },
+      "point_measurement": {
+        "samples_per_point": 5,
+        "sample_interval_s": 1.0,
+        "min_valid_samples": 2,
+        "fit_min_relative_brightness": 0.05
+      }
+    },
+    "energy_element": "LINAC_ENERGY",
+    "energy_set_channel": "setpoint",
+    "diagnostics": {
+      "flag_element": "ENY",
+      "flag_image_channel": "image",
+      "x_reference_mm": 0,
+      "design_eta_m": -0.7484210850804714
+    },
+    "energy_match_defaults": {
+      "profile_fit_method": "Gauss fit",
+      "measurement": {
+        "profile_fit_method": "Gauss fit",
+        "min_fit_r_squared": 0.3,
+        "beam_presence": {
+          "sigma_threshold": 6.0,
+          "min_area_px": 50
+        }
+      },
+      "stages": {
+        "center_lock": {
+          "strategy": "secant_dispersion",
+          "center_lock_trigger_mm": 10.0,
+          "center_tolerance_mm": 0.2,
+          "max_iterations": 6,
+          "max_correction_step_mev": 20
+        }
+      }
+    },
+    "energy_match": {
+      "pipelines": {
+        "initial": ["center_lock"],
+        "tracking": ["center_lock"]
+      },
+      "range": {
+        "low": 0,
+        "high": 2450,
+        "settle_time_s": 3,
+        "unit": "MeV",
+        "mode": "absolute",
+        "restore_initial_on_failure": true
+      }
+    }
+  },
   "write_control": {"vm": "blocked", "real": "allowed"}
 }
