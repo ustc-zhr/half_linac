@@ -1018,7 +1018,8 @@
         "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}
       },
       "logical_channels": [
-        "image"
+        "image",
+        "exposure_time"
       ]
     },
     {
@@ -1036,7 +1037,8 @@
         "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}
       },
       "logical_channels": [
-        "image"
+        "image",
+        "exposure_time"
       ]
     },
     {

@@ -431,7 +431,15 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(
             [element.id for element in real_flags],
-            ["PRF03", "PRF04", "PRFESA"],
+            ["PRF01", "PRF02", "PRF03", "PRF04", "PRFESA"],
+        )
+        self.assertEqual(
+            resolve_channel(real_context, "PRF01", "image"),
+            "IRFEL:BD:FLAG1:image1:ArrayData",
+        )
+        self.assertEqual(
+            resolve_channel(real_context, "PRF02", "exposure_time"),
+            "IRFEL:BD:FLAG2:cam1:AcquireTime",
         )
 
     def test_load_solenoid_centering_app_context(self):

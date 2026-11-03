@@ -310,6 +310,14 @@
     "ICT04": {
       "current": "IRFEL:BD:CT:CT4:I"
     },
+    "PRF01": {
+      "image": "IRFEL:BD:FLAG1:image1:ArrayData",
+      "exposure_time": "IRFEL:BD:FLAG1:cam1:AcquireTime"
+    },
+    "PRF02": {
+      "image": "IRFEL:BD:FLAG2:image1:ArrayData",
+      "exposure_time": "IRFEL:BD:FLAG2:cam1:AcquireTime"
+    },
     "PRF03": {
       "image": "IRFEL:BD:FLAG3:image1:ArrayData",
       "exposure_time": "IRFEL:BD:FLAG3:cam1:AcquireTime"
