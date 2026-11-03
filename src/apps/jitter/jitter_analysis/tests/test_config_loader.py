@@ -23,6 +23,16 @@ def test_load_example_config():
     assert '"schema_version": "2.0"' in config.source_text
 
 
+def test_irfel_fct_waveform_inherits_library_interval():
+    config = load_config(ROOT / "configs" / "irfel_pvlist.json")
+    fct = next(obj for obj in config.objects if obj.id == "fct_waveform")
+
+    assert config.defaults.waveform.sample_interval_sec == pytest.approx(2.5e-9)
+    assert fct.capture_mode == "waveform"
+    assert fct.value_reducer == "none"
+    assert fct.waveform_sample_interval_sec == pytest.approx(2.5e-9)
+
+
 def test_load_object_value_reducer_from_config(tmp_path):
     config_path = tmp_path / "pvlist.json"
     config_path.write_text(

@@ -277,15 +277,19 @@ if QtWidgets is not None:
                 QtWidgets.QMessageBox.warning(self, "Invalid PV", "Choose or add a group.")
                 return
             if self._captures_raw_waveform():
-                try:
-                    interval = float(self.waveform_interval_edit.text().strip())
-                except ValueError:
-                    interval = 0.0
-                if not math.isfinite(interval) or interval <= 0:
-                    QtWidgets.QMessageBox.warning(
-                        self, "Invalid PV", "Sample Interval must be a positive number."
-                    )
-                    return
+                interval_text = self.waveform_interval_edit.text().strip()
+                if interval_text:
+                    try:
+                        interval = float(interval_text)
+                    except ValueError:
+                        interval = 0.0
+                    if not math.isfinite(interval) or interval <= 0:
+                        QtWidgets.QMessageBox.warning(
+                            self,
+                            "Invalid PV",
+                            "Sample Interval must be blank or a positive number.",
+                        )
+                        return
             super().accept()
 
         def _captures_raw_waveform(self) -> bool:

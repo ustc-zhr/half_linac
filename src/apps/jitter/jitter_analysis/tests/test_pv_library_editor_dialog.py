@@ -47,14 +47,38 @@ def test_raw_waveform_maps_to_existing_config_fields(qt_app):
 
 def test_raw_waveform_allows_inherited_library_interval(qt_app):
     dialog = editor_module.PVObjectEditorDialog(group_labels={"user": "User PVs"})
+    dialog.id_edit.setText("scope")
+    dialog.read_pv_edit.setText("PV:SCOPE")
     dialog.kind_box.setCurrentIndex(dialog.kind_box.findData("waveform"))
     dialog.waveform_handling_box.setCurrentIndex(dialog.waveform_handling_box.findData("raw"))
     dialog.waveform_interval_edit.clear()
 
+    dialog.accept()
     data = dialog.object_data()
 
+    assert dialog.result() == dialog.Accepted
     assert data["capture_mode"] == "waveform"
     assert "waveform_sample_interval_sec" not in data
+
+
+def test_raw_waveform_rejects_invalid_explicit_interval(qt_app, monkeypatch):
+    warnings = []
+    monkeypatch.setattr(
+        editor_module.QtWidgets.QMessageBox,
+        "warning",
+        lambda _parent, _title, message: warnings.append(message),
+    )
+    dialog = editor_module.PVObjectEditorDialog(group_labels={"user": "User PVs"})
+    dialog.id_edit.setText("scope")
+    dialog.read_pv_edit.setText("PV:SCOPE")
+    dialog.kind_box.setCurrentIndex(dialog.kind_box.findData("waveform"))
+    dialog.waveform_handling_box.setCurrentIndex(dialog.waveform_handling_box.findData("raw"))
+    dialog.waveform_interval_edit.setText("0")
+
+    dialog.accept()
+
+    assert dialog.result() != dialog.Accepted
+    assert warnings == ["Sample Interval must be blank or a positive number."]
 
 
 def test_mean_waveform_maps_to_scalar_capture_without_interval(qt_app):

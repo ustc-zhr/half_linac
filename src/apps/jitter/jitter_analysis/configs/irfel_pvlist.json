@@ -12,6 +12,9 @@
       "timeout_sec": 1.0,
       "mode": "poll"
     },
+    "waveform": {
+      "sample_interval_sec": 2.5e-9
+    },
     "scan": {
       "settle_mode": "fixed_delay",
       "settle_delay_sec": 1.5,
