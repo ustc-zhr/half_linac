@@ -136,3 +136,25 @@ def test_group_action_controls_fit_without_clipping(qt_app):
     assert dialog.group_dropdown_button.size() == editor_module.QtCore.QSize(32, 32)
     assert dialog.add_group_button.size() == editor_module.QtCore.QSize(32, 32)
     assert dialog.group_dropdown_button.parentWidget().height() == 34
+
+
+def test_library_editor_displays_current_library_and_updates_after_save_as(qt_app):
+    saved_as = "/tmp/copied_irfel_pvlist.json"
+    dialog = editor_module.PVLibraryEditorDialog(
+        objects=[],
+        groups=[],
+        library_name="IRFEL",
+        library_path="/tmp/irfel_pvlist.json",
+        save_callback=lambda _objects, _groups: True,
+        save_as_callback=lambda _objects, _groups: saved_as,
+    )
+
+    assert dialog.windowTitle() == "PV Library Editor — irfel_pvlist.json"
+    assert dialog.library_label.text() == "PV Library: IRFEL — irfel_pvlist.json"
+    assert dialog.library_path_label.toolTip() == "/tmp/irfel_pvlist.json"
+
+    dialog.save_as_button.click()
+
+    assert dialog.windowTitle() == "PV Library Editor — copied_irfel_pvlist.json"
+    assert dialog.library_label.text() == "PV Library: IRFEL — copied_irfel_pvlist.json"
+    assert dialog.library_path_label.toolTip() == saved_as

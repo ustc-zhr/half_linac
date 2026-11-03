@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import math
+from pathlib import Path
 import re
 
 try:
@@ -333,9 +334,18 @@ if QtWidgets is not None:
 
 
     class PVLibraryEditorDialog(QtWidgets.QDialog):
-        def __init__(self, *, objects, groups, save_callback, save_as_callback, parent=None) -> None:
+        def __init__(
+            self,
+            *,
+            objects,
+            groups,
+            save_callback,
+            save_as_callback,
+            library_name="",
+            library_path="",
+            parent=None,
+        ) -> None:
             super().__init__(parent)
-            self.setWindowTitle("PV Library Editor")
             self.resize(1100, 680)
             self._objects = deepcopy(list(objects))
             self._group_items = deepcopy(list(groups))
@@ -345,8 +355,22 @@ if QtWidgets is not None:
             }
             self._save_callback = save_callback
             self._save_as_callback = save_as_callback
+            self._library_name = str(library_name).strip()
+            self._library_path = str(library_path).strip()
 
             layout = QtWidgets.QVBoxLayout(self)
+            self.library_label = QtWidgets.QLabel(self)
+            library_font = self.library_label.font()
+            library_font.setBold(True)
+            self.library_label.setFont(library_font)
+            layout.addWidget(self.library_label)
+
+            self.library_path_label = QtWidgets.QLabel(self)
+            self.library_path_label.setSizePolicy(
+                QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
+            )
+            layout.addWidget(self.library_path_label)
+
             self.table = QtWidgets.QTableWidget(0, 6)
             self.table.setHorizontalHeaderLabels(
                 ["Name", "ID", "Read PV", "Group", "Value Type", "Analysis"]
@@ -377,14 +401,11 @@ if QtWidgets is not None:
             self.add_button.clicked.connect(self._add_object)
             self.edit_button.clicked.connect(self._edit_object)
             self.delete_button.clicked.connect(self._delete_object)
-            self.save_button.clicked.connect(
-                lambda: self._save_callback(self.objects(), self.groups())
-            )
-            self.save_as_button.clicked.connect(
-                lambda: self._save_as_callback(self.objects(), self.groups())
-            )
+            self.save_button.clicked.connect(self._save)
+            self.save_as_button.clicked.connect(self._save_as)
             self.close_button.clicked.connect(self.reject)
             self.table.itemSelectionChanged.connect(self._sync_actions)
+            self._refresh_library_identity()
             self._refresh_table()
 
         def objects(self) -> list[dict[str, object]]:
@@ -392,6 +413,42 @@ if QtWidgets is not None:
 
         def groups(self) -> list[dict[str, object]]:
             return deepcopy(self._group_items)
+
+        def _save(self) -> None:
+            self._save_callback(self.objects(), self.groups())
+
+        def _save_as(self) -> None:
+            target_path = self._save_as_callback(self.objects(), self.groups())
+            if target_path:
+                self._library_path = str(target_path)
+                self._refresh_library_identity()
+
+        def _refresh_library_identity(self) -> None:
+            filename = Path(self._library_path).name if self._library_path else ""
+            identity = self._library_name or "Unknown machine"
+            if filename:
+                identity = f"{identity} — {filename}"
+                self.setWindowTitle(f"PV Library Editor — {filename}")
+            else:
+                self.setWindowTitle("PV Library Editor")
+            self.library_label.setText(f"PV Library: {identity}")
+            self.library_path_label.setToolTip(self._library_path)
+            self._refresh_library_path_label()
+
+        def _refresh_library_path_label(self) -> None:
+            path_text = self._library_path or "Not available"
+            text = f"Path: {path_text}"
+            width = max(120, self.library_path_label.contentsRect().width())
+            self.library_path_label.setText(
+                self.library_path_label.fontMetrics().elidedText(
+                    text, QtCore.Qt.ElideMiddle, width
+                )
+            )
+
+        def resizeEvent(self, event) -> None:
+            super().resizeEvent(event)
+            if hasattr(self, "library_path_label"):
+                self._refresh_library_path_label()
 
         def _object_group_labels(self) -> dict[str, str]:
             return {

@@ -1372,6 +1372,8 @@ class MainWindow(_MainWindowBase):
         dialog = PVLibraryEditorDialog(
             objects=objects,
             groups=groups,
+            library_name=self.loaded_config.machine.name,
+            library_path=self.loaded_config.source_path,
             save_callback=lambda edited_objects, edited_groups: self._save_pv_library_objects(
                 edited_objects, edited_groups
             ),
@@ -1383,9 +1385,9 @@ class MainWindow(_MainWindowBase):
         dialog.exec_()
         return True
 
-    def _save_pv_library_objects(self, objects, groups, *, save_as: bool = False) -> bool:
+    def _save_pv_library_objects(self, objects, groups, *, save_as: bool = False) -> Path | None:
         if self.loaded_config is None or self.state.run_status == RunStatus.RUNNING:
-            return False
+            return None
         current_path = Path(self.loaded_config.source_path or "")
         if save_as:
             path, _ = QtWidgets.QFileDialog.getSaveFileName(
@@ -1395,25 +1397,25 @@ class MainWindow(_MainWindowBase):
                 "JSON Files (*.json);;All Files (*)",
             )
             if not path:
-                return False
+                return None
             target_path = Path(path)
         else:
             target_path = current_path
         if not str(target_path):
             QtWidgets.QMessageBox.warning(self, "Save PV Library", "The loaded PV library has no file path.")
-            return False
+            return None
 
         try:
             data = prepare_edited_config(self.loaded_config.source_text, objects, groups)
             save_config_file(target_path, data)
             if not self._load_config_path(target_path):
-                return False
+                return None
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Save PV Library", str(exc))
             self.append_log(f"Failed to save PV library: {exc}")
-            return False
+            return None
         self.append_log(f"Saved PV library to {target_path}.")
-        return True
+        return target_path
 
     def browse_save_dir(self) -> bool:
         if self.state.run_status == RunStatus.RUNNING:
