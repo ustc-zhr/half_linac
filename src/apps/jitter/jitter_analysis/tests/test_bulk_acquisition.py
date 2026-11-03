@@ -286,6 +286,25 @@ def test_sample_batch_splits_scalar_and_waveform_objects():
     assert batch.waveform_samples[0].batch_index == 7
 
 
+def test_sample_batch_preserves_raw_waveform_without_interval():
+    class _StubClient:
+        def read_many(self, pv_names: list[str]) -> list[ReadResult]:
+            assert pv_names == ["PV:FCT:RAW"]
+            return [ReadResult(value=[0.0, 1.0, 0.5, -0.25], connected=True)]
+
+    sampler = AcquisitionSampler(_StubClient())
+    waveform = _object_spec("fct_waveform", "PV:FCT:RAW")
+    waveform.capture_mode = "waveform"
+    waveform.waveform_sample_interval_sec = None
+
+    batch = sampler.sample_batch([waveform], batch_index=3)
+
+    assert batch.scalar_samples == []
+    assert len(batch.waveform_samples) == 1
+    assert batch.waveform_samples[0].values == [0.0, 1.0, 0.5, -0.25]
+    assert batch.waveform_samples[0].waveform_sample_interval_sec == 0.0
+
+
 def test_sample_objects_rejects_waveform_capture_objects():
     class _StubClient:
         def read_many(self, pv_names: list[str]) -> list[ReadResult]:

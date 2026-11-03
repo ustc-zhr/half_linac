@@ -213,7 +213,7 @@ if QtWidgets is not None:
             except (TypeError, ValueError):
                 return ""
             if interval_sec <= 0.0:
-                return ""
+                return "Sample index"
             if interval_sec < 1.0e-6:
                 return f"{interval_sec * 1.0e9:.6g} ns"
             if interval_sec < 1.0e-3:

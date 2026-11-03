@@ -396,15 +396,16 @@ def test_waveform_interval_uses_object_override_then_library_default(tmp_path):
     assert inherited.objects[0].waveform_sample_interval_sec == 1.25e-9
 
 
-def test_waveform_interval_requires_object_value_or_library_default(tmp_path):
+def test_waveform_interval_is_optional_for_raw_sample_index_capture(tmp_path):
     payload = _minimal_config()
     waveform = payload["objects"][0]
     waveform["kind"] = "waveform"
     waveform["capture_mode"] = "waveform"
     waveform["value_reducer"] = "none"
 
-    with pytest.raises(ValueError, match="defaults\\.waveform\\.sample_interval_sec"):
-        load_config(_write_config(tmp_path, payload))
+    config = load_config(_write_config(tmp_path, payload))
+
+    assert config.objects[0].waveform_sample_interval_sec is None
 
 
 def test_config_validation_rejects_missing_nested_fields_with_value_error(tmp_path):

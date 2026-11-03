@@ -77,6 +77,18 @@ def test_select_visible_respects_search_filter_and_type_labels(qt_app):
     dialog.close()
 
 
+def test_waveform_without_interval_uses_sample_index_label(qt_app):
+    entry = _object(
+        "scope",
+        "Scope",
+        "diag",
+        capture_mode="waveform",
+        waveform_sample_interval_sec=None,
+    )
+
+    assert selector_module.PVSelectorDialog._format_sample_interval(entry) == "Sample index"
+
+
 def test_clear_visible_preserves_hidden_selection(qt_app):
     dialog = selector_module.PVSelectorDialog(
         knobs=[],

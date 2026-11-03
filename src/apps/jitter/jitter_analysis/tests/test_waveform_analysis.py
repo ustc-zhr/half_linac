@@ -29,6 +29,18 @@ def test_compute_waveform_features_extracts_expected_values():
     assert features.peak_to_peak == 3.0
 
 
+def test_compute_waveform_features_without_interval_keeps_amplitude_features():
+    values = [0.0, 0.0, 1.0, 3.0, 2.0, 0.0]
+
+    features = compute_waveform_features(values, 0.0)
+
+    assert features.peak_value == 3.0
+    assert features.rms > 0.0
+    assert features.peak_to_peak == 3.0
+    assert np.isnan(features.peak_time_sec)
+    assert np.isnan(features.integral)
+
+
 def test_estimate_waveform_delay_returns_positive_when_right_lags_left():
     left = np.array([0.0, 0.0, 0.5, 1.0, 0.5, 0.0, 0.0], dtype=float)
     right = np.array([0.0, 0.0, 0.0, 0.5, 1.0, 0.5, 0.0], dtype=float)

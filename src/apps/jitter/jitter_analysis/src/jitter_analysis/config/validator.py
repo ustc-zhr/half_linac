@@ -100,11 +100,10 @@ def validate_config_dict(data: dict[str, Any]) -> dict[str, Any]:
     _require_positive_int(scan_defaults["sample_count_per_step"], "defaults.scan.sample_count_per_step")
     _require_nonnegative_float(scan_defaults["max_wait_sec"], "defaults.scan.max_wait_sec")
 
-    default_waveform_sample_interval = None
     if "waveform" in defaults:
         waveform_defaults = _require_mapping(defaults, "defaults.waveform", key="waveform")
         _require_keys(waveform_defaults, REQUIRED_WAVEFORM_DEFAULT_KEYS, "defaults.waveform")
-        default_waveform_sample_interval = _require_positive_float(
+        _require_positive_float(
             waveform_defaults["sample_interval_sec"],
             "defaults.waveform.sample_interval_sec",
         )
@@ -189,11 +188,6 @@ def validate_config_dict(data: dict[str, Any]) -> dict[str, Any]:
                 _require_positive_float(
                     obj["waveform_sample_interval_sec"],
                     f"objects[{index}].waveform_sample_interval_sec",
-                )
-            elif default_waveform_sample_interval is None:
-                raise ValueError(
-                    f"Waveform object {obj['id']} requires waveform_sample_interval_sec "
-                    "or defaults.waveform.sample_interval_sec."
                 )
     _raise_if_duplicates([item["id"] for item in objects], "object id")
 

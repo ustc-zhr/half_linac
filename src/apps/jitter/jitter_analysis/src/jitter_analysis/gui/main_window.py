@@ -2659,13 +2659,20 @@ class MainWindow(_MainWindowBase):
             else None
         )
 
+        displayed_records = [
+            record for record in (primary_record, secondary_record) if record is not None
+        ]
+        use_time_axis = bool(displayed_records) and all(
+            float(record.waveform_sample_interval_sec) > 0.0
+            for record in displayed_records
+        )
+        x_axis_label = "Time [s]" if use_time_axis else "Sample Index"
+
         def _payload(record: WaveformRecord | None, label: str):
             if record is None:
                 return None
-            x_values = [
-                float(index * record.waveform_sample_interval_sec)
-                for index in range(len(record.values))
-            ]
+            scale = float(record.waveform_sample_interval_sec) if use_time_axis else 1.0
+            x_values = [float(index * scale) for index in range(len(record.values))]
             return {
                 "label": label,
                 "x_values": x_values,
@@ -2673,21 +2680,38 @@ class MainWindow(_MainWindowBase):
             }
 
         info_parts = []
-        roi_bounds_sec = None
+        roi_bounds_display = None
         if primary_record is not None:
             max_stop = min(roi_stop, len(primary_record.values))
-            roi_bounds_sec = (
-                float(roi_start * primary_record.waveform_sample_interval_sec),
-                float(max_stop * primary_record.waveform_sample_interval_sec),
+            primary_scale = (
+                float(primary_record.waveform_sample_interval_sec)
+                if use_time_axis
+                else 1.0
+            )
+            roi_bounds_display = (
+                float(roi_start * primary_scale),
+                float(max_stop * primary_scale),
+            )
+            primary_summary = (
+                f"{len(primary_record.values)} samples @ "
+                f"{primary_record.waveform_sample_interval_sec:.6g} s"
+                if use_time_axis
+                else f"{len(primary_record.values)} samples; sample interval unavailable"
             )
             info_parts.append(
                 f"{self._waveform_label_for_id(primary_id)} shot {shot_index + 1}: "
-                f"{len(primary_record.values)} samples @ {primary_record.waveform_sample_interval_sec:.6g} s"
+                f"{primary_summary}"
             )
         if secondary_record is not None and secondary_id != primary_id:
+            secondary_summary = (
+                f"{len(secondary_record.values)} samples @ "
+                f"{secondary_record.waveform_sample_interval_sec:.6g} s"
+                if use_time_axis
+                else f"{len(secondary_record.values)} samples; sample interval unavailable"
+            )
             info_parts.append(
                 f"{self._waveform_label_for_id(secondary_id)} shot {shot_index + 1}: "
-                f"{len(secondary_record.values)} samples @ {secondary_record.waveform_sample_interval_sec:.6g} s"
+                f"{secondary_summary}"
             )
         if not info_parts:
             info_parts.append("Select a waveform object and shot with available waveform data.")
@@ -2697,7 +2721,8 @@ class MainWindow(_MainWindowBase):
         self.waveform_plot.set_preview_series(
             primary=_payload(primary_record, self._waveform_label_for_id(primary_id)),
             secondary=_payload(secondary_record, self._waveform_label_for_id(secondary_id)),
-            roi_bounds=roi_bounds_sec,
+            roi_bounds=roi_bounds_display,
+            x_axis_label=x_axis_label,
             info_text=" | ".join(info_parts),
         )
 

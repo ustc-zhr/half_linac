@@ -60,8 +60,7 @@ def compute_waveform_features(
     roi_start_index: int = 0,
     roi_stop_index: int | None = None,
 ) -> WaveformFeatureSet:
-    if waveform_sample_interval_sec <= 0.0:
-        raise ValueError("waveform_sample_interval_sec must be positive.")
+    has_time_axis = waveform_sample_interval_sec > 0.0
     roi, start, stop = _prepare_roi(values, roi_start_index=roi_start_index, roi_stop_index=roi_stop_index)
     if roi.size <= 0:
         raise ValueError("Waveform ROI is empty.")
@@ -77,7 +76,9 @@ def compute_waveform_features(
     corrected_roi = clean_roi - baseline_mean
     peak_offset = int(np.argmax(clean_roi))
 
-    if clean_roi.size >= 2:
+    if not has_time_axis:
+        integral = math.nan
+    elif clean_roi.size >= 2:
         integral = float(np.trapezoid(corrected_roi, dx=waveform_sample_interval_sec))
     else:
         integral = 0.0
@@ -85,7 +86,11 @@ def compute_waveform_features(
     return WaveformFeatureSet(
         baseline_mean=baseline_mean,
         peak_value=float(np.max(clean_roi)),
-        peak_time_sec=float((start + peak_offset) * waveform_sample_interval_sec),
+        peak_time_sec=(
+            float((start + peak_offset) * waveform_sample_interval_sec)
+            if has_time_axis
+            else math.nan
+        ),
         integral=integral,
         rms=float(math.sqrt(np.mean(np.square(corrected_roi)))),
         peak_to_peak=float(np.ptp(clean_roi)),

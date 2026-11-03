@@ -90,7 +90,7 @@ python scripts/sync_half_real_pvlist.py --check
 }
 ```
 
-如果配置中包含原始波形，建议在 PV 库的 `defaults` 中统一配置采样点间隔：
+如果原始波形具有已知且统一的采样点间隔，建议在 PV 库的 `defaults` 中统一配置：
 
 ```json
 {
@@ -102,7 +102,7 @@ python scripts/sync_half_real_pvlist.py --check
 }
 ```
 
-该值会应用于所有 `capture_mode: "waveform"` 的 object。只有某个 PV 的采样率不同时，才在该 object 上增加 `waveform_sample_interval_sec` 作为覆盖值；对象配置优先于全库默认值。
+该值会应用于所有 `capture_mode: "waveform"` 的 object。只有某个 PV 的采样率不同时，才在该 object 上增加 `waveform_sample_interval_sec` 作为覆盖值；对象配置优先于全库默认值。若两处都不配置，原始数组仍会保存并按采样点序号预览，但依赖秒单位的峰值时间、积分和延迟分析不可用。
 
 ## groups 配置规则
 
@@ -243,7 +243,7 @@ python scripts/sync_half_real_pvlist.py --check
 - 如果某个 PV 返回的是 waveform/数组，但你只关心它的均值，可以给这个 object 加上 `"value_reducer": "mean"`。
 - `value_reducer: "mean"` 会把返回数组里的有限数值先求平均，再作为这个 object 的单个采样值进入 jitter/correlation/spectrum。
 - 如果不写 `value_reducer`，默认就是 `"none"`，也就是要求这个 PV 本身是数值型标量。
-- 如果你要保存原始波形并启用新的 Waveform 分析页，需要设置 `"capture_mode": "waveform"`；采样点间隔优先读取对象的 `waveform_sample_interval_sec`，未配置时继承 `defaults.waveform.sample_interval_sec`，两处至少有一处必须是正数。
+- 如果你要保存原始波形并启用新的 Waveform 分析页，需要设置 `"capture_mode": "waveform"`；采样点间隔优先读取对象的 `waveform_sample_interval_sec`，未配置时继承 `defaults.waveform.sample_interval_sec`。两处都未配置时使用采样点序号预览，不伪造时间轴。
 - `capture_mode: "waveform"` 的 object 目前只在 Monitor 模式下参与波形采集与分析；Single Knob 和 Random Multi-Knob 仍然只支持标量 object。
 - `capture_mode: "waveform"` 时，`value_reducer` 必须保持为 `"none"`。如果你既想保留原始波形，又想把同一 PV 的均值送进旧分析页，请在 `objects` 里为同一个 `read_pv` 配两个不同的 object。
 - 字符串 PV 目前仍然不适合直接加入这套配置格式。

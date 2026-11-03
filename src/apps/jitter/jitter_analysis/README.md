@@ -87,7 +87,7 @@ PV libraries use schema version `2.0`. See [configs/README.md](configs/README.md
 Important details:
 
 - `shot_interval_sec` is the current sampling interval field.
-- waveform objects require `capture_mode: "waveform"` and a positive `waveform_sample_interval_sec`.
+- waveform objects use `capture_mode: "waveform"`; `waveform_sample_interval_sec` is optional. Without it, raw arrays are saved and previewed by sample index, while time-based features remain unavailable.
 - waveform capture is currently available in Monitor mode only.
 - knob readback PVs are automatically exposed as derived read PV objects when they are not already present.
 - jitter RMS is computed from mean-centered samples, not from the raw DC-offset signal.

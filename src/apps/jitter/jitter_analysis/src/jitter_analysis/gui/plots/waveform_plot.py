@@ -185,6 +185,7 @@ if QtWidgets is not None:
             secondary=None,
             roi_bounds: tuple[int, int] | None = None,
             info_text: str = "",
+            x_axis_label: str = "Time [s]",
         ) -> None:
             if info_text:
                 self.info_label.setText(info_text)
@@ -194,7 +195,7 @@ if QtWidgets is not None:
             self.preview_plot.addLegend()
             style_plot_widget(self.preview_plot)
             self.preview_plot.setTitle("Waveform Preview")
-            self.preview_plot.setLabel("bottom", "Time [s]")
+            self.preview_plot.setLabel("bottom", x_axis_label)
             self.preview_plot.setLabel("left", "Amplitude")
             if primary:
                 self._plot_waveform_series(self.preview_plot, primary, "#78d5e3")
