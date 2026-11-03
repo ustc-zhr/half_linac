@@ -27,10 +27,10 @@ def test_irfel_fct_waveform_inherits_library_interval():
     config = load_config(ROOT / "configs" / "irfel_pvlist.json")
     fct = next(obj for obj in config.objects if obj.id == "fct_waveform")
 
-    assert config.defaults.waveform.sample_interval_sec == pytest.approx(2.5e-9)
+    assert config.defaults.waveform.sample_interval_sec == pytest.approx(9.453582907922103e-09)
     assert fct.capture_mode == "waveform"
     assert fct.value_reducer == "none"
-    assert fct.waveform_sample_interval_sec == pytest.approx(2.5e-9)
+    assert fct.waveform_sample_interval_sec == pytest.approx(9.453582907922103e-09)
 
 
 def test_load_object_value_reducer_from_config(tmp_path):

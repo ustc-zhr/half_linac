@@ -13,7 +13,7 @@
       "mode": "poll"
     },
     "waveform": {
-      "sample_interval_sec": 2.5e-9
+      "sample_interval_sec": 9.453582907922103e-09
     },
     "scan": {
       "settle_mode": "fixed_delay",
