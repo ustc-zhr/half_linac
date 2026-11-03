@@ -1481,6 +1481,29 @@
       ]
     },
     {
+      "id": "fct_waveform_mean",
+      "name": "FCT_WAVEFORM_MEAN",
+      "group": "ct",
+      "read_pv": "IRFEL:BD:CT:CH1:WAV:CALC.AVAL",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "waveform",
+      "access": "ro",
+      "value_reducer": "mean",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "fct",
+        "ct",
+        "waveform",
+        "mean"
+      ],
+      "note": "Uses the calibrated FCT waveform average as a scalar analysis input."
+    },
+    {
       "id": "ch3_asum",
       "name": "CH3_ASUM",
       "group": "ct",
