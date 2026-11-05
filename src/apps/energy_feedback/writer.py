@@ -83,7 +83,7 @@ def apply_feedback_decision(
     return replace(
         decision,
         state="HOLD",
-        reason="phase write failed",
+        reason="control-knob write failed",
         commands=rounded,
         write_verified=False,
         rollback_applied=rollback_applied,
@@ -163,7 +163,7 @@ def apply_manual_targets(
 
     proposal = FeedbackDecision(
         "SHADOW",
-        "manual phase request",
+        "manual control-knob request",
         None,
         commands=tuple(commands),
     )
@@ -181,8 +181,8 @@ def apply_manual_targets(
         monotonic=monotonic,
     )
     if result.write_verified:
-        return replace(result, reason="manual phase write applied")
-    return replace(result, reason="manual phase write failed")
+        return replace(result, reason="manual control-knob write applied")
+    return replace(result, reason="manual control-knob write failed")
 
 
 def _write_commands(

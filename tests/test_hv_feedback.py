@@ -149,11 +149,17 @@ class HVFeedbackProfileTests(unittest.TestCase):
 
     def test_machine_voltage_limit_intersects_application_safety_range(self):
         base_config = unit_config(self.real_context)
-        self.assertEqual(base_config["_machine_hv_limit"], {
-            "low": 0.0,
-            "high": 80.0,
-            "unit": "kV",
-        })
+        machine_limit = self.real_context.profile.get_element(
+            "MODULATOR_HV1"
+        ).limits_for("voltage_set")
+        self.assertEqual(
+            base_config["_machine_hv_limit"],
+            {
+                "low": float(machine_limit["low"]),
+                "high": float(machine_limit["high"]),
+                "unit": machine_limit["unit"],
+            },
+        )
         self.assertEqual(base_config["safety"]["hv_min_kv"], 38.5)
         self.assertEqual(base_config["safety"]["hv_max_kv"], 39.5)
 

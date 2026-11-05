@@ -75,6 +75,7 @@ from half_linac.src.apps.hv_feedback.utils import phase_diff_deg
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     AppContext,
+    EnergyControlLock,
     MachineProfileError,
     RuntimeContextWidget,
     load_app_context,
@@ -606,10 +607,17 @@ class GeneralizedFeedbackWorker(QObject):
         run_dir: Path | None = None
         logger: CSVLogger | None = None
         engine: FeedbackEngine | None = None
+        control_lock: EnergyControlLock | None = None
         detail = ""
         final_state = "STOPPED"
         try:
             unit_id = str(self.config["feedback_unit_id"])
+            if self.operation == "feedback":
+                control_lock = EnergyControlLock.for_machine(
+                    self.context.profile.machine.id,
+                    {"app": "hv_feedback", "operation": "closed_loop_feedback", "unit": unit_id},
+                )
+                control_lock.acquire()
             run_dir = new_run_dir(self.context, self.operation, unit_id)
             logging_config = self.config["logging"]
             logger = CSVLogger(
@@ -668,6 +676,8 @@ class GeneralizedFeedbackWorker(QObject):
             detail = str(exc)
             self.failed.emit(detail)
         finally:
+            if control_lock is not None:
+                control_lock.release()
             if logger is not None:
                 logger.close()
             if run_dir is not None:

@@ -29,6 +29,13 @@ CSV_FIELDS = (
     "quality",
     "quality_reason",
     "connected",
+    "observable_label",
+    "observable_unit",
+    "observable_raw",
+    "observable_value",
+    "observable_target",
+    "observable_error",
+    "calibration_version",
     "energy_mev",
     "target_mev",
     "error_mev",
@@ -105,6 +112,17 @@ class EnergyFeedbackCsvLogger:
                 "quality": measurement.quality.state,
                 "quality_reason": measurement.quality.reason,
                 "connected": int(measurement.quality.connected),
+                "observable_label": measurement.observable_label,
+                "observable_unit": measurement.observable_unit,
+                "observable_raw": _value(
+                    measurement.observable.raw_value if measurement.observable else measurement.energy_mev
+                ),
+                "observable_value": _value(measurement.control_value),
+                "observable_target": _value(measurement.control_target),
+                "observable_error": _value(measurement.control_error),
+                "calibration_version": str(
+                    self._config.get("calibration", {}).get("version", "")
+                ),
                 "energy_mev": _value(measurement.energy_mev),
                 "target_mev": _value(measurement.target_mev),
                 "error_mev": _value(measurement.error_mev),

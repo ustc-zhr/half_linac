@@ -674,8 +674,7 @@ class EnergyFeedbackProfileTests(unittest.TestCase):
                 "energy_feedback", machine_id="half", control_backend="vm"
             )
         supported, reason = describe_app_support("irfel", "energy_feedback")
-        self.assertFalse(supported)
-        self.assertIn("energy_feedback.json", reason)
+        self.assertTrue(supported, reason)
 
     def test_synthetic_second_machine_has_no_half_naming_dependency(self):
         profile = synthetic_profile()
@@ -898,6 +897,42 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_irfel_sampling_and_control_timing_are_gui_editable_while_stopped(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            self.assertIsNotNone(window.sample_period_spin)
+            self.assertIsNotNone(window.control_period_spin)
+            self.assertAlmostEqual(window.sample_period_spin.value(), 0.1)
+            self.assertAlmostEqual(window.control_period_spin.value(), 10.0)
+            self.assertEqual(
+                window.control_window_value.text(), "100 samples · 10 s"
+            )
+
+            window.sample_period_spin.setValue(0.3)
+            self.assertEqual(
+                window.control_window_value.text(),
+                "34 samples · 10.2 s actual",
+            )
+            timing = window._apply_timing_settings()
+            self.assertEqual(timing.window_samples, 34)
+            self.assertAlmostEqual(window.config["runtime"]["sample_period_s"], 0.3)
+            self.assertEqual(
+                window.config["workflow"]["controller"]["derived_window_samples"],
+                34,
+            )
+
+            window._set_timing_editing(False)
+            self.assertFalse(window.sample_period_spin.isEnabled())
+            self.assertFalse(window.control_period_spin.isEnabled())
+            window._set_timing_editing(True)
+            self.assertTrue(window.sample_period_spin.isEnabled())
+            self.assertTrue(window.control_period_spin.isEnabled())
+        finally:
+            window.close()
 
     def test_half_write_controls_are_present_but_safe_until_connected(self):
         context = load_app_context(
@@ -1159,6 +1194,49 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
                 window.actuator_axis.get_ylabel(), "Phase Correction [deg]"
             )
 
+        finally:
+            window.close()
+
+    def test_irfel_plot_uses_q_and_hv_units_without_placeholder_action_window(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            history = {
+                "time": [100.0, 101.0],
+                "energy": [0.2, 0.1],
+                "target": [0.0, 0.0],
+                "error": [0.2, 0.1],
+                "event.applied": [math.nan, math.nan],
+                "event.hold": [math.nan, math.nan],
+                "event.recovered": [math.nan, math.nan],
+                "actuator.modulator_hv1.readback_delta": [0.0, 0.01],
+                "actuator.modulator_hv1.command_delta": [math.nan, 0.01],
+            }
+            for key, values in history.items():
+                window._history[key].extend(values)
+
+            window._draw_plot()
+            self.assertEqual(
+                window.error_axis.get_ylabel(), "FIR Energy Proxy q Error [mm]"
+            )
+            self.assertEqual(
+                window.actuator_axis.get_ylabel(), "Modulator HV1 Change [kV]"
+            )
+            error_labels = window.error_axis.get_legend_handles_labels()[1]
+            self.assertIn("q − target", error_labels)
+            self.assertNotIn("Action window", error_labels)
+
+            window.plot_view_combo.setCurrentText("Full Detail")
+            self.assertEqual(
+                window.energy_axis.get_ylabel(),
+                "FIR Energy Proxy q Tracking [mm]",
+            )
+            self.assertEqual(
+                [line.get_label() for line in window.energy_axis.lines],
+                ["Measured q", "Target q"],
+            )
         finally:
             window.close()
 

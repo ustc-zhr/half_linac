@@ -265,6 +265,194 @@ def _validate_bpm_transport_source(
     return source_id
 
 
+def _validate_bpm_dispersion_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+    backends: Sequence[str],
+    write_backends: set[str],
+) -> None:
+    measurement = _mapping(profile, workflow.get("measurement"), "measurement")
+    _text(profile, measurement.get("id"), "measurement.id")
+    _text(profile, measurement.get("label"), "measurement.label")
+    capabilities = list(_sequence(profile, measurement.get("capabilities"), "measurement.capabilities"))
+    if capabilities != ["energy_proxy"]:
+        _fail(profile, "bpm_dispersion capabilities must be exactly ['energy_proxy']")
+
+    observable = _mapping(profile, measurement.get("observable"), "measurement.observable")
+    _text(profile, observable.get("label"), "measurement.observable.label")
+    if observable.get("unit") != "mm":
+        _fail(profile, "measurement.observable.unit must be 'mm'")
+    _range(profile, observable.get("valid_range"), "measurement.observable.valid_range")
+
+    bpm_ids = [
+        _text(profile, item, "measurement.bpm_elements[]")
+        for item in _sequence(profile, measurement.get("bpm_elements"), "measurement.bpm_elements")
+    ]
+    if len(bpm_ids) != 5 or len(set(bpm_ids)) != 5:
+        _fail(profile, "measurement.bpm_elements must contain five distinct BPMs")
+    for bpm_id in bpm_ids:
+        element = profile.get_element(bpm_id)
+        if element.kind != "bpm":
+            _fail(profile, f"measurement element {bpm_id!r} is not a BPM")
+        for channel in ("x", "y", "s"):
+            for backend in backends:
+                if backend not in element.channels.get(channel, {}):
+                    _fail(profile, f"{bpm_id}.{channel} is unavailable on {backend}")
+
+    geometry = _mapping(profile, measurement.get("geometry"), "measurement.geometry")
+    upstream = list(_sequence(profile, geometry.get("upstream_bpms"), "measurement.geometry.upstream_bpms"))
+    dispersive = _text(profile, geometry.get("dispersive_bpm"), "measurement.geometry.dispersive_bpm")
+    exit_bpm = _text(profile, geometry.get("exit_guard_bpm"), "measurement.geometry.exit_guard_bpm")
+    if len(upstream) != 2 or len(set((*upstream, dispersive, exit_bpm))) != 4:
+        _fail(profile, "FIR geometry requires two upstream, one dispersive, and one exit BPM")
+    if any(item not in bpm_ids for item in (*upstream, dispersive, exit_bpm)):
+        _fail(profile, "FIR geometry BPMs must be present in bpm_elements")
+    _text(profile, geometry.get("note"), "measurement.geometry.note")
+
+    fct_id, _ = _signal(
+        profile, measurement.get("fct"), "measurement.fct", backends, expected_unit="a.u."
+    )
+    if profile.get_element(fct_id).kind != "ct":
+        _fail(profile, "measurement.fct must reference a current-transformer element")
+
+    quadrupoles = [
+        _text(profile, item, "measurement.quadrupole_elements[]")
+        for item in _sequence(
+            profile, measurement.get("quadrupole_elements"), "measurement.quadrupole_elements"
+        )
+    ]
+    if len(quadrupoles) != 6 or len(set(quadrupoles)) != 6:
+        _fail(profile, "measurement.quadrupole_elements must contain six distinct quadrupoles")
+    for quad_id in quadrupoles:
+        element = profile.get_element(quad_id)
+        if element.kind != "quad":
+            _fail(profile, f"measurement element {quad_id!r} is not a quadrupole")
+        for backend in backends:
+            if backend not in element.channels.get("current_readback", {}):
+                _fail(profile, f"{quad_id}.current_readback is unavailable on {backend}")
+    timestamp_skew_limit = _number(
+        profile,
+        measurement.get("max_timestamp_skew_s"),
+        "measurement.max_timestamp_skew_s",
+        positive=True,
+    )
+
+    calibration = _mapping(profile, measurement.get("calibration"), "measurement.calibration")
+    ready = calibration.get("ready")
+    if not isinstance(ready, bool):
+        _fail(profile, "measurement.calibration.ready must be boolean")
+    numeric_fields = (
+        "a",
+        "b",
+        "response_q_mm_per_kv",
+        "fct_min",
+        "q_action_range_mm",
+        "bpm05_max_offset_mm",
+        "quadrupole_max_delta_a",
+    )
+    for key in numeric_fields:
+        value = calibration.get(key)
+        if ready or value is not None:
+            number = _number(profile, value, f"measurement.calibration.{key}")
+            if key == "response_q_mm_per_kv" and number == 0:
+                _fail(profile, "measurement.calibration.response_q_mm_per_kv must be non-zero")
+            if key in {
+                "fct_min",
+                "q_action_range_mm",
+                "bpm05_max_offset_mm",
+                "quadrupole_max_delta_a",
+            } and number <= 0:
+                _fail(profile, f"measurement.calibration.{key} must be positive")
+    if ready:
+        _text(profile, calibration.get("version"), "measurement.calibration.version")
+
+    groups = _sequence(profile, workflow.get("control_groups"), "control_groups")
+    if len(groups) != 1:
+        _fail(profile, "bpm_dispersion requires exactly one control group")
+    group = _mapping(profile, groups[0], "control_groups[0]")
+    _text(profile, group.get("id"), "control_groups[0].id")
+    _text(profile, group.get("label"), "control_groups[0].label")
+    _number(profile, group.get("loop_gain"), "control_groups[0].loop_gain", positive=True)
+    _number(profile, group.get("max_knob_step"), "control_groups[0].max_knob_step", positive=True)
+    _number(profile, group.get("deadband", 0), "control_groups[0].deadband", nonnegative=True)
+    if ready:
+        if float(calibration["q_action_range_mm"]) <= float(group.get("deadband", 0)):
+            _fail(profile, "calibrated q action range must exceed the deadband")
+    actuators = _sequence(profile, group.get("actuators"), "control_groups[0].actuators")
+    if len(actuators) != 1:
+        _fail(profile, "bpm_dispersion requires exactly one control actuator")
+    actuator = _mapping(profile, actuators[0], "control_groups[0].actuators[0]")
+    element_id = _text(profile, actuator.get("element"), "control actuator element")
+    unit = _text(profile, actuator.get("unit"), "control actuator unit")
+    setpoint = _text(profile, actuator.get("setpoint"), "control actuator setpoint")
+    readback = _text(profile, actuator.get("readback"), "control actuator readback")
+    _signal(profile, {"element": element_id, "channel": setpoint, "unit": unit}, "control actuator setpoint", backends, expected_unit=unit)
+    _signal(profile, {"element": element_id, "channel": readback}, "control actuator readback", backends)
+    operating_range = _range(profile, actuator.get("operating_range"), "control actuator operating_range")
+    machine_limit = _element_limit(profile, element_id, setpoint)
+    if machine_limit is None or operating_range[0] < machine_limit[0] or operating_range[1] > machine_limit[1]:
+        _fail(profile, "control actuator operating_range exceeds its machine limit")
+    _number(profile, actuator.get("coefficient"), "control actuator coefficient")
+    max_step = _number(profile, actuator.get("max_step"), "control actuator max_step", positive=True)
+    session_limit = _number(profile, actuator.get("max_session_delta"), "control actuator max_session_delta", positive=True)
+    if session_limit < max_step:
+        _fail(profile, "control actuator session limit must be at least one step")
+    _number(profile, actuator.get("verify_tolerance"), "control actuator verify_tolerance", positive=True)
+    if actuator.get("command_basis", "readback") not in {"readback", "setpoint"}:
+        _fail(profile, "control actuator command_basis must be 'readback' or 'setpoint'")
+
+    controller = _mapping(profile, workflow.get("controller"), "controller")
+    if controller.get("mode") not in {"I", "PI"}:
+        _fail(profile, "controller.mode must be 'I' or 'PI'")
+    _number(profile, controller.get("kp"), "controller.kp", nonnegative=True)
+    _number(profile, controller.get("ki"), "controller.ki", nonnegative=True)
+    control_period = _number(
+        profile, controller.get("control_period_s"), "controller.control_period_s", positive=True
+    )
+    if controller.get("require_reference_capture") is not True:
+        _fail(profile, "bpm_dispersion requires explicit reference capture")
+
+    verification = _mapping(profile, workflow.get("write_verification"), "write_verification")
+    timeout = _number(profile, verification.get("timeout_s"), "write_verification.timeout_s", positive=True)
+    poll = _number(profile, verification.get("poll_interval_s"), "write_verification.poll_interval_s", positive=True)
+    if poll > timeout:
+        _fail(profile, "write verification poll interval exceeds timeout")
+    _integer(profile, verification.get("command_precision"), "write_verification.command_precision")
+
+    runtime = _mapping(profile, workflow.get("runtime"), "runtime")
+    for key in ("sample_period_s", "plot_period_s", "connection_timeout_s", "stale_timeout_s"):
+        _number(profile, runtime.get(key), f"runtime.{key}", positive=True)
+    sample_period = float(runtime["sample_period_s"])
+    if control_period < sample_period:
+        _fail(profile, "controller.control_period_s must not be shorter than runtime.sample_period_s")
+    _integer(profile, runtime.get("max_history_points"), "runtime.max_history_points", positive=True)
+
+    operator_controls = _mapping(
+        profile, workflow.get("operator_controls"), "operator_controls"
+    )
+    sample_limits = _operator_range(
+        profile, operator_controls.get("sample_period_s"),
+        "operator_controls.sample_period_s", positive=True,
+    )
+    control_limits = _operator_range(
+        profile, operator_controls.get("control_period_s"),
+        "operator_controls.control_period_s", positive=True,
+    )
+    if not sample_limits[0] <= sample_period <= sample_limits[1]:
+        _fail(profile, "runtime.sample_period_s is outside its operator range")
+    if not control_limits[0] <= control_period <= control_limits[1]:
+        _fail(profile, "controller.control_period_s is outside its operator range")
+    if timestamp_skew_limit >= sample_limits[0]:
+        _fail(
+            profile, "measurement.max_timestamp_skew_s must be shorter than every sample period"
+        )
+    if sample_limits[1] > control_limits[0]:
+        _fail(profile, "operator timing ranges permit a control period shorter than the sample period")
+
+    logging = _mapping(profile, workflow.get("logging"), "logging")
+    _text(profile, logging.get("file_prefix"), "logging.file_prefix")
+    _integer(profile, logging.get("flush_every_n_rows"), "logging.flush_every_n_rows", positive=True)
+
 def validate_energy_feedback_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
@@ -291,10 +479,10 @@ def validate_energy_feedback_workflow(
     if control_backend is not None and control_backend not in backends:
         _fail(profile, f"backend {control_backend!r} is not configured")
     real_status = workflow.get("real_status")
-    if real_status not in {"read_only", "write_smoke_passed", "commissioned"}:
+    if real_status not in {"read_only", "commissioning", "write_smoke_passed", "commissioned"}:
         _fail(
             profile,
-            "real_status must be 'read_only', 'write_smoke_passed', or 'commissioned'",
+            "real_status must be 'read_only', 'commissioning', 'write_smoke_passed', or 'commissioned'",
         )
 
     write_control = _mapping(profile, workflow.get("write_control"), "write_control")
@@ -314,7 +502,7 @@ def validate_energy_feedback_workflow(
             "blocked",
         }:
             _fail(profile, f"write_control for backend {backend!r} is invalid")
-    if write_backends and real_status not in {"write_smoke_passed", "commissioned"}:
+    if write_backends and real_status not in {"commissioning", "write_smoke_passed", "commissioned"}:
         _fail(profile, "write-enabled real backend requires a write-capable real_status")
     if not write_backends and real_status != "read_only":
         _fail(profile, "a non-writing profile must use real_status='read_only'")
@@ -323,6 +511,9 @@ def validate_energy_feedback_workflow(
     measurement_kind = _text(
         profile, measurement.get("kind"), "measurement.kind"
     )
+    if measurement_kind == "bpm_dispersion":
+        _validate_bpm_dispersion_workflow(profile, workflow, backends, write_backends)
+        return
     if measurement_kind not in {"direct_energy", "energy_spectrum_target"}:
         _fail(
             profile,

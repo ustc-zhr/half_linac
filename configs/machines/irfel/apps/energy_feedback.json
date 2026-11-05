@@ -1,0 +1,110 @@
+{
+  "control_backends": ["real"],
+  "real_status": "commissioning",
+  "write_control": {"default": "blocked", "real": "allowed"},
+  "measurement": {
+    "id": "fir_bpm_dispersion",
+    "kind": "bpm_dispersion",
+    "label": "FIR BPM02/03/04",
+    "capabilities": ["energy_proxy"],
+    "observable": {
+      "label": "FIR Energy Proxy q",
+      "unit": "mm",
+      "valid_range": [-1000.0, 1000.0]
+    },
+    "geometry": {
+      "upstream_bpms": ["BPM02", "BPM03"],
+      "dispersive_bpm": "BPM04",
+      "exit_guard_bpm": "BPM05",
+      "note": "BPM02 and BPM03 are upstream of the DM5/DM6 dogleg; BPM04 is inside it; BPM05 is exit-orbit protection only. No bend-PV mapping is assumed."
+    },
+    "bpm_elements": ["BPM01", "BPM02", "BPM03", "BPM04", "BPM05"],
+    "fct": {"element": "FCT1", "channel": "sum", "unit": "a.u."},
+    "quadrupole_elements": ["QM05", "QM06", "QM07", "QM08", "QM09", "QM10"],
+    "max_timestamp_skew_s": 0.08,
+    "calibration": {
+      "ready": false,
+      "version": "",
+      "a": null,
+      "b": null,
+      "response_q_mm_per_kv": null,
+      "fct_min": null,
+      "q_action_range_mm": null,
+      "bpm05_max_offset_mm": null,
+      "quadrupole_max_delta_a": null
+    }
+  },
+  "default_measurement_source": "fir_bpm_dispersion",
+  "measurement_alternatives": [],
+  "pulse": {"marker": null, "require_marker_for_write": false},
+  "control_groups": [
+    {
+      "id": "modulator_hv1",
+      "label": "Modulator HV1",
+      "response_per_knob_unit": null,
+      "loop_gain": 0.1,
+      "max_knob_step": 0.02,
+      "deadband": 0.0,
+      "action_window": null,
+      "actuators": [
+        {
+          "id": "modulator_hv1",
+          "label": "Modulator HV1",
+          "element": "MODULATOR_HV1",
+          "setpoint": "voltage_set",
+          "readback": "voltage_readback",
+          "coefficient": 1.0,
+          "unit": "kV",
+          "max_step": 0.02,
+          "max_session_delta": 0.2,
+          "verify_tolerance": 0.015,
+          "operating_range": [38.5, 39.5],
+          "command_basis": "setpoint"
+        }
+      ]
+    }
+  ],
+  "controller": {
+    "mode": "I",
+    "kp": 0.0,
+    "ki": 0.1,
+    "control_period_s": 10.0,
+    "require_reference_capture": true
+  },
+  "safety": {"hv_feedback_unit": "kly1"},
+  "write_verification": {
+    "timeout_s": 2.0,
+    "poll_interval_s": 0.05,
+    "command_precision": 3
+  },
+  "operator_controls": {
+    "sample_period_s": {"label": "Sample period", "minimum": 0.1, "maximum": 1.0, "decimals": 1},
+    "control_period_s": {"label": "Control period", "minimum": 1.0, "maximum": 60.0, "decimals": 1},
+    "target": {"minimum": -1000.0, "maximum": 1000.0, "decimals": 4},
+    "gain": {"label": "ki", "minimum": 0.0, "maximum": 1.0, "decimals": 4},
+    "kp": {"label": "kp", "minimum": 0.0, "maximum": 1.0, "decimals": 4},
+    "actuator_ratio": {
+      "label": "coefficient",
+      "actuator": "modulator_hv1",
+      "sign": 1,
+      "minimum": 1.0,
+      "maximum": 1.000001,
+      "decimals": 6,
+      "hidden": true
+    },
+    "max_knob_step": {"label": "Step limit", "minimum": 0.001, "maximum": 0.02, "decimals": 3},
+    "action_window": {"label": "q action range", "minimum": 0.001, "maximum": 1000.0, "decimals": 3},
+    "max_session_delta": {"label": "Session limit", "minimum": 0.01, "maximum": 0.2, "decimals": 3}
+  },
+  "runtime": {
+    "sample_period_s": 0.2,
+    "plot_period_s": 1.0,
+    "connection_timeout_s": 2.0,
+    "stale_timeout_s": 3.0,
+    "max_history_points": 36000
+  },
+  "logging": {
+    "file_prefix": "irfel_fir_energy_feedback",
+    "flush_every_n_rows": 10
+  }
+}

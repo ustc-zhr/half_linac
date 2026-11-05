@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from functools import wraps
 from dataclasses import replace
 import time
 
 import numpy as np
 
 from half_linac.src.apps.dispersion_correction.knobs import SymmetricKnobSet
+from half_linac.src.shared.machine_profile import EnergyControlLock
 from half_linac.src.apps.dispersion_correction.calibration import (
     effective_delta_for_integer_actuator_step,
 )
@@ -58,6 +60,36 @@ def create_machine(config: RunConfig) -> MachineInterface:
     raise ValueError(f"Unsupported backend type: {config.backend.type}")
 
 
+def energy_control_session(operation: str):
+    """Hold the machine energy-control lock across one complete live workflow."""
+
+    def decorate(method):
+        @wraps(method)
+        def wrapped(self, *args, **kwargs):
+            if not isinstance(self.machine, EpicsMachine):
+                return method(self, *args, **kwargs)
+            outer = self._energy_control_lock_depth == 0
+            lock = None
+            if outer:
+                machine_id = str(self.config.backend.options.get("site", "irfel"))
+                lock = EnergyControlLock.for_machine(
+                    machine_id,
+                    {"app": "dispersion_correction", "operation": operation},
+                )
+                lock.acquire()
+            self._energy_control_lock_depth += 1
+            try:
+                return method(self, *args, **kwargs)
+            finally:
+                self._energy_control_lock_depth -= 1
+                if lock is not None:
+                    lock.release()
+
+        return wrapped
+
+    return decorate
+
+
 class AchromatWorkflow:
     """One-click effective dispersion correction workflow."""
 
@@ -82,8 +114,10 @@ class AchromatWorkflow:
         self.response_callback = response_callback
         self.knob_names = tuple(knob.name for knob in config.knobs)
         self._progress_depth = 0
+        self._energy_control_lock_depth = 0
         self.last_live_preflight = None
 
+    @energy_control_session("energy_scan")
     def measure_dispersion(
         self,
         samples: int | None = None,
@@ -179,6 +213,7 @@ class AchromatWorkflow:
             return measurements[0]
         return MultiPlaneDispersionMeasurement(measurements)
 
+    @energy_control_session("response_scan")
     def build_response_matrix(self, knob_set: SymmetricKnobSet | None = None) -> ResponseMatrixResult:
         self._require_correction_section()
         report_progress = self._progress_depth == 0
@@ -273,6 +308,7 @@ class AchromatWorkflow:
             self._progress("Response complete", total_steps, total_steps)
         return result
 
+    @energy_control_session("correction_run")
     def run(self, saved_response: SavedQResponse | None = None) -> CorrectionResult:
         self._require_correction_section()
         if saved_response is not None:
@@ -286,6 +322,7 @@ class AchromatWorkflow:
         finally:
             self._progress_depth -= 1
 
+    @energy_control_session("apply_recommendation")
     def apply_recommendation(
         self,
         recommendation: CorrectionRecommendation,
@@ -300,6 +337,7 @@ class AchromatWorkflow:
         finally:
             self._progress_depth -= 1
 
+    @energy_control_session("apply_design_targets")
     def apply_design_targets(
         self,
         target_values: Mapping[str, float],
@@ -396,6 +434,7 @@ class AchromatWorkflow:
             "max_orbit_change_mm": safety.max_orbit_change_mm,
         }
 
+    @energy_control_session("restore_correction_state")
     def restore_correction_state(
         self,
         target_values: Mapping[str, float],

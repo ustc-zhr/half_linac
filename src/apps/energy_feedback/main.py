@@ -48,11 +48,18 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from half_linac.src.apps.energy_feedback.bpm_dispersion import (
+    FirFeedbackCoordinator,
+    build_rf_hv_safety_checker,
+    check_session_guards,
+    rf_hv_aggregate,
+)
 from half_linac.src.apps.energy_feedback.client import EpicsPVClient
 from half_linac.src.apps.energy_feedback.cyclic import cyclic_delta
 from half_linac.src.apps.energy_feedback.csv_logger import EnergyFeedbackCsvLogger
 from half_linac.src.apps.energy_feedback.engine import (
     configure_control_group,
+    derive_control_timing,
     evaluate_shadow,
     unavailable_decision,
 )
@@ -175,6 +182,7 @@ class AcquisitionThread(QThread):
     startup_failed = pyqtSignal(str)
     feedback_state = pyqtSignal(bool, str)
     manual_result = pyqtSignal(object)
+    reference_captured = pyqtSignal(object, str)
 
     def __init__(self, context: AppContext, config: Mapping[str, Any]) -> None:
         super().__init__()
@@ -182,6 +190,7 @@ class AcquisitionThread(QThread):
         self.config = config
         self._stop_event = threading.Event()
         self._feedback_event = threading.Event()
+        self._capture_reference_event = threading.Event()
         self._settings_lock = threading.Lock()
         self._manual_requests: queue.Queue[dict[str, float]] = queue.Queue()
 
@@ -206,6 +215,7 @@ class AcquisitionThread(QThread):
         )
         self._settings: dict[str, float | None] = {
             "target_mev": None,
+            "kp": float(config.get("controller", {}).get("kp", 0.0)),
             "loop_gain": group.loop_gain if group is not None else 0.1,
             "ratio": abs(ratio_actuator.coefficient) if ratio_actuator else 1.0,
             "max_knob_step": group.max_knob_step if group is not None else 0.3,
@@ -237,6 +247,9 @@ class AcquisitionThread(QThread):
                     if not math.isfinite(value):
                         raise ValueError(f"{key} must be finite")
                     self._settings[key] = value
+
+    def request_capture_reference(self) -> None:
+        self._capture_reference_event.set()
 
     def request_manual_targets(self, targets: Mapping[str, float]) -> None:
         self._manual_requests.put({key: float(value) for key, value in targets.items()})
@@ -301,7 +314,7 @@ class AcquisitionThread(QThread):
             self.provider_ready.emit(
                 dict(getattr(provider, "runtime_metadata", {}))
             )
-        except Exception as exc:  # noqa: BLE001 - reported as disconnected
+        except Exception as exc:  # noqa: BLE001
             self.startup_failed.emit(str(exc))
             return
 
@@ -309,110 +322,207 @@ class AcquisitionThread(QThread):
         stale_timeout = float(self.config["runtime"]["stale_timeout_s"])
         verification = self.config["write_verification"]
         groups = tuple(self.config["control_groups"])
-        key_map = (
-            self.config["group_readback_keys"][groups[0].id] if groups else {}
+        group_template = groups[0] if groups else None
+        readback_key_map = (
+            self.config["group_readback_keys"][group_template.id]
+            if group_template is not None
+            else {}
         )
+        command_key_map = {
+            actuator.id: (
+                actuator.setpoint_key
+                if actuator.command_basis == "setpoint"
+                else actuator.readback_key
+            )
+            for actuator in (group_template.actuators if group_template else ())
+        }
+        fir = None
+        rf_hv_checker = None
+        control_timing = None
+        timing_parameters: dict[str, float] = {}
+        try:
+            if self.config["measurement_kind"] == "bpm_dispersion":
+                controller = self.config["controller"]
+                control_timing = derive_control_timing(
+                    sample_period,
+                    float(controller["control_period_s"]),
+                )
+                fir = FirFeedbackCoordinator(
+                    source,
+                    window_samples=control_timing.window_samples,
+                    kp=float(controller.get("kp", 0.0)),
+                    ki=float(controller.get("ki", 0.1)),
+                    period_s=control_timing.effective_control_period_s,
+                )
+                rf_hv_checker = build_rf_hv_safety_checker(source)
+                timing_parameters = {
+                    "sample_period_s": control_timing.sample_period_s,
+                    "control_period_s": control_timing.effective_control_period_s,
+                    "control_window_samples": float(control_timing.window_samples),
+                }
+        except Exception as exc:  # noqa: BLE001
+            self.startup_failed.emit(str(exc))
+            return
+
         origins: dict[str, float] = {}
         last_pulse_token: object | None = None
         feedback_active = False
         control_lock: EnergyControlLock | None = None
+
+        def disarm(message: str) -> None:
+            nonlocal feedback_active, control_lock
+            self._feedback_event.clear()
+            feedback_active = False
+            origins.clear()
+            if control_lock is not None:
+                control_lock.release()
+                control_lock = None
+            self.feedback_state.emit(False, message)
+
+        next_sample_at = time.monotonic()
+
+        def wait_for_next_sample() -> None:
+            nonlocal next_sample_at
+            next_sample_at += sample_period
+            now = time.monotonic()
+            if next_sample_at <= now:
+                missed = math.floor((now - next_sample_at) / sample_period) + 1
+                next_sample_at += missed * sample_period
+            self._stop_event.wait(max(0.0, next_sample_at - now))
 
         try:
             while not self._stop_event.is_set():
                 settings = self._settings_snapshot()
                 group = self._configured_group(settings)
                 measurement = provider.sample()
-                target_override = settings.get("target_mev")
-                if (
-                    target_override is None
-                    and measurement.quality.valid
-                    and measurement.energy_mev is not None
-                    and math.isfinite(measurement.energy_mev)
-                ):
-                    initial_target = (
-                        measurement.target_mev
-                        if measurement.target_mev is not None
-                        and math.isfinite(measurement.target_mev)
-                        else measurement.energy_mev
+                instantaneous_diagnostics = measurement.diagnostics
+                fir_result = None
+                if fir is not None:
+                    assert control_timing is not None
+                    fir.configure_controller(
+                        kp=float(settings.get("kp", self.config["controller"].get("kp", 0.0))),
+                        ki=float(settings.get("loop_gain", self.config["controller"].get("ki", 0.1))),
+                        period_s=control_timing.effective_control_period_s,
                     )
-                    with self._settings_lock:
-                        if self._settings["target_mev"] is None:
-                            self._settings["target_mev"] = float(initial_target)
-                        target_override = self._settings["target_mev"]
-                    settings = dict(settings)
-                    settings["target_mev"] = target_override
-                if (
-                    target_override is not None
-                    and measurement.energy_mev is not None
-                    and measurement.quality.valid
-                ):
-                    measurement = replace(
-                        measurement,
-                        target_source_timestamp=None,
-                        target_mev=target_override,
-                        error_mev=measurement.energy_mev - target_override,
-                    )
+                    fir_result = fir.accept(measurement)
+                    if fir_result is not None:
+                        measurement = fir_result.measurement
+                    if self._capture_reference_event.is_set():
+                        self._capture_reference_event.clear()
+                        try:
+                            reference = fir.capture_latest()
+                        except Exception as exc:  # noqa: BLE001
+                            self.reference_captured.emit(None, str(exc))
+                        else:
+                            with self._settings_lock:
+                                self._settings["target_mev"] = reference.target_q_mm
+                            self.reference_captured.emit(reference, "Current energy captured")
+                    if fir.reference is not None and measurement.observable is not None:
+                        target_q = fir.reference.target_q_mm
+                        q_value = measurement.control_value
+                        measurement = replace(
+                            measurement,
+                            diagnostics={
+                                **dict(measurement.diagnostics),
+                                "q_target_mm": target_q,
+                            },
+                            observable=replace(
+                                measurement.observable,
+                                target=target_q,
+                                error=q_value - target_q if q_value is not None else None,
+                            ),
+                        )
+                else:
+                    target_override = settings.get("target_mev")
+                    if (
+                        target_override is None
+                        and measurement.quality.valid
+                        and measurement.energy_mev is not None
+                        and math.isfinite(measurement.energy_mev)
+                    ):
+                        initial_target = (
+                            measurement.target_mev
+                            if measurement.target_mev is not None
+                            and math.isfinite(measurement.target_mev)
+                            else measurement.energy_mev
+                        )
+                        with self._settings_lock:
+                            if self._settings["target_mev"] is None:
+                                self._settings["target_mev"] = float(initial_target)
+                            target_override = self._settings["target_mev"]
+                        settings = dict(settings)
+                        settings["target_mev"] = target_override
+                    if (
+                        target_override is not None
+                        and measurement.energy_mev is not None
+                        and measurement.quality.valid
+                    ):
+                        measurement = replace(
+                            measurement,
+                            target_source_timestamp=None,
+                            target_mev=target_override,
+                            error_mev=measurement.energy_mev - target_override,
+                        )
 
                 if group is None:
                     decision = replace(
                         unavailable_decision(),
-                        error_mev=measurement.error_mev,
-                        control_parameters=settings,
+                        error_mev=measurement.control_error,
+                        control_parameters={**settings, **timing_parameters},
                     )
                     self.sample_ready.emit(measurement, decision, {})
-                    self._stop_event.wait(sample_period)
+                    wait_for_next_sample()
                     continue
 
                 readbacks: dict[str, PVReading] = {}
+                command_readings: dict[str, PVReading] = {}
+                proposal = None
                 try:
-                    raw = client.read_many(key_map.values())
+                    read_keys = set(readback_key_map.values()) | set(command_key_map.values())
+                    raw = client.read_many(read_keys)
                     readbacks = {
                         actuator_id: raw[key]
-                        for actuator_id, key in key_map.items()
+                        for actuator_id, key in readback_key_map.items()
+                    }
+                    command_readings = {
+                        actuator_id: raw[key]
+                        for actuator_id, key in command_key_map.items()
                     }
                 except Exception as exc:  # noqa: BLE001
                     decision = FeedbackDecision(
                         "HOLD",
                         f"actuator read failure: {exc}",
-                        measurement.error_mev,
-                        control_parameters=settings,
+                        measurement.control_error,
+                        control_parameters={**settings, **timing_parameters},
                     )
                 else:
                     requested = self._feedback_event.is_set()
                     if requested and not feedback_active:
                         try:
+                            if not self.config.get("feedback_ready", True):
+                                raise MachineProfileError(self.config["feedback_block_reason"])
+                            if fir is not None and fir.reference is None:
+                                raise MachineProfileError("Set Current Energy before starting feedback")
                             require_workflow_write_allowed(
-                                self.context,
-                                WORKFLOW_NAME,
-                                "Energy feedback",
+                                self.context, WORKFLOW_NAME, "Energy feedback"
                             )
                             control_lock = EnergyControlLock.for_machine(
                                 self.config["machine_id"],
-                                {
-                                    "app": WORKFLOW_NAME,
-                                    "operation": "closed_loop_feedback",
-                                },
+                                {"app": WORKFLOW_NAME, "operation": "closed_loop_feedback"},
                             )
                             control_lock.acquire()
                         except Exception as exc:  # noqa: BLE001
-                            self._feedback_event.clear()
-                            self.feedback_state.emit(False, str(exc))
+                            disarm(str(exc))
                         else:
                             feedback_active = True
                             origins.clear()
                             last_pulse_token = None
                             self.feedback_state.emit(True, "Feedback enabled")
                     elif not requested and feedback_active:
-                        feedback_active = False
-                        origins.clear()
-                        last_pulse_token = None
-                        if control_lock is not None:
-                            control_lock.release()
-                            control_lock = None
-                        self.feedback_state.emit(False, "Feedback stopped")
+                        disarm("Feedback stopped")
 
                     if feedback_active:
-                        for actuator_id, reading in readbacks.items():
+                        for actuator_id, reading in command_readings.items():
                             if (
                                 actuator_id not in origins
                                 and reading.connected
@@ -421,23 +531,96 @@ class AcquisitionThread(QThread):
                             ):
                                 origins[actuator_id] = float(reading.value)
 
-                    try:
-                        decision = evaluate_shadow(
-                            measurement,
-                            group,
-                            readbacks,
-                            session_origins=origins if feedback_active else None,
-                            stale_timeout_s=stale_timeout,
+                    if fir is not None:
+                        if not measurement.quality.valid:
+                            decision = FeedbackDecision(
+                                "HOLD", measurement.quality.reason, measurement.control_error
+                            )
+                        elif fir_result is None:
+                            decision = FeedbackDecision(
+                                "HOLD",
+                                f"collecting FIR window ({fir.window.pending}/{fir.window.size})",
+                                measurement.control_error,
+                            )
+                        elif fir.reference is None:
+                            decision = FeedbackDecision(
+                                "HOLD", "Set Current Energy to capture the FIR reference", None
+                            )
+                        else:
+                            guard_issue = check_session_guards(
+                                fir_result.medians, fir.reference, source["calibration"]
+                            )
+                            aggregate = rf_hv_aggregate(
+                                instantaneous_diagnostics, source
+                            )
+                            rf_result = rf_hv_checker.check_aggregate(aggregate)
+                            if guard_issue or not rf_result.ok:
+                                decision = FeedbackDecision(
+                                    "HOLD",
+                                    guard_issue or rf_result.reason,
+                                    measurement.control_error,
+                                )
+                            else:
+                                proposal = fir.proposal(measurement)
+                                parameters = {
+                                    **settings,
+                                    **timing_parameters,
+                                    "kp": fir.controller.kp,
+                                    "ki": fir.controller.ki,
+                                    "p_component": proposal.p_component,
+                                    "i_component": proposal.i_component,
+                                }
+                                decision = evaluate_shadow(
+                                    measurement,
+                                    group,
+                                    command_readings,
+                                    session_origins=origins if feedback_active else None,
+                                    stale_timeout_s=stale_timeout,
+                                    requested_knob_delta=proposal.knob_delta,
+                                    control_parameters=parameters,
+                                )
+                                if decision.has_valid_suggestion:
+                                    hv_result = rf_hv_checker.check_aggregate(
+                                        aggregate, decision.commands[0].proposed
+                                    )
+                                    if not hv_result.ok:
+                                        decision = replace(
+                                            decision,
+                                            state="HOLD",
+                                            reason=hv_result.reason,
+                                            commands=(),
+                                        )
+                    else:
+                        try:
+                            decision = evaluate_shadow(
+                                measurement,
+                                group,
+                                command_readings,
+                                session_origins=origins if feedback_active else None,
+                                stale_timeout_s=stale_timeout,
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            decision = FeedbackDecision(
+                                "HOLD",
+                                f"feedback evaluation failure: {exc}",
+                                measurement.control_error,
+                            )
+                    if not decision.control_parameters:
+                        decision = replace(
+                            decision,
+                            control_parameters={**settings, **timing_parameters},
                         )
-                    except Exception as exc:  # noqa: BLE001
-                        decision = FeedbackDecision(
-                            "HOLD",
-                            f"feedback evaluation failure: {exc}",
-                            measurement.error_mev,
-                        )
-                    decision = replace(decision, control_parameters=settings)
 
-                    if feedback_active and decision.has_valid_suggestion:
+                    if feedback_active and decision.state == "HOLD" and any(
+                        token in decision.reason.lower()
+                        for token in (
+                            "operating or machine limit",
+                            "session limit",
+                            "hv out of bounds",
+                        )
+                    ):
+                        disarm(f"Feedback stopped after hard limit: {decision.reason}")
+                    elif feedback_active and decision.has_valid_suggestion:
                         token = self._pulse_token(measurement)
                         if token is None:
                             decision = replace(
@@ -450,7 +633,7 @@ class AcquisitionThread(QThread):
                             decision = replace(
                                 decision,
                                 state="HOLD",
-                                reason="waiting for a new measurement pulse",
+                                reason="waiting for a new measurement window",
                                 commands=(),
                             )
                         else:
@@ -460,40 +643,40 @@ class AcquisitionThread(QThread):
                                 group,
                                 decision,
                                 timeout_s=float(verification["timeout_s"]),
-                                poll_interval_s=float(
-                                    verification["poll_interval_s"]
-                                ),
+                                poll_interval_s=float(verification["poll_interval_s"]),
                             )
+                            if decision.write_verified and fir is not None and proposal is not None:
+                                fir.commit(proposal)
                             if decision.write_detail and not decision.write_verified:
-                                self._feedback_event.clear()
-                                feedback_active = False
-                                if control_lock is not None:
-                                    control_lock.release()
-                                    control_lock = None
-                                self.feedback_state.emit(
-                                    False,
-                                    f"Feedback stopped after write failure: {decision.write_detail}",
+                                disarm(
+                                    "Feedback stopped after write/verification failure: "
+                                    + decision.write_detail
                                 )
+                    elif (
+                        not feedback_active
+                        and decision.has_valid_suggestion
+                        and fir is not None
+                        and proposal is not None
+                    ):
+                        fir.commit(proposal)
 
                     if not feedback_active:
                         manual_decision = self._process_manual_request(
-                            client,
-                            group,
-                            readbacks,
-                            verification,
+                            client, group, command_readings, verification
                         )
                         if manual_decision is not None:
                             decision = replace(
                                 manual_decision,
-                                error_mev=measurement.error_mev,
-                                control_parameters=settings,
+                                error_mev=measurement.control_error,
+                                control_parameters={**settings, **timing_parameters},
                             )
 
                 self.sample_ready.emit(measurement, decision, readbacks)
-                self._stop_event.wait(sample_period)
+                wait_for_next_sample()
         finally:
             if control_lock is not None:
                 control_lock.release()
+
 
     def _pulse_token(self, measurement) -> object | None:
         if self.config["require_marker_for_write"]:
@@ -548,6 +731,11 @@ class EnergyFeedbackWindow(QMainWindow):
         super().__init__()
         self.context = context
         self.config = load_runtime_config(context)
+        self.observable_label = str(self.config["observable"]["label"])
+        self.observable_unit = str(self.config["observable"]["unit"])
+        self._reference_capture_required = bool(
+            self.config.get("controller", {}).get("require_reference_capture", False)
+        )
         self.safety = FeedbackSafetyStateMachine(
             has_control_group=bool(self.config["control_groups"]),
             write_enabled=bool(self.config["write_enabled"]),
@@ -623,7 +811,7 @@ class EnergyFeedbackWindow(QMainWindow):
             status_layout, "loop", "LOOP", "OFF"
         )
         self.phase_summary_value = self._add_status_item(
-            status_layout, "phase", "PHASES", "Not checked"
+            status_layout, "phase", "CONTROL", "Not checked"
         )
         self.last_action_value = self._add_status_item(
             status_layout, "action", "LAST ACTION", "Ready"
@@ -664,16 +852,16 @@ class EnergyFeedbackWindow(QMainWindow):
 
         metrics_row = QHBoxLayout()
         metrics_row.setSpacing(10)
-        energy_group = QGroupBox("Energy Tracking")
+        energy_group = QGroupBox(f"{self.observable_label} Tracking")
         energy_group.setProperty("themeCard", True)
         energy_layout = QHBoxLayout(energy_group)
         energy_layout.setContentsMargins(10, 30, 10, 8)
         self.energy_metric = self._metric_field(
-            energy_layout, "Measured Energy", "— MeV"
+            energy_layout, "Measured", f"— {self.observable_unit}"
         )
-        self.target_metric = self._metric_field(energy_layout, "Target", "— MeV")
+        self.target_metric = self._metric_field(energy_layout, "Target", f"— {self.observable_unit}")
         self.error_metric = self._metric_field(
-            energy_layout, "Feedback Error", "— MeV"
+            energy_layout, "Feedback Error", f"— {self.observable_unit}"
         )
         metrics_row.addWidget(energy_group, 1)
         left_layout.addLayout(metrics_row)
@@ -692,21 +880,54 @@ class EnergyFeedbackWindow(QMainWindow):
         operation_layout.setSpacing(7)
 
         acquisition_card, acquisition_grid = self._create_section_card(
-            "Acquisition", "Live PV polling and automatic CSV logging"
+            "Acquisition",
+            (
+                "Timing applies on the next Start; plotting remains at 1 Hz"
+                if self.config["measurement_kind"] == "bpm_dispersion"
+                else "Live PV polling and automatic CSV logging"
+            ),
         )
         self.start_button = QPushButton("Start")
         self.stop_button = QPushButton("Stop")
         acquisition_grid.addWidget(self.start_button, 0, 0)
         acquisition_grid.addWidget(self.stop_button, 0, 1)
-        acquisition_grid.addWidget(self._field_label("Interval"), 1, 0)
-        acquisition_grid.addWidget(
-            self._read_only_value(
-                f"{float(self.config['runtime']['sample_period_s']):g} s"
-            ),
-            1,
-            1,
-        )
-        acquisition_grid.addWidget(self._field_label("Energy Source"), 2, 0)
+        self.sample_period_spin = None
+        self.control_period_spin = None
+        self.control_window_value = None
+        source_row = 2
+        detail_row = 3
+        if self.config["measurement_kind"] == "bpm_dispersion":
+            timing_controls = self.config["operator_controls"]
+            self.sample_period_spin = self._parameter_spin(
+                timing_controls["sample_period_s"],
+                value=float(self.config["runtime"]["sample_period_s"]),
+                suffix=" s",
+            )
+            self.control_period_spin = self._parameter_spin(
+                timing_controls["control_period_s"],
+                value=float(self.config["controller"]["control_period_s"]),
+                suffix=" s",
+            )
+            self.control_window_value = self._read_only_value("")
+            acquisition_grid.addWidget(self._field_label("Sample period"), 1, 0)
+            acquisition_grid.addWidget(self.sample_period_spin, 1, 1)
+            acquisition_grid.addWidget(self._field_label("Control period"), 2, 0)
+            acquisition_grid.addWidget(self.control_period_spin, 2, 1)
+            acquisition_grid.addWidget(self._field_label("Control window"), 3, 0)
+            acquisition_grid.addWidget(self.control_window_value, 3, 1)
+            self._update_timing_summary()
+            source_row = 4
+            detail_row = 5
+        else:
+            acquisition_grid.addWidget(self._field_label("Interval"), 1, 0)
+            acquisition_grid.addWidget(
+                self._read_only_value(
+                    f"{float(self.config['runtime']['sample_period_s']):g} s"
+                ),
+                1,
+                1,
+            )
+        acquisition_grid.addWidget(self._field_label("Energy Source"), source_row, 0)
         self.energy_source_combo = QComboBox()
         self.energy_source_combo.setToolTip(
             "Stop acquisition before changing the energy measurement source"
@@ -717,14 +938,14 @@ class EnergyFeedbackWindow(QMainWindow):
             self.config["measurement_source_id"]
         )
         self.energy_source_combo.setCurrentIndex(max(0, selected_index))
-        acquisition_grid.addWidget(self.energy_source_combo, 2, 1)
+        acquisition_grid.addWidget(self.energy_source_combo, source_row, 1)
         self.source_detail_value = QLabel(self.config["measurement_label"])
         self.source_detail_value.setProperty("role", "hint")
         self.source_detail_value.setWordWrap(True)
         self.source_detail_value.setVisible(
-            self.config["measurement_kind"] == "bpm_transport"
+            self.config["measurement_kind"] in {"bpm_transport", "bpm_dispersion"}
         )
-        acquisition_grid.addWidget(self.source_detail_value, 3, 0, 1, 2)
+        acquisition_grid.addWidget(self.source_detail_value, detail_row, 0, 1, 2)
         operation_layout.addWidget(acquisition_card)
 
         plot_card, plot_grid = self._create_section_card(
@@ -759,6 +980,19 @@ class EnergyFeedbackWindow(QMainWindow):
         feedback_grid.addWidget(self._field_label("Feedback"), 0, 0)
         feedback_grid.addWidget(self.feedback_start_button, 0, 1)
         feedback_grid.addWidget(self.feedback_stop_button, 0, 2)
+        self.capture_target_button = QPushButton("Set Current Energy")
+        self.capture_target_button.setVisible(self._reference_capture_required)
+        feedback_grid.addWidget(self.capture_target_button, 1, 0, 1, 3)
+        self.controller_mode_combo = QComboBox()
+        self.controller_mode_combo.addItems(("I", "PI"))
+        self.controller_mode_combo.setCurrentText(
+            str(self.config.get("controller", {}).get("mode", "I"))
+        )
+        controller_label = self._field_label("Controller")
+        controller_label.setVisible(self._reference_capture_required)
+        self.controller_mode_combo.setVisible(self._reference_capture_required)
+        feedback_grid.addWidget(controller_label, 2, 0)
+        feedback_grid.addWidget(self.controller_mode_combo, 2, 1, 1, 2)
 
         groups = tuple(self.config["control_groups"])
         group = groups[0] if groups else None
@@ -791,11 +1025,24 @@ class EnergyFeedbackWindow(QMainWindow):
             ratio_default = abs(ratio_actuator.coefficient)
         else:
             ratio_default = 1.0
+        knob_unit = group.actuators[0].unit if group is not None else ""
+        action_default = (
+            group.action_window_mev
+            if group is not None and math.isfinite(group.action_window_mev)
+            else float(controls["action_window"]["minimum"])
+        )
         self.target_energy_spin = self._parameter_spin(
-            controls["target"], value=0.0, suffix=" MeV"
+            controls["target"], value=0.0, suffix=f" {self.observable_unit}"
         )
         self.gain_spin = self._parameter_spin(
-            controls["gain"], value=group.loop_gain if group is not None else 0.1
+            controls["gain"],
+            value=float(self.config.get("controller", {}).get(
+                "ki", group.loop_gain if group is not None else 0.1
+            )),
+        )
+        self.kp_spin = self._parameter_spin(
+            controls.get("kp", controls["gain"]),
+            value=float(self.config.get("controller", {}).get("kp", 0.0)),
         )
         self.ratio_spin = self._parameter_spin(
             controls["actuator_ratio"], value=ratio_default
@@ -803,12 +1050,12 @@ class EnergyFeedbackWindow(QMainWindow):
         self.step_limit_spin = self._parameter_spin(
             controls["max_knob_step"],
             value=group.max_knob_step if group is not None else 0.3,
-            suffix=" °",
+            suffix=f" {knob_unit}",
         )
         self.action_window_spin = self._parameter_spin(
             controls["action_window"],
-            value=group.action_window_mev if group is not None else 5.0,
-            suffix=" MeV",
+            value=action_default,
+            suffix=f" {self.observable_unit}",
         )
         self.session_limit_spin = self._parameter_spin(
             controls["max_session_delta"],
@@ -817,23 +1064,31 @@ class EnergyFeedbackWindow(QMainWindow):
                 if group is not None
                 else 3.0
             ),
-            suffix=" °",
+            suffix=f" {knob_unit}",
         )
-        parameter_rows = (
-            ("Target Energy", self.target_energy_spin),
+        parameter_rows = [
+            (f"Target {self.observable_label}", self.target_energy_spin),
             (str(controls["gain"].get("label", "ki")), self.gain_spin),
+            (str(controls.get("kp", {}).get("label", "kp")), self.kp_spin),
             (str(controls["actuator_ratio"].get("label", "alpha")), self.ratio_spin),
             ("Step limit", self.step_limit_spin),
             ("Action window", self.action_window_spin),
             ("Session limit", self.session_limit_spin),
-        )
-        for row, (label, spin) in enumerate(parameter_rows, start=1):
+        ]
+        if controls["actuator_ratio"].get("hidden"):
+            parameter_rows = [item for item in parameter_rows if item[1] is not self.ratio_spin]
+        for row, (label, spin) in enumerate(parameter_rows, start=3):
             feedback_grid.addWidget(self._field_label(label), row, 0)
             feedback_grid.addWidget(spin, row, 1, 1, 2)
         operation_layout.addWidget(feedback_card)
         right_layout.addWidget(operation_group)
 
-        phase_group = QGroupBox("Phase Shifter")
+        actuator_title = (
+            "Phase Shifter"
+            if group is not None and all(item.unit == "deg" for item in group.actuators)
+            else "Control Knob"
+        )
+        phase_group = QGroupBox(actuator_title)
         phase_group.setProperty("themeCard", True)
         phase_grid = QGridLayout(phase_group)
         phase_grid.setContentsMargins(12, 32, 12, 10)
@@ -883,11 +1138,11 @@ class EnergyFeedbackWindow(QMainWindow):
         self.main_splitter = QSplitter(Qt.Horizontal, body)
         self.main_splitter.setObjectName("mainSplitter")
         self.main_splitter.setChildrenCollapsible(True)
-        self.main_splitter.setCollapsible(0, False)
-        self.main_splitter.setCollapsible(1, True)
         self.main_splitter.setHandleWidth(10)
         self.main_splitter.addWidget(left_column)
         self.main_splitter.addWidget(right_column)
+        self.main_splitter.setCollapsible(0, False)
+        self.main_splitter.setCollapsible(1, True)
         self.main_splitter.setStretchFactor(0, 7)
         self.main_splitter.setStretchFactor(1, 4)
         self.main_splitter.setSizes([1000, 430])
@@ -918,6 +1173,8 @@ class EnergyFeedbackWindow(QMainWindow):
         self.clear_button.clicked.connect(self.clear_plot)
         self.feedback_start_button.clicked.connect(self.start_feedback)
         self.feedback_stop_button.clicked.connect(self.stop_feedback)
+        self.capture_target_button.clicked.connect(self.capture_current_energy)
+        self.controller_mode_combo.currentTextChanged.connect(self._controller_mode_changed)
         self.restore_initial_button.clicked.connect(self.restore_initial_phases)
         self.plot_view_combo.currentTextChanged.connect(
             self._on_plot_view_changed
@@ -926,6 +1183,9 @@ class EnergyFeedbackWindow(QMainWindow):
         self.plot_axis_combo.currentTextChanged.connect(self._draw_plot)
         for spin in self._parameter_spins():
             spin.editingFinished.connect(self._push_operator_parameters)
+        for spin in (self.sample_period_spin, self.control_period_spin):
+            if spin is not None:
+                spin.valueChanged.connect(self._update_timing_summary)
         self._apply_theme()
 
     def _rebuild_plot_axes(self, view: str) -> None:
@@ -1015,10 +1275,67 @@ class EnergyFeedbackWindow(QMainWindow):
         spin.setSuffix(suffix)
         return spin
 
+
+    def _selected_control_timing(self):
+        if self.sample_period_spin is None or self.control_period_spin is None:
+            return None
+        return derive_control_timing(
+            self.sample_period_spin.value(),
+            self.control_period_spin.value(),
+        )
+
+    def _update_timing_summary(self, _value: float | None = None) -> None:
+        timing = self._selected_control_timing()
+        if timing is None or self.control_window_value is None:
+            return
+        exact = math.isclose(
+            timing.requested_control_period_s,
+            timing.effective_control_period_s,
+            rel_tol=1e-9,
+            abs_tol=1e-9,
+        )
+        actual = f"{timing.effective_control_period_s:g} s"
+        if not exact:
+            actual += " actual"
+        self.control_window_value.setText(
+            f"{timing.window_samples} samples · {actual}"
+        )
+        self.control_window_value.setToolTip(
+            f"Acquisition {1.0 / timing.sample_period_s:g} Hz · "
+            f"requested control period {timing.requested_control_period_s:g} s"
+        )
+
+    def _apply_timing_settings(self):
+        timing = self._selected_control_timing()
+        if timing is None:
+            return None
+        for runtime in (
+            self.config["runtime"],
+            self.config["workflow"]["runtime"],
+        ):
+            runtime["sample_period_s"] = timing.sample_period_s
+        for controller in (
+            self.config["controller"],
+            self.config["workflow"]["controller"],
+        ):
+            controller["control_period_s"] = timing.requested_control_period_s
+            controller["derived_window_samples"] = timing.window_samples
+            controller["effective_control_period_s"] = (
+                timing.effective_control_period_s
+            )
+        self._update_timing_summary()
+        return timing
+
+    def _set_timing_editing(self, enabled: bool) -> None:
+        for spin in (self.sample_period_spin, self.control_period_spin):
+            if spin is not None:
+                spin.setEnabled(enabled)
+
     def _parameter_spins(self) -> tuple[QDoubleSpinBox, ...]:
         return (
             self.target_energy_spin,
             self.gain_spin,
+            self.kp_spin,
             self.ratio_spin,
             self.step_limit_spin,
             self.action_window_spin,
@@ -1029,6 +1346,7 @@ class EnergyFeedbackWindow(QMainWindow):
         return {
             "target_mev": self.target_energy_spin.value(),
             "loop_gain": self.gain_spin.value(),
+            "kp": self.kp_spin.value() if self.controller_mode_combo.currentText() == "PI" else 0.0,
             "ratio": self.ratio_spin.value(),
             "max_knob_step": self.step_limit_spin.value(),
             "action_window_mev": self.action_window_spin.value(),
@@ -1262,6 +1580,12 @@ class EnergyFeedbackWindow(QMainWindow):
     def start_acquisition(self) -> None:
         if self.worker is not None and self.worker.isRunning():
             return
+        try:
+            self._apply_timing_settings()
+        except ValueError as exc:
+            self.event_value.setText(f"Invalid timing: {exc}")
+            self._set_status_item("action", "Invalid timing", "danger")
+            return
         self._history.clear()
         self._last_plot_state = None
         self._draw_plot()
@@ -1270,9 +1594,11 @@ class EnergyFeedbackWindow(QMainWindow):
         self._initial_phases.clear()
         self._target_initialized = False
         self.target_energy_spin.setEnabled(False)
+        self.capture_target_button.setEnabled(self._reference_capture_required)
         self.initial_phase_value.setText("Initial: —")
         self._set_manual_controls(False)
         self.energy_source_combo.setEnabled(False)
+        self._set_timing_editing(False)
         if self.config["measurement_kind"] == "bpm_transport":
             self.source_detail_value.setVisible(True)
             self.source_detail_value.setText(
@@ -1287,6 +1613,7 @@ class EnergyFeedbackWindow(QMainWindow):
             self.worker.startup_failed.connect(self._on_startup_failed)
             self.worker.feedback_state.connect(self._on_feedback_state)
             self.worker.manual_result.connect(self._on_manual_result)
+            self.worker.reference_captured.connect(self._on_reference_captured)
             self.worker.finished.connect(self._on_worker_finished)
             self.worker.start()
         except Exception as exc:  # noqa: BLE001
@@ -1298,6 +1625,7 @@ class EnergyFeedbackWindow(QMainWindow):
             self._set_status_item("data", "Disconnected", "danger")
             self._set_status_item("action", "Start failed", "danger")
             self.energy_source_combo.setEnabled(True)
+            self._set_timing_editing(True)
             return
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -1336,6 +1664,7 @@ class EnergyFeedbackWindow(QMainWindow):
         self.energy_source_combo.setEnabled(True)
         self._set_parameter_editing(True)
         self._set_manual_controls(False)
+        self._set_timing_editing(True)
         self._set_status_item("data", "Stopped", "subtle")
         self._set_status_item("loop", "OFF", "subtle")
         self._set_status_item("phase", "Not checked", "subtle")
@@ -1370,7 +1699,7 @@ class EnergyFeedbackWindow(QMainWindow):
         self.event_value.setText(
             f"Energy source selected: {self.config['measurement_label']} · press Start"
         )
-        is_bpm_source = self.config["measurement_kind"] == "bpm_transport"
+        is_bpm_source = self.config["measurement_kind"] in {"bpm_transport", "bpm_dispersion"}
         self.source_detail_value.setVisible(is_bpm_source)
         self.source_detail_value.setText(
             f"{self.config['measurement_label']} · press Start to apply"
@@ -1378,7 +1707,38 @@ class EnergyFeedbackWindow(QMainWindow):
             else ""
         )
 
+    def capture_current_energy(self) -> None:
+        if self.worker is None or not self.worker.isRunning():
+            self.event_value.setText("Start acquisition before capturing current energy")
+            return
+        self.worker.request_capture_reference()
+        timing = self._selected_control_timing()
+        period = timing.effective_control_period_s if timing is not None else 0.0
+        self.event_value.setText(
+            f"Capturing the latest complete {period:g}-s FIR window…"
+        )
+
+    def _on_reference_captured(self, reference, message: str) -> None:
+        if reference is None:
+            self.event_value.setText(message)
+            return
+        self.target_energy_spin.blockSignals(True)
+        self.target_energy_spin.setValue(float(reference.target_q_mm))
+        self.target_energy_spin.blockSignals(False)
+        self._target_initialized = True
+        self.event_value.setText(
+            f"{message}: q={reference.target_q_mm:.4f} {self.observable_unit}"
+        )
+        self._refresh_write_control_state()
+
+    def _controller_mode_changed(self, mode: str) -> None:
+        self.kp_spin.setEnabled(mode == "PI" and not self._feedback_active)
+        self._push_operator_parameters()
+
     def start_feedback(self) -> None:
+        if not self.config.get("feedback_ready", True):
+            self.event_value.setText(self.config.get("feedback_block_reason", "Calibration not ready"))
+            return
         if not self.config["control_groups"]:
             self.event_value.setText("Feedback unavailable: no actuator group")
             return
@@ -1392,14 +1752,14 @@ class EnergyFeedbackWindow(QMainWindow):
             for actuator in group.actuators
         )
         message = (
-            "Enable automatic real-machine phase writes?\n\n"
+            "Enable automatic real-machine control-knob writes?\n\n"
             f"{actuator_text}\n"
-            f"targetE={parameters['target_mev']:.3f} MeV, "
-            f"ki={parameters['loop_gain']:.4f}, "
-            f"alpha={parameters['ratio']:.6f}\n"
-            f"step≤{parameters['max_knob_step']:.3f}°, "
-            f"|error|<{parameters['action_window_mev']:.3f} MeV, "
-            f"session≤{parameters['max_session_delta']:.3f}°"
+            f"target={parameters['target_mev']:.4f} {self.observable_unit}, "
+            f"mode={self.controller_mode_combo.currentText()}, "
+            f"kp={parameters['kp']:.4f}, ki={parameters['loop_gain']:.4f}\n"
+            f"step≤{parameters['max_knob_step']:.3f} {group.actuators[0].unit}, "
+            f"|error|<{parameters['action_window_mev']:.4f} {self.observable_unit}, "
+            f"session≤{parameters['max_session_delta']:.3f} {group.actuators[0].unit}"
         )
         if (
             QMessageBox.warning(
@@ -1457,7 +1817,7 @@ class EnergyFeedbackWindow(QMainWindow):
         if (
             QMessageBox.warning(
                 self,
-                "Apply Phase Setpoint",
+                "Apply Control-Knob Setpoint",
                 f"Write {actuator.label} to {spin.value():.{actuator.command_precision}f} {actuator.unit}?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
@@ -1479,8 +1839,8 @@ class EnergyFeedbackWindow(QMainWindow):
         if (
             QMessageBox.warning(
                 self,
-                "Restore Initial Phases",
-                "Restore both phase setpoints to the values captured at acquisition start?",
+                "Restore Initial Control Knobs",
+                "Restore all control-knob setpoints captured at acquisition start?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -1489,7 +1849,7 @@ class EnergyFeedbackWindow(QMainWindow):
             return
         self._set_manual_controls(False)
         self.worker.request_manual_targets(self._initial_phases)
-        self.event_value.setText("Initial phase-pair restore queued")
+        self.event_value.setText("Initial control-knob restore queued")
 
     def _on_feedback_state(self, enabled: bool, message: str) -> None:
         self._feedback_active = bool(enabled)
@@ -1524,7 +1884,15 @@ class EnergyFeedbackWindow(QMainWindow):
 
     def _set_parameter_editing(self, enabled: bool) -> None:
         for spin in self._parameter_spins():
-            spin.setEnabled(enabled and (spin is not self.target_energy_spin or self._target_initialized))
+            editable = enabled and (
+                spin is not self.target_energy_spin
+                or (self._target_initialized and not self._reference_capture_required)
+            )
+            if spin is self.kp_spin:
+                editable = editable and self.controller_mode_combo.currentText() == "PI"
+            spin.setEnabled(editable)
+        self.controller_mode_combo.setEnabled(enabled)
+        self.capture_target_button.setEnabled(enabled and self._reference_capture_required)
 
     def _set_manual_controls(self, enabled: bool) -> None:
         for actuator_id, (_label, spin, button) in self._phase_controls.items():
@@ -1546,6 +1914,7 @@ class EnergyFeedbackWindow(QMainWindow):
         measurement = self._latest_measurement
         return bool(
             self.config["write_enabled"]
+            and self.config.get("feedback_ready", True)
             and self.config["control_groups"]
             and self.worker is not None
             and self.worker.isRunning()
@@ -1626,7 +1995,8 @@ class EnergyFeedbackWindow(QMainWindow):
             self.event_value.setText(f"{safety.state} · {safety.reason}")
 
         if (
-            not self._target_initialized
+            not self._reference_capture_required
+            and not self._target_initialized
             and (
                 (
                     measurement.target_mev is not None
@@ -1652,9 +2022,9 @@ class EnergyFeedbackWindow(QMainWindow):
             self.target_energy_spin.setEnabled(not self._feedback_active)
             self._push_operator_parameters()
 
-        self.energy_metric.setText(_format_value(measurement.energy_mev, "MeV"))
-        self.target_metric.setText(_format_value(measurement.target_mev, "MeV"))
-        self.error_metric.setText(_format_value(measurement.error_mev, "MeV"))
+        self.energy_metric.setText(_format_value(measurement.control_value, self.observable_unit))
+        self.target_metric.setText(_format_value(measurement.control_target, self.observable_unit))
+        self.error_metric.setText(_format_value(measurement.control_error, self.observable_unit))
         self._update_source_detail(measurement)
 
         phase_parts = []
@@ -1667,8 +2037,9 @@ class EnergyFeedbackWindow(QMainWindow):
                 and math.isfinite(reading.value)
             ):
                 value = float(reading.value)
-                label.setText(f"{value:.2f}°")
-                phase_parts.append(f"{actuator_id}={value:.2f}°")
+                actuator = next(item for item in self.config["control_groups"][0].actuators if item.id == actuator_id)
+                label.setText(f"{value:.{actuator.command_precision}f} {actuator.unit}")
+                phase_parts.append(f"{actuator_id}={value:.{actuator.command_precision}f} {actuator.unit}")
                 if actuator_id not in self._initial_phases:
                     self._initial_phases[actuator_id] = value
                     spin.setValue(value)
@@ -1679,7 +2050,7 @@ class EnergyFeedbackWindow(QMainWindow):
             self.initial_phase_value.setText(
                 "Initial: "
                 + " · ".join(
-                    f"{actuator_id}={value:.2f}°"
+                    f"{actuator_id}={value:.3f}"
                     for actuator_id, value in self._initial_phases.items()
                 )
             )
@@ -1693,9 +2064,9 @@ class EnergyFeedbackWindow(QMainWindow):
         self._refresh_write_control_state()
 
         self._history["time"].append(float(measurement.sampled_at))
-        self._history["energy"].append(_plot_value(measurement.energy_mev))
-        self._history["target"].append(_plot_value(measurement.target_mev))
-        self._history["error"].append(_plot_value(measurement.error_mev))
+        self._history["energy"].append(_plot_value(measurement.control_value))
+        self._history["target"].append(_plot_value(measurement.control_target))
+        self._history["error"].append(_plot_value(measurement.control_error))
         diagnostic_value = (
             lambda key: measurement.diagnostics.get(key)
             if measurement.quality.valid
@@ -1715,17 +2086,17 @@ class EnergyFeedbackWindow(QMainWindow):
         is_hold = safety.state == "HOLD"
         self._history["event.applied"].append(
             _plot_value(
-                measurement.error_mev if decision.state == "APPLIED" else None
+                measurement.control_error if decision.state == "APPLIED" else None
             )
         )
         self._history["event.hold"].append(
             _plot_value(
-                measurement.error_mev if is_hold and not was_hold else None
+                measurement.control_error if is_hold and not was_hold else None
             )
         )
         self._history["event.recovered"].append(
             _plot_value(
-                measurement.error_mev if was_hold and not is_hold else None
+                measurement.control_error if was_hold and not is_hold else None
             )
         )
         self._last_plot_state = safety.state
@@ -1844,6 +2215,7 @@ class EnergyFeedbackWindow(QMainWindow):
         self.feedback_start_button.setEnabled(False)
         self.feedback_stop_button.setEnabled(False)
         self.energy_source_combo.setEnabled(True)
+        self._set_timing_editing(True)
         self._set_manual_controls(False)
 
     def _draw_plot(self) -> None:
@@ -1864,6 +2236,10 @@ class EnergyFeedbackWindow(QMainWindow):
         )
         if self.error_axis is not None:
             groups = tuple(self.config["control_groups"])
+            action_window_ready = not (
+                self.config["measurement_kind"] == "bpm_dispersion"
+                and not self.config.get("feedback_ready", False)
+            )
             deadband = groups[0].deadband_mev if groups else 0.0
             action_window = (
                 self.action_window_spin.value()
@@ -1872,7 +2248,11 @@ class EnergyFeedbackWindow(QMainWindow):
                 if groups
                 else 0.0
             )
-            if action_window > 0:
+            if (
+                action_window_ready
+                and math.isfinite(action_window)
+                and action_window > 0
+            ):
                 self.error_axis.axhspan(
                     -action_window,
                     action_window,
@@ -1943,10 +2323,11 @@ class EnergyFeedbackWindow(QMainWindow):
                 ]
 
             if self.energy_axis is not None:
+                fir_source = self.config["measurement_kind"] == "bpm_dispersion"
                 self.energy_axis.plot(
                     x_values,
                     values("energy"),
-                    label="Filtered Energy",
+                    label="Measured q" if fir_source else "Filtered Energy",
                     color=theme["energy"],
                 )
                 if self.config["measurement_kind"] == "bpm_transport":
@@ -1968,7 +2349,7 @@ class EnergyFeedbackWindow(QMainWindow):
                     self.energy_axis.plot(
                         x_values,
                         values("target"),
-                        label="Target Energy",
+                        label="Target q" if fir_source else "Target Energy",
                         color=theme["target"],
                     )
             if self.bpm_axis is not None:
@@ -1987,10 +2368,15 @@ class EnergyFeedbackWindow(QMainWindow):
                         color=color,
                     )
             if self.error_axis is not None:
+                error_label = (
+                    "q − target"
+                    if self.config["measurement_kind"] == "bpm_dispersion"
+                    else "Measured − Target"
+                )
                 self.error_axis.plot(
                     x_values,
                     values("error"),
-                    label="Measured − Target",
+                    label=error_label,
                     color=theme["error"],
                 )
                 event_specs = (
@@ -2040,20 +2426,39 @@ class EnergyFeedbackWindow(QMainWindow):
                         markersize=3,
                     )
         if self.energy_axis is not None:
-            self.energy_axis.set_ylabel(
-                "Energy Tracking [MeV]"
-                if view == "Full Detail"
-                else "Measured Energy [MeV]",
-                color=theme["text"],
-            )
+            if self.config["measurement_kind"] == "bpm_dispersion":
+                energy_axis_label = (
+                    f"{self.observable_label} Tracking [{self.observable_unit}]"
+                )
+            else:
+                energy_axis_label = (
+                    "Energy Tracking [MeV]"
+                    if view == "Full Detail"
+                    else "Measured Energy [MeV]"
+                )
+            self.energy_axis.set_ylabel(energy_axis_label, color=theme["text"])
         if self.error_axis is not None:
-            self.error_axis.set_ylabel("Feedback Error [MeV]", color=theme["text"])
+            error_axis_label = (
+                f"{self.observable_label} Error [{self.observable_unit}]"
+                if self.config["measurement_kind"] == "bpm_dispersion"
+                else "Feedback Error [MeV]"
+            )
+            self.error_axis.set_ylabel(error_axis_label, color=theme["text"])
         if self.bpm_axis is not None:
             self.bpm_axis.set_ylabel("BPM X [mm]", color=theme["text"])
         if self.actuator_axis is not None:
-            self.actuator_axis.set_ylabel(
-                "Phase Correction [deg]", color=theme["text"]
-            )
+            groups = tuple(self.config["control_groups"])
+            actuators = groups[0].actuators if groups else ()
+            if actuators and all(actuator.unit == "deg" for actuator in actuators):
+                actuator_axis_label = "Phase Correction [deg]"
+            elif len(actuators) == 1:
+                actuator_axis_label = (
+                    f"{actuators[0].label} Change [{actuators[0].unit}]"
+                )
+            else:
+                units = "/".join(dict.fromkeys(item.unit for item in actuators))
+                actuator_axis_label = f"Control Knob Change [{units}]"
+            self.actuator_axis.set_ylabel(actuator_axis_label, color=theme["text"])
         mode = self.plot_axis_combo.currentText()
         bottom_axis = axes[-1]
         if mode == "Clock":

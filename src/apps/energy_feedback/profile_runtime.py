@@ -16,11 +16,14 @@ from half_linac.src.shared.energy_measurement import (
 from half_linac.src.shared.machine_profile import (
     AppContext,
     MachineProfileError,
+    load_profile,
     resolve_channel,
     resolve_energy_feedback_workflow,
+    resolve_hv_feedback_workflow,
     workflow_writes_allowed,
 )
 
+from .bpm_dispersion import BpmDispersionProvider, calibration_issue
 from .measurement import BpmTransportEnergyProvider, PROVIDER_FACTORIES
 from .models import ShadowActuator, ShadowControlGroup
 
@@ -58,17 +61,9 @@ def load_runtime_config(
         return key
 
     measurement = workflow["measurement"]
-    add_signal("energy", measurement["energy"])
+    measurement_kind = str(measurement["kind"])
     target_key = None
-    if workflow.get("target") is not None:
-        target_key = "target"
-        add_signal(target_key, workflow["target"])
     diagnostic_keys: list[str] = []
-    for name, signal in measurement.get("diagnostics", {}).items():
-        key = f"diagnostic.{name}"
-        diagnostic_keys.append(key)
-        add_signal(key, signal)
-
     marker_key = None
     marker = workflow["pulse"].get("marker")
     if marker is not None:
@@ -78,19 +73,128 @@ def load_runtime_config(
     default_source_id = str(
         workflow.get(
             "default_measurement_source",
-            measurement.get("id", measurement["kind"]),
+            measurement.get("id", measurement_kind),
         )
     )
-    default_measurement_id = str(measurement.get("id", measurement["kind"]))
-    direct_signal_keys = ["energy", *diagnostic_keys]
-    if target_key is not None:
-        direct_signal_keys.append(target_key)
-    if marker_key is not None:
-        direct_signal_keys.append(marker_key)
-    measurement_sources: dict[str, dict[str, Any]] = {
-        default_measurement_id: {
+    default_measurement_id = str(measurement.get("id", measurement_kind))
+    measurement_sources: dict[str, dict[str, Any]] = {}
+
+    if measurement_kind == "bpm_dispersion":
+        source_signal_keys: list[str] = []
+        bpm_signal_keys: list[str] = []
+        bpm_keys: dict[str, dict[str, str]] = {}
+        for bpm_id in measurement["bpm_elements"]:
+            bpm_id = str(bpm_id)
+            bpm_keys[bpm_id] = {}
+            for channel in ("x", "y", "s"):
+                key = f"bpm.{bpm_id}.{channel}"
+                add_signal(key, {"element": bpm_id, "channel": channel, "unit": "mm"})
+                bpm_keys[bpm_id][channel] = key
+                bpm_signal_keys.append(key)
+                source_signal_keys.append(key)
+        fct_key = "fct"
+        add_signal(fct_key, measurement["fct"])
+        source_signal_keys.append(fct_key)
+        quadrupole_ids = tuple(str(item) for item in measurement["quadrupole_elements"])
+        quadrupole_keys: dict[str, str] = {}
+        for quadrupole_id in quadrupole_ids:
+            key = f"quad.{quadrupole_id}"
+            add_signal(
+                key,
+                {"element": quadrupole_id, "channel": "current_readback", "unit": "A"},
+            )
+            quadrupole_keys[quadrupole_id] = key
+            source_signal_keys.append(key)
+
+        hv_profile = load_profile(context.profile.machine.id)
+        hv_workflow = resolve_hv_feedback_workflow(hv_profile)
+        safety_unit_id = str(workflow.get("safety", {}).get("hv_feedback_unit", ""))
+        hv_unit = next(
+            (
+                item
+                for item in hv_workflow["feedback_units"]
+                if str(item["id"]) == safety_unit_id
+            ),
+            None,
+        )
+        if hv_unit is None:
+            raise MachineProfileError(
+                f"Unknown HV Feedback safety unit {safety_unit_id!r}."
+            )
+        guard_keys: dict[str, str] = {}
+        for guard_name, signal in (
+            ("hv_setpoint", hv_unit["hv"]["setpoint"]),
+            ("hv_readback", hv_unit["hv"]["readback"]),
+        ):
+            key = f"guard.{guard_name}"
+            add_signal(key, signal)
+            guard_keys[guard_name] = key
+            source_signal_keys.append(key)
+        for channel in hv_unit["rf_channels"]:
+            channel_id = str(channel["id"])
+            for field in ("amplitude", "phase"):
+                guard_name = f"rf.{channel_id}.{field}"
+                key = f"guard.{guard_name}"
+                add_signal(key, channel[field])
+                guard_keys[guard_name] = key
+                source_signal_keys.append(key)
+
+        observable = copy.deepcopy(dict(measurement["observable"]))
+        measurement_sources[default_measurement_id] = {
             "id": default_measurement_id,
-            "kind": str(measurement["kind"]),
+            "kind": measurement_kind,
+            "label": str(measurement["label"]),
+            "capabilities": tuple(str(item) for item in measurement["capabilities"]),
+            "valid_range_mev": tuple(float(value) for value in observable["valid_range"]),
+            "median_window": 1,
+            "observable": observable,
+            "geometry": copy.deepcopy(dict(measurement["geometry"])),
+            "calibration": copy.deepcopy(dict(measurement["calibration"])),
+            "stale_timeout_s": float(workflow["runtime"]["stale_timeout_s"]),
+            "max_timestamp_skew_s": float(measurement["max_timestamp_skew_s"]),
+            "bpm_keys": bpm_keys,
+            "bpm_signal_keys": tuple(bpm_signal_keys),
+            "q_keys": (
+                bpm_keys["BPM02"]["x"],
+                bpm_keys["BPM03"]["x"],
+                bpm_keys["BPM04"]["x"],
+            ),
+            "fct_key": fct_key,
+            "quadrupole_ids": quadrupole_ids,
+            "quadrupole_keys": quadrupole_keys,
+            "guard_keys": guard_keys,
+            "rf_safety": {
+                "unit_id": safety_unit_id,
+                "default_feedback_channel": str(hv_unit["default_feedback_channel"]),
+                "rf_channels": copy.deepcopy(list(hv_unit["rf_channels"])),
+                "reference": copy.deepcopy(dict(hv_unit["reference"])),
+                "safety": copy.deepcopy(dict(hv_unit["safety"])),
+            },
+            "resolved_signals": {
+                key: signals[key] for key in source_signal_keys
+            },
+            "diagnostic_keys": tuple(source_signal_keys),
+            "marker_key": marker_key,
+            "target_key": None,
+            "signal_keys": tuple(source_signal_keys + ([marker_key] if marker_key else [])),
+        }
+    else:
+        add_signal("energy", measurement["energy"])
+        if workflow.get("target") is not None:
+            target_key = "target"
+            add_signal(target_key, workflow["target"])
+        for name, signal in measurement.get("diagnostics", {}).items():
+            key = f"diagnostic.{name}"
+            diagnostic_keys.append(key)
+            add_signal(key, signal)
+        direct_signal_keys = ["energy", *diagnostic_keys]
+        if target_key is not None:
+            direct_signal_keys.append(target_key)
+        if marker_key is not None:
+            direct_signal_keys.append(marker_key)
+        measurement_sources[default_measurement_id] = {
+            "id": default_measurement_id,
+            "kind": measurement_kind,
             "label": str(measurement["label"]),
             "capabilities": tuple(
                 str(capability) for capability in measurement["capabilities"]
@@ -99,12 +203,13 @@ def load_runtime_config(
                 float(value) for value in measurement["valid_range_mev"]
             ),
             "median_window": int(measurement.get("median_window", 1)),
+            "observable": {"label": "Energy", "unit": "MeV"},
             "diagnostic_keys": tuple(diagnostic_keys),
             "marker_key": marker_key,
             "target_key": target_key,
             "signal_keys": tuple(direct_signal_keys),
         }
-    }
+
 
     for raw_source in workflow.get("measurement_alternatives", ()):
         source_id = str(raw_source["id"])
@@ -238,20 +343,37 @@ def load_runtime_config(
                         if raw_actuator.get("cyclic_period") is not None
                         else None
                     ),
+                    command_basis=str(raw_actuator.get("command_basis", "readback")),
                 )
             )
         group_id = str(raw_group["id"])
+        calibration = measurement.get("calibration", {})
+        response_value = raw_group.get(
+            "response_mev_per_knob_unit",
+            raw_group.get("response_per_knob_unit"),
+        )
+        action_window = raw_group.get(
+            "action_window_mev",
+            raw_group.get("action_window"),
+        )
+        if measurement_kind == "bpm_dispersion":
+            response_value = calibration.get("response_q_mm_per_kv")
+            action_window = calibration.get("q_action_range_mm")
         groups.append(
             ShadowControlGroup(
                 id=group_id,
                 label=str(raw_group.get("label", group_id)),
-                response_mev_per_knob_unit=float(
-                    raw_group["response_mev_per_knob_unit"]
+                response_mev_per_knob_unit=(
+                    float(response_value) if response_value is not None else math.nan
                 ),
                 loop_gain=float(raw_group["loop_gain"]),
                 max_knob_step=float(raw_group["max_knob_step"]),
-                deadband_mev=float(raw_group.get("deadband_mev", 0)),
-                action_window_mev=float(raw_group["action_window_mev"]),
+                deadband_mev=float(
+                    raw_group.get("deadband_mev", raw_group.get("deadband", 0))
+                ),
+                action_window_mev=(
+                    float(action_window) if action_window is not None else math.nan
+                ),
                 actuators=tuple(actuators),
             )
         )
@@ -270,10 +392,14 @@ def load_runtime_config(
             str(capability) for capability in measurement["capabilities"]
         ),
         "valid_range_mev": tuple(
-            float(value) for value in measurement["valid_range_mev"]
+            measurement_sources[default_measurement_id]["valid_range_mev"]
         ),
-        "median_window": int(measurement.get("median_window", 1)),
-        "diagnostic_keys": tuple(diagnostic_keys),
+        "median_window": int(
+            measurement_sources[default_measurement_id]["median_window"]
+        ),
+        "diagnostic_keys": tuple(
+            measurement_sources[default_measurement_id].get("diagnostic_keys", ())
+        ),
         "marker_key": marker_key,
         "target_key": target_key,
         "require_marker_for_write": bool(
@@ -291,6 +417,11 @@ def load_runtime_config(
         "runtime": copy.deepcopy(dict(workflow["runtime"])),
         "logging": copy.deepcopy(dict(workflow["logging"])),
         "measurement_sources": measurement_sources,
+        "observable": copy.deepcopy(dict(measurement_sources[default_measurement_id]["observable"])),
+        "controller": copy.deepcopy(dict(workflow.get("controller", {}))),
+        "calibration": copy.deepcopy(dict(measurement.get("calibration", {}))),
+        "feedback_ready": not bool(calibration_issue(measurement.get("calibration", {}))) if measurement_kind == "bpm_dispersion" else True,
+        "feedback_block_reason": calibration_issue(measurement.get("calibration", {})) if measurement_kind == "bpm_dispersion" else "",
     }
     activate_measurement_source(config, default_source_id)
     return config
@@ -318,6 +449,9 @@ def build_measurement_provider(
     config: Mapping[str, Any], client, *, context: AppContext | None = None
 ):
     kind = str(config["measurement_kind"])
+    if kind == "bpm_dispersion":
+        source = config["measurement_sources"][config["measurement_source_id"]]
+        return BpmDispersionProvider(client, source)
     if kind == "bpm_transport":
         if context is None:
             raise MachineProfileError(

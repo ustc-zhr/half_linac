@@ -301,6 +301,9 @@
     "ESA_ENERGY": {
       "setpoint": "IRFEL:AP:ENG:A3:ao"
     },
+    "FCT1": {
+      "sum": "IRFEL:BD:CT:CH1:WAV:ASUM"
+    },
     "ICT02": {
       "current": "IRFEL:BD:CT:CT2:I"
     },

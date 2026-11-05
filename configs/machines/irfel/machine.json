@@ -1142,7 +1142,7 @@
       "id": "LLRF02",
       "kind": "rf",
       "display_name": "LLRF02",
-      "order": 67,
+      "order": 68,
       "tags": ["rf", "llrf", "wrapped_phase"],
       "limits": {
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
@@ -1231,10 +1231,24 @@
       ]
     },
     {
+      "id": "FCT1",
+      "kind": "ct",
+      "display_name": "FCT CH1 ASUM",
+      "order": 67,
+      "tags": [
+        "diagnostics",
+        "beam_present"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "sum"
+      ]
+    },
+    {
       "id": "ICT02",
       "kind": "ct",
       "display_name": "ICT2",
-      "order": 67,
+      "order": 68,
       "tags": [
         "diagnostics"
       ],
@@ -1247,7 +1261,7 @@
       "id": "ICT03",
       "kind": "ct",
       "display_name": "ICT3",
-      "order": 68,
+      "order": 69,
       "tags": [
         "diagnostics"
       ],
@@ -1260,7 +1274,7 @@
       "id": "ICT04",
       "kind": "ct",
       "display_name": "ICT4",
-      "order": 69,
+      "order": 70,
       "tags": [
         "diagnostics"
       ],
