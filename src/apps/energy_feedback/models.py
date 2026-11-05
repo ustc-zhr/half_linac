@@ -14,6 +14,7 @@ class PVReading:
     connected: bool
     source_timestamp: float | None
     error: str = ""
+    monitor_received_at: float | None = None
 
 
 @dataclass(frozen=True)

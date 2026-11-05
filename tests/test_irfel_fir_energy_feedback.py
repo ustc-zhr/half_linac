@@ -55,8 +55,21 @@ CALIBRATION = {
 }
 
 
-def reading(key: str, value: float, timestamp: float = 100.0) -> PVReading:
-    return PVReading(key, f"PV:{key}", value, True, timestamp)
+def reading(
+    key: str,
+    value: float,
+    timestamp: float = 100.0,
+    *,
+    monitor_received_at: float | None = None,
+) -> PVReading:
+    return PVReading(
+        key,
+        f"PV:{key}",
+        value,
+        True,
+        timestamp,
+        monitor_received_at=monitor_received_at,
+    )
 
 
 class FakeClient:
@@ -162,6 +175,58 @@ class BpmDispersionProviderTests(unittest.TestCase):
         lost = provider.sample(100.0)
         self.assertFalse(lost.quality.valid)
         self.assertIn("FCT", lost.quality.reason)
+
+    def test_monitor_receive_policy_accepts_legacy_bpm_source_timestamps(self):
+        source = provider_source()
+        source["bpm_timestamp_policy"] = "monitor_receive"
+        values = {
+            key: reading(
+                key,
+                value,
+                1.0,
+                monitor_received_at=100.0,
+            )
+            for key, value in {
+                "bpm.BPM02.x": 2.0,
+                "bpm.BPM03.x": 4.0,
+                "bpm.BPM04.x": 8.0,
+                "bpm.BPM05.x": 0.0,
+            }.items()
+        }
+        values["fct"] = reading("fct", 10.0, 100.0)
+
+        result = BpmDispersionProvider(FakeClient(values), source).sample(100.0)
+
+        self.assertTrue(result.quality.valid, result.quality.reason)
+        self.assertIn("monitor receive time", result.quality.reason)
+        self.assertEqual(
+            result.diagnostic_source_timestamps["bpm.BPM02.x"], 1.0
+        )
+
+    def test_monitor_receive_policy_holds_when_bpm_events_stop(self):
+        source = provider_source()
+        source["bpm_timestamp_policy"] = "monitor_receive"
+        values = {
+            key: reading(
+                key,
+                value,
+                1.0,
+                monitor_received_at=90.0,
+            )
+            for key, value in {
+                "bpm.BPM02.x": 2.0,
+                "bpm.BPM03.x": 4.0,
+                "bpm.BPM04.x": 8.0,
+                "bpm.BPM05.x": 0.0,
+            }.items()
+        }
+        values["fct"] = reading("fct", 10.0, 100.0)
+
+        result = BpmDispersionProvider(FakeClient(values), source).sample(100.0)
+
+        self.assertFalse(result.quality.valid)
+        self.assertIn("BPM monitor event", result.quality.reason)
+        self.assertIn("stale", result.quality.reason)
 
 
 class WindowAndControllerTests(unittest.TestCase):
@@ -270,6 +335,12 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertEqual(timing.window_samples, 50)
         self.assertAlmostEqual(timing.effective_control_period_s, 10.0)
         self.assertEqual(config["controller"]["window_aggregation"], "median")
+        self.assertEqual(
+            config["measurement_sources"][config["measurement_source_id"]][
+                "bpm_timestamp_policy"
+            ],
+            "monitor_receive",
+        )
         self.assertEqual(config["pvs"]["fct"], "IRFEL:BD:CT:CH1:WAV:ASUM")
         self.assertTrue(config["write_enabled"])
         self.assertFalse(config["feedback_ready"])

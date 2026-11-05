@@ -128,6 +128,10 @@ class BpmDispersionProvider:
         self.source = source
         self.stale_timeout_s = float(source["stale_timeout_s"])
         self.max_timestamp_skew_s = float(source["max_timestamp_skew_s"])
+        self.bpm_timestamp_policy = str(
+            source.get("bpm_timestamp_policy", "source")
+        )
+        self.bpm_signal_keys = frozenset(source["bpm_signal_keys"])
         self.calibration = dict(source["calibration"])
         self.runtime_metadata = {
             "source_id": source["id"],
@@ -135,6 +139,7 @@ class BpmDispersionProvider:
             "geometry": dict(source["geometry"]),
             "calibration": dict(source["calibration"]),
             "resolved_signals": dict(source["resolved_signals"]),
+            "bpm_timestamp_policy": self.bpm_timestamp_policy,
         }
 
     @property
@@ -153,19 +158,48 @@ class BpmDispersionProvider:
 
         diagnostics: dict[str, float | None] = {}
         timestamps: dict[str, float | None] = {}
+        effective_timestamps: dict[str, float | None] = {}
         errors: dict[str, str] = {}
         for key in self.required_keys:
             reading = readings.get(key)
-            value, issue = _reading_value(reading, sampled_at, self.stale_timeout_s)
+            effective_reading = reading
+            if (
+                reading is not None
+                and key in self.bpm_signal_keys
+                and self.bpm_timestamp_policy == "monitor_receive"
+            ):
+                effective_reading = replace(
+                    reading, source_timestamp=reading.monitor_received_at
+                )
+            value, issue = _reading_value(
+                effective_reading, sampled_at, self.stale_timeout_s
+            )
             diagnostics[key] = value
             timestamps[key] = reading.source_timestamp if reading else None
+            effective_timestamps[key] = (
+                effective_reading.source_timestamp if effective_reading else None
+            )
             if issue:
-                errors[key] = issue
+                if (
+                    key in self.bpm_signal_keys
+                    and self.bpm_timestamp_policy == "monitor_receive"
+                ):
+                    errors[key] = f"BPM monitor event {issue}"
+                else:
+                    errors[key] = issue
 
         issue = next(iter(errors.values()), "")
         bpm_time_keys = tuple(self.source["bpm_signal_keys"]) + (self.source["fct_key"],)
-        valid_times = [timestamps[key] for key in bpm_time_keys if timestamps.get(key) is not None]
-        if not issue and len(valid_times) == len(bpm_time_keys):
+        valid_times = [
+            effective_timestamps[key]
+            for key in bpm_time_keys
+            if effective_timestamps.get(key) is not None
+        ]
+        if (
+            not issue
+            and self.bpm_timestamp_policy == "source"
+            and len(valid_times) == len(bpm_time_keys)
+        ):
             skew = max(valid_times) - min(valid_times)
             diagnostics["bpm_fct_timestamp_skew_s"] = skew
             if skew > self.max_timestamp_skew_s:
@@ -202,6 +236,9 @@ class BpmDispersionProvider:
             issue = "FCT beam-present threshold not met"
 
         source_times = [item for item in valid_times if item is not None]
+        valid_reason = "FIR BPM-dispersion sample valid"
+        if self.bpm_timestamp_policy == "monitor_receive":
+            valid_reason += "; BPM freshness uses monitor receive time"
         return EnergyMeasurement(
             sampled_at=sampled_at,
             source_timestamp=max(source_times) if source_times else None,
@@ -213,7 +250,7 @@ class BpmDispersionProvider:
             diagnostic_errors=errors,
             quality=MeasurementQuality(
                 "HOLD" if issue else "OK",
-                issue or "FIR BPM-dispersion sample valid",
+                issue or valid_reason,
                 connected=not any("disconnected" in item for item in errors.values()),
                 stale=any("stale" in item for item in errors.values()),
             ),

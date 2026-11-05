@@ -1,11 +1,13 @@
 """Configured EPICS access for energy feedback.
 
-Writes are limited to keys resolved from the machine profile. Source
-timestamps come from Channel Access metadata rather than the polling clock.
+Writes are limited to keys resolved from the machine profile. Channel Access
+source timestamps and local monitor-event receipt times are kept separately.
 """
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Iterable, Mapping
 from typing import Protocol
 
@@ -50,10 +52,26 @@ class EpicsPVClient:
                 f"Writable PV keys are not configured: {unknown_writable}"
             )
         self.connection_timeout_s = float(connection_timeout_s)
-        self._pvs = {
-            key: PV(name, auto_monitor=True)
-            for key, name in self.pv_names.items()
-        }
+        self._monitor_lock = threading.Lock()
+        self._monitor_received_at: dict[str, float] = {}
+        self._pvs = {}
+        for key, name in self.pv_names.items():
+            pv = PV(name, auto_monitor=True)
+            self._pvs[key] = pv
+            add_callback = getattr(pv, "add_callback", None)
+            if callable(add_callback):
+                add_callback(self._monitor_callback(key))
+
+    def _monitor_callback(self, key: str):
+        def record_event(**_kwargs) -> None:
+            with self._monitor_lock:
+                self._monitor_received_at[key] = time.time()
+
+        return record_event
+
+    def _monitor_time(self, key: str) -> float | None:
+        with self._monitor_lock:
+            return self._monitor_received_at.get(key)
 
     def read_many(self, keys: Iterable[str]) -> dict[str, PVReading]:
         readings: dict[str, PVReading] = {}
@@ -67,14 +85,26 @@ class EpicsPVClient:
                 )
                 if not connected:
                     readings[key] = PVReading(
-                        key, pv_name, None, False, None, "PV connection timeout"
+                        key,
+                        pv_name,
+                        None,
+                        False,
+                        None,
+                        "PV connection timeout",
+                        self._monitor_time(key),
                     )
                     continue
                 value = pv.get(timeout=self.connection_timeout_s, use_monitor=True)
                 timestamp = getattr(pv, "timestamp", None)
                 if value is None:
                     readings[key] = PVReading(
-                        key, pv_name, None, True, _timestamp(timestamp), "PV returned None"
+                        key,
+                        pv_name,
+                        None,
+                        True,
+                        _timestamp(timestamp),
+                        "PV returned None",
+                        self._monitor_time(key),
                     )
                     continue
                 readings[key] = PVReading(
@@ -83,10 +113,17 @@ class EpicsPVClient:
                     float(value),
                     True,
                     _timestamp(timestamp),
+                    monitor_received_at=self._monitor_time(key),
                 )
             except Exception as exc:  # noqa: BLE001 - failures become HOLD data
                 readings[key] = PVReading(
-                    key, pv_name, None, bool(getattr(pv, "connected", False)), None, str(exc)
+                    key,
+                    pv_name,
+                    None,
+                    bool(getattr(pv, "connected", False)),
+                    None,
+                    str(exc),
+                    self._monitor_time(key),
                 )
         return readings
 

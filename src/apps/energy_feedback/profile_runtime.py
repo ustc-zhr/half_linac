@@ -152,6 +152,9 @@ def load_runtime_config(
             "calibration": copy.deepcopy(dict(measurement["calibration"])),
             "stale_timeout_s": float(workflow["runtime"]["stale_timeout_s"]),
             "max_timestamp_skew_s": float(measurement["max_timestamp_skew_s"]),
+            "bpm_timestamp_policy": str(
+                measurement.get("bpm_timestamp_policy", "source")
+            ),
             "bpm_keys": bpm_keys,
             "bpm_signal_keys": tuple(bpm_signal_keys),
             "q_keys": (

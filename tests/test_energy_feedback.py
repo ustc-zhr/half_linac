@@ -486,6 +486,33 @@ class FeedbackWriterTests(unittest.TestCase):
             client.write("energy", 1.0)
         self.assertTrue(client.write("a.set", 1.0))
 
+    def test_epics_client_records_monitor_event_receive_time(self):
+        class FakePV:
+            def __init__(self, _name, auto_monitor=True):
+                self.connected = True
+                self.timestamp = 1.0
+                self.callback = None
+
+            def add_callback(self, callback):
+                self.callback = callback
+
+            def get(self, **_kwargs):
+                return 2.0
+
+        with (
+            patch.dict(sys.modules, {"epics": SimpleNamespace(PV=FakePV)}),
+            patch(
+                "half_linac.src.apps.energy_feedback.client.time.time",
+                return_value=100.0,
+            ),
+        ):
+            client = EpicsPVClient({"energy": "SYN:ENERGY"})
+            client._pvs["energy"].callback()
+            result = client.read_many(("energy",))["energy"]
+
+        self.assertEqual(result.source_timestamp, 1.0)
+        self.assertEqual(result.monitor_received_at, 100.0)
+
 
 def synthetic_profile() -> MachineProfile:
     energy = ElementConfig(

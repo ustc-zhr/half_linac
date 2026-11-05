@@ -1391,7 +1391,13 @@ class EnergyFeedbackWindow(QMainWindow):
     def _set_data_status(self, measurement) -> None:
         quality = measurement.quality
         if quality.valid:
-            value, tone = "OK", "success"
+            source = self.config["measurement_sources"][
+                self.config["measurement_source_id"]
+            ]
+            if source.get("bpm_timestamp_policy") == "monitor_receive":
+                value, tone = "RX Time", "warning"
+            else:
+                value, tone = "OK", "success"
         elif not quality.connected:
             value, tone = "Disconnected", "danger"
         elif quality.stale:
@@ -2180,8 +2186,32 @@ class EnergyFeedbackWindow(QMainWindow):
             self.source_detail_value.setText(
                 f"Model ready · {details.get('model_line', '—')} · {quadrupoles}"
             )
+        elif details.get("bpm_timestamp_policy") == "monitor_receive":
+            self.source_detail_value.setVisible(True)
+            self.source_detail_value.setText(
+                "Commissioning mode · BPM freshness uses monitor receive time"
+            )
+            self.source_detail_value.setToolTip(
+                "BPM EPICS source timestamps are ignored; FCT, magnet and RF/HV "
+                "timestamps remain enforced."
+            )
 
     def _update_source_detail(self, measurement: object) -> None:
+        if self.config["measurement_kind"] == "bpm_dispersion":
+            source = self.config["measurement_sources"][
+                self.config["measurement_source_id"]
+            ]
+            compatibility_mode = (
+                source.get("bpm_timestamp_policy") == "monitor_receive"
+            )
+            self.source_detail_value.setVisible(compatibility_mode)
+            self.source_detail_value.setText(
+                "Commissioning mode · BPM freshness uses monitor receive time"
+                if compatibility_mode
+                else ""
+            )
+            self.source_detail_value.setToolTip(measurement.quality.reason)
+            return
         if self.config["measurement_kind"] != "bpm_transport":
             self.source_detail_value.setVisible(False)
             self.source_detail_value.setText("")

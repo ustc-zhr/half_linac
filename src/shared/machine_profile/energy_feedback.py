@@ -278,6 +278,13 @@ def _validate_bpm_dispersion_workflow(
     if capabilities != ["energy_proxy"]:
         _fail(profile, "bpm_dispersion capabilities must be exactly ['energy_proxy']")
 
+    bpm_timestamp_policy = measurement.get("bpm_timestamp_policy", "source")
+    if bpm_timestamp_policy not in {"source", "monitor_receive"}:
+        _fail(
+            profile,
+            "measurement.bpm_timestamp_policy must be 'source' or 'monitor_receive'",
+        )
+
     observable = _mapping(profile, measurement.get("observable"), "measurement.observable")
     _text(profile, observable.get("label"), "measurement.observable.label")
     if observable.get("unit") != "mm":
