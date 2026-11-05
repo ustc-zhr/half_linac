@@ -166,6 +166,7 @@ def load_runtime_config(
             "quadrupole_ids": quadrupole_ids,
             "quadrupole_keys": quadrupole_keys,
             "guard_keys": guard_keys,
+            "source_timestamp_exempt_keys": (guard_keys["hv_setpoint"],),
             "rf_safety": {
                 "unit_id": safety_unit_id,
                 "default_feedback_channel": str(hv_unit["default_feedback_channel"]),

@@ -132,6 +132,9 @@ class BpmDispersionProvider:
             source.get("bpm_timestamp_policy", "source")
         )
         self.bpm_signal_keys = frozenset(source["bpm_signal_keys"])
+        self.source_timestamp_exempt_keys = frozenset(
+            source.get("source_timestamp_exempt_keys", ())
+        )
         self.calibration = dict(source["calibration"])
         self.runtime_metadata = {
             "source_id": source["id"],
@@ -172,7 +175,12 @@ class BpmDispersionProvider:
                     reading, source_timestamp=reading.monitor_received_at
                 )
             value, issue = _reading_value(
-                effective_reading, sampled_at, self.stale_timeout_s
+                effective_reading,
+                sampled_at,
+                self.stale_timeout_s,
+                check_source_timestamp=(
+                    key not in self.source_timestamp_exempt_keys
+                ),
             )
             diagnostics[key] = value
             timestamps[key] = reading.source_timestamp if reading else None
@@ -293,6 +301,8 @@ def _reading_value(
     reading: PVReading | None,
     now: float,
     stale_timeout_s: float,
+    *,
+    check_source_timestamp: bool = True,
 ) -> tuple[float | None, str]:
     if reading is None:
         return None, "result missing"
@@ -302,6 +312,8 @@ def _reading_value(
         return None, reading.error
     if reading.value is None or not math.isfinite(reading.value):
         return None, "not finite"
+    if not check_source_timestamp:
+        return float(reading.value), ""
     if reading.source_timestamp is None:
         return None, "source timestamp missing"
     age = now - reading.source_timestamp

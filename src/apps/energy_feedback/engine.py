@@ -158,7 +158,12 @@ def evaluate_shadow(
     values: dict[str, float] = {}
     for actuator in group.actuators:
         reading = actuator_readbacks.get(actuator.id)
-        issue = _readback_issue(reading, timestamp, stale_timeout_s)
+        issue = _readback_issue(
+            reading,
+            timestamp,
+            stale_timeout_s,
+            check_source_timestamp=(actuator.command_basis != "setpoint"),
+        )
         if issue:
             return FeedbackDecision(
                 "HOLD", f"actuator {actuator.id} {issue}", error_mev
@@ -368,6 +373,8 @@ def _readback_issue(
     reading: PVReading | None,
     now: float,
     stale_timeout_s: float,
+    *,
+    check_source_timestamp: bool = True,
 ) -> str:
     if reading is None:
         return "readback missing"
@@ -377,6 +384,8 @@ def _readback_issue(
         return f"readback invalid: {reading.error}"
     if reading.value is None or not math.isfinite(reading.value):
         return "readback is not finite"
+    if not check_source_timestamp:
+        return ""
     if reading.source_timestamp is None:
         return "readback source timestamp missing"
     age = now - reading.source_timestamp

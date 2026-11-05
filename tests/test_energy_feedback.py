@@ -125,6 +125,7 @@ def actuator(
     operating_range: tuple[float, float] = (-20.0, 20.0),
     machine_limit: tuple[float, float] = (-30.0, 30.0),
     cyclic_period: float | None = None,
+    command_basis: str = "readback",
 ) -> ShadowActuator:
     return ShadowActuator(
         id=actuator_id,
@@ -140,6 +141,7 @@ def actuator(
         verify_tolerance=0.01,
         command_precision=3,
         cyclic_period=cyclic_period,
+        command_basis=command_basis,
     )
 
 
@@ -333,6 +335,18 @@ class ShadowEngineTests(unittest.TestCase):
         )
         self.assertEqual(invalid_response.state, "HOLD")
         self.assertEqual(invalid_response.commands, ())
+
+    def test_static_setpoint_timestamp_does_not_block_shadow_evaluation(self):
+        result = evaluate_shadow(
+            measurement(),
+            group(actuator("a", command_basis="setpoint")),
+            {"a": reading("a", 0.0, timestamp=1.0)},
+            stale_timeout_s=3.0,
+            now=101.0,
+        )
+
+        self.assertEqual(result.state, "SHADOW")
+        self.assertTrue(result.commands)
 
     def test_cyclic_phase_crosses_positive_boundary_continuously(self):
         phase = actuator(

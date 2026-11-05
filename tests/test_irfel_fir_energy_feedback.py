@@ -119,6 +119,7 @@ def provider_source() -> dict[str, object]:
         "bpm_signal_keys": signal_keys[:-1],
         "fct_key": "fct",
         "q_keys": ("bpm.BPM02.x", "bpm.BPM03.x", "bpm.BPM04.x"),
+        "source_timestamp_exempt_keys": (),
     }
 
 
@@ -227,6 +228,23 @@ class BpmDispersionProviderTests(unittest.TestCase):
         self.assertFalse(result.quality.valid)
         self.assertIn("BPM monitor event", result.quality.reason)
         self.assertIn("stale", result.quality.reason)
+
+    def test_static_hv_setpoint_timestamp_is_not_a_measurement_hold(self):
+        source = provider_source()
+        source["signal_keys"] = (*source["signal_keys"], "guard.hv_setpoint")
+        source["source_timestamp_exempt_keys"] = ("guard.hv_setpoint",)
+        values = {
+            "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0),
+            "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0),
+            "bpm.BPM04.x": reading("bpm.BPM04.x", 8.0),
+            "bpm.BPM05.x": reading("bpm.BPM05.x", 0.0),
+            "fct": reading("fct", 10.0),
+            "guard.hv_setpoint": reading("guard.hv_setpoint", 39.0, 1.0),
+        }
+
+        result = BpmDispersionProvider(FakeClient(values), source).sample(100.0)
+
+        self.assertTrue(result.quality.valid, result.quality.reason)
 
 
 class WindowAndControllerTests(unittest.TestCase):
@@ -351,6 +369,11 @@ class IrfelProfileTests(unittest.TestCase):
             )
         )
         self.assertEqual(config["pvs"]["fct"], "IRFEL:BD:CT:CH1:WAV:ASUM")
+        source = config["measurement_sources"][config["measurement_source_id"]]
+        self.assertEqual(
+            source["source_timestamp_exempt_keys"],
+            (source["guard_keys"]["hv_setpoint"],),
+        )
         self.assertTrue(config["write_enabled"])
         self.assertFalse(config["feedback_ready"])
         self.assertIn("not marked ready", config["feedback_block_reason"])
