@@ -406,6 +406,8 @@ def _validate_bpm_dispersion_workflow(
         _fail(profile, "controller.mode must be 'I' or 'PI'")
     _number(profile, controller.get("kp"), "controller.kp", nonnegative=True)
     _number(profile, controller.get("ki"), "controller.ki", nonnegative=True)
+    if controller.get("window_aggregation") not in {"median", "mean"}:
+        _fail(profile, "controller.window_aggregation must be 'median' or 'mean'")
     control_period = _number(
         profile, controller.get("control_period_s"), "controller.control_period_s", positive=True
     )

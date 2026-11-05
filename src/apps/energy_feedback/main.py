@@ -353,6 +353,7 @@ class AcquisitionThread(QThread):
                     kp=float(controller.get("kp", 0.0)),
                     ki=float(controller.get("ki", 0.1)),
                     period_s=control_timing.effective_control_period_s,
+                    aggregation=str(controller["window_aggregation"]),
                 )
                 rf_hv_checker = build_rf_hv_safety_checker(source)
                 timing_parameters = {
@@ -548,7 +549,7 @@ class AcquisitionThread(QThread):
                             )
                         else:
                             guard_issue = check_session_guards(
-                                fir_result.medians, fir.reference, source["calibration"]
+                                fir_result.aggregates, fir.reference, source["calibration"]
                             )
                             aggregate = rf_hv_aggregate(
                                 instantaneous_diagnostics, source

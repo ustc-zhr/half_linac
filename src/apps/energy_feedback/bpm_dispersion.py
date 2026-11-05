@@ -14,7 +14,11 @@ from half_linac.src.shared.rf_hv_safety import (
 )
 
 from .client import PVClient
-from .engine import IncrementalPIController, NonOverlappingMedianWindow, PIProposal
+from .engine import (
+    IncrementalPIController,
+    NonOverlappingAggregateWindow,
+    PIProposal,
+)
 from .models import EnergyMeasurement, FeedbackObservable, MeasurementQuality, PVReading
 
 
@@ -66,45 +70,49 @@ class FirSessionReference:
 
 def capture_session_reference(
     target_q_mm: float,
-    medians: Mapping[str, float],
+    aggregates: Mapping[str, float],
     quadrupole_ids: tuple[str, ...],
     *,
     window_sequence: int,
 ) -> FirSessionReference:
     required = ["bpm.BPM05.x", "fct", *(f"quad.{item}" for item in quadrupole_ids)]
-    missing = [key for key in required if key not in medians or not math.isfinite(medians[key])]
+    missing = [
+        key
+        for key in required
+        if key not in aggregates or not math.isfinite(aggregates[key])
+    ]
     if missing:
         raise ValueError(f"session reference fields missing: {missing}")
     return FirSessionReference(
         target_q_mm=float(target_q_mm),
-        bpm05_x_mm=float(medians["bpm.BPM05.x"]),
-        fct=float(medians["fct"]),
+        bpm05_x_mm=float(aggregates["bpm.BPM05.x"]),
+        fct=float(aggregates["fct"]),
         quadrupoles_a={
-            item: float(medians[f"quad.{item}"]) for item in quadrupole_ids
+            item: float(aggregates[f"quad.{item}"]) for item in quadrupole_ids
         },
         window_sequence=int(window_sequence),
     )
 
 
 def check_session_guards(
-    medians: Mapping[str, float],
+    aggregates: Mapping[str, float],
     reference: FirSessionReference,
     calibration: Mapping[str, Any],
 ) -> str:
     issue = calibration_issue(calibration)
     if issue:
         return issue
-    fct = medians.get("fct")
+    fct = aggregates.get("fct")
     if fct is None or not math.isfinite(fct) or abs(fct) < float(calibration["fct_min"]):
         return "FCT beam-present threshold not met"
-    bpm05 = medians.get("bpm.BPM05.x")
+    bpm05 = aggregates.get("bpm.BPM05.x")
     if bpm05 is None or not math.isfinite(bpm05):
         return "BPM05 exit orbit is unavailable"
     if abs(bpm05 - reference.bpm05_x_mm) > float(calibration["bpm05_max_offset_mm"]):
         return "BPM05 exit orbit offset exceeds limit"
     tolerance = float(calibration["quadrupole_max_delta_a"])
     for quad_id, initial in reference.quadrupoles_a.items():
-        current = medians.get(f"quad.{quad_id}")
+        current = aggregates.get(f"quad.{quad_id}")
         if current is None or not math.isfinite(current):
             return f"{quad_id} readback is unavailable"
         if abs(current - initial) > tolerance:
@@ -271,7 +279,7 @@ def _reading_value(
 class FirWindowResult:
     sequence: int
     measurement: EnergyMeasurement
-    medians: Mapping[str, float]
+    aggregates: Mapping[str, float]
 
 
 class FirFeedbackCoordinator:
@@ -285,10 +293,13 @@ class FirFeedbackCoordinator:
         kp: float = 0.0,
         ki: float = 0.1,
         period_s: float = 10.0,
+        aggregation: str = "median",
     ) -> None:
         self.source = source
         self.calibration = dict(source["calibration"])
-        self.window = NonOverlappingMedianWindow(window_samples)
+        self.window = NonOverlappingAggregateWindow(
+            window_samples, aggregation=aggregation
+        )
         self.controller = IncrementalPIController(kp=kp, ki=ki, period_s=period_s)
         self.reference: FirSessionReference | None = None
         self.latest_window: FirWindowResult | None = None
@@ -319,7 +330,7 @@ class FirFeedbackCoordinator:
         )
         if completed is None:
             return None
-        sequence, q_median, medians = completed
+        sequence, q_window, aggregates = completed
         target = self.reference.target_q_mm if self.reference is not None else None
         observable = measurement.observable
         assert observable is not None
@@ -327,19 +338,19 @@ class FirFeedbackCoordinator:
             measurement,
             observable=replace(
                 observable,
-                value=q_median,
+                value=q_window,
                 target=target,
-                error=q_median - target if target is not None else None,
+                error=q_window - target if target is not None else None,
             ),
             diagnostics={
                 **dict(measurement.diagnostics),
-                **dict(medians),
-                "q_window_mm": q_median,
+                **dict(aggregates),
+                "q_window_mm": q_window,
                 "q_target_mm": target,
                 "window_sequence": float(sequence),
             },
         )
-        result = FirWindowResult(sequence, window_measurement, medians)
+        result = FirWindowResult(sequence, window_measurement, aggregates)
         self.latest_window = result
         return result
 
@@ -348,7 +359,7 @@ class FirFeedbackCoordinator:
             raise ValueError("wait for a complete FIR control window")
         self.reference = capture_session_reference(
             self.latest_window.measurement.control_value,
-            self.latest_window.medians,
+            self.latest_window.aggregates,
             tuple(self.source["quadrupole_ids"]),
             window_sequence=self.latest_window.sequence,
         )
@@ -404,11 +415,11 @@ def build_rf_hv_safety_checker(source: Mapping[str, Any]) -> SafetyChecker:
 
 
 def rf_hv_aggregate(
-    medians: Mapping[str, float],
+    values: Mapping[str, float],
     source: Mapping[str, Any],
 ) -> dict[str, float]:
     return {
-        name: float(medians[key])
+        name: float(values[key])
         for name, key in source["guard_keys"].items()
-        if key in medians
+        if key in values
     }

@@ -68,6 +68,7 @@
     "mode": "I",
     "kp": 0.0,
     "ki": 0.1,
+    "window_aggregation": "median",
     "control_period_s": 10.0,
     "require_reference_capture": true
   },

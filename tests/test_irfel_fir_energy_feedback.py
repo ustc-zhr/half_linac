@@ -20,6 +20,7 @@ from half_linac.src.apps.energy_feedback.bpm_dispersion import (
 )
 from half_linac.src.apps.energy_feedback.engine import (
     IncrementalPIController,
+    NonOverlappingAggregateWindow,
     NonOverlappingMedianWindow,
     derive_control_timing,
 )
@@ -176,6 +177,21 @@ class WindowAndControllerTests(unittest.TestCase):
         self.assertEqual(window.pending, 0)
         self.assertIsNone(window.add(4.0, {"x": 40.0}, valid=True))
 
+    def test_window_supports_median_and_mean_aggregation(self):
+        results = {}
+        for aggregation in ("median", "mean"):
+            window = NonOverlappingAggregateWindow(3, aggregation=aggregation)
+            window.add(1.0, {"x": 10.0}, valid=True)
+            window.add(2.0, {"x": 20.0}, valid=True)
+            results[aggregation] = window.add(100.0, {"x": 1000.0}, valid=True)
+
+        self.assertEqual(results["median"], (1, 2.0, {"x": 20.0}))
+        self.assertEqual(results["mean"][0], 1)
+        self.assertAlmostEqual(results["mean"][1], 103.0 / 3.0)
+        self.assertAlmostEqual(results["mean"][2]["x"], 1030.0 / 3.0)
+        with self.assertRaisesRegex(ValueError, "median.*mean"):
+            NonOverlappingAggregateWindow(3, aggregation="latest")
+
     def test_sampling_and_control_periods_are_resolved_independently(self):
         default = derive_control_timing(0.1, 10.0)
         self.assertEqual(default.window_samples, 100)
@@ -231,11 +247,11 @@ class WindowAndControllerTests(unittest.TestCase):
         self.assertEqual(reference.target_q_mm, 4.0)
         self.assertAlmostEqual(reference.bpm05_x_mm, 1.1)
         self.assertEqual(reference.fct, 11.0)
-        self.assertEqual(check_session_guards(completed.medians, reference, CALIBRATION), "")
+        self.assertEqual(check_session_guards(completed.aggregates, reference, CALIBRATION), "")
 
-        bad_bpm = dict(completed.medians, **{"bpm.BPM05.x": 2.0})
+        bad_bpm = dict(completed.aggregates, **{"bpm.BPM05.x": 2.0})
         self.assertIn("BPM05", check_session_guards(bad_bpm, reference, CALIBRATION))
-        bad_quad = dict(completed.medians, **{"quad.QM05": 5.2})
+        bad_quad = dict(completed.aggregates, **{"quad.QM05": 5.2})
         self.assertIn("QM05", check_session_guards(bad_quad, reference, CALIBRATION))
 
 
@@ -253,6 +269,7 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertAlmostEqual(config["runtime"]["sample_period_s"], 0.2)
         self.assertEqual(timing.window_samples, 50)
         self.assertAlmostEqual(timing.effective_control_period_s, 10.0)
+        self.assertEqual(config["controller"]["window_aggregation"], "median")
         self.assertEqual(config["pvs"]["fct"], "IRFEL:BD:CT:CH1:WAV:ASUM")
         self.assertTrue(config["write_enabled"])
         self.assertFalse(config["feedback_ready"])

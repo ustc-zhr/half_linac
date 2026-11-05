@@ -298,13 +298,17 @@ class IncrementalPIController:
         self._previous_error = float(proposal.error)
 
 
-class NonOverlappingMedianWindow:
-    """Collect exactly N valid samples; invalid input discards the partial window."""
+class NonOverlappingAggregateWindow:
+    """Aggregate exactly N valid samples; invalid input clears the window."""
 
-    def __init__(self, size: int):
+    def __init__(self, size: int, *, aggregation: str = "median"):
         if int(size) <= 0:
             raise ValueError("window size must be positive")
+        aggregation = str(aggregation).strip().lower()
+        if aggregation not in {"median", "mean"}:
+            raise ValueError("window aggregation must be 'median' or 'mean'")
         self.size = int(size)
+        self.aggregation = aggregation
         self._values: deque[tuple[float, Mapping[str, float]]] = deque()
         self.sequence = 0
 
@@ -337,15 +341,27 @@ class NonOverlappingMedianWindow:
         self.clear()
         self.sequence += 1
         keys = set.intersection(*(set(row[1]) for row in rows)) if rows else set()
-        medians = {
-            key: float(statistics.median(row[1][key] for row in rows))
+        aggregates = {
+            key: self._aggregate(tuple(row[1][key] for row in rows))
             for key in keys
         }
         return (
             self.sequence,
-            float(statistics.median(row[0] for row in rows)),
-            medians,
+            self._aggregate(tuple(row[0] for row in rows)),
+            aggregates,
         )
+
+    def _aggregate(self, values: tuple[float, ...]) -> float:
+        if self.aggregation == "mean":
+            return float(statistics.fmean(values))
+        return float(statistics.median(values))
+
+
+class NonOverlappingMedianWindow(NonOverlappingAggregateWindow):
+    """Backward-compatible median-only window."""
+
+    def __init__(self, size: int):
+        super().__init__(size, aggregation="median")
 
 
 def _readback_issue(
