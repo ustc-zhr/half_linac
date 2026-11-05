@@ -295,24 +295,22 @@ def _validate_bpm_dispersion_workflow(
         _text(profile, item, "measurement.bpm_elements[]")
         for item in _sequence(profile, measurement.get("bpm_elements"), "measurement.bpm_elements")
     ]
-    if len(bpm_ids) != 5 or len(set(bpm_ids)) != 5:
-        _fail(profile, "measurement.bpm_elements must contain five distinct BPMs")
+    if len(bpm_ids) != 3 or len(set(bpm_ids)) != 3:
+        _fail(profile, "measurement.bpm_elements must contain three distinct BPMs")
     for bpm_id in bpm_ids:
         element = profile.get_element(bpm_id)
         if element.kind != "bpm":
             _fail(profile, f"measurement element {bpm_id!r} is not a BPM")
-        for channel in ("x", "y"):
-            for backend in backends:
-                if backend not in element.channels.get(channel, {}):
-                    _fail(profile, f"{bpm_id}.{channel} is unavailable on {backend}")
+        for backend in backends:
+            if backend not in element.channels.get("x", {}):
+                _fail(profile, f"{bpm_id}.x is unavailable on {backend}")
 
     geometry = _mapping(profile, measurement.get("geometry"), "measurement.geometry")
     upstream = list(_sequence(profile, geometry.get("upstream_bpms"), "measurement.geometry.upstream_bpms"))
     dispersive = _text(profile, geometry.get("dispersive_bpm"), "measurement.geometry.dispersive_bpm")
-    exit_bpm = _text(profile, geometry.get("exit_guard_bpm"), "measurement.geometry.exit_guard_bpm")
-    if len(upstream) != 2 or len(set((*upstream, dispersive, exit_bpm))) != 4:
-        _fail(profile, "FIR geometry requires two upstream, one dispersive, and one exit BPM")
-    if any(item not in bpm_ids for item in (*upstream, dispersive, exit_bpm)):
+    if len(upstream) != 2 or len(set((*upstream, dispersive))) != 3:
+        _fail(profile, "FIR geometry requires two upstream and one dispersive BPM")
+    if any(item not in bpm_ids for item in (*upstream, dispersive)):
         _fail(profile, "FIR geometry BPMs must be present in bpm_elements")
     _text(profile, geometry.get("note"), "measurement.geometry.note")
 
@@ -322,21 +320,6 @@ def _validate_bpm_dispersion_workflow(
     if profile.get_element(fct_id).kind != "ct":
         _fail(profile, "measurement.fct must reference a current-transformer element")
 
-    quadrupoles = [
-        _text(profile, item, "measurement.quadrupole_elements[]")
-        for item in _sequence(
-            profile, measurement.get("quadrupole_elements"), "measurement.quadrupole_elements"
-        )
-    ]
-    if len(quadrupoles) != 6 or len(set(quadrupoles)) != 6:
-        _fail(profile, "measurement.quadrupole_elements must contain six distinct quadrupoles")
-    for quad_id in quadrupoles:
-        element = profile.get_element(quad_id)
-        if element.kind != "quad":
-            _fail(profile, f"measurement element {quad_id!r} is not a quadrupole")
-        for backend in backends:
-            if backend not in element.channels.get("current_readback", {}):
-                _fail(profile, f"{quad_id}.current_readback is unavailable on {backend}")
     timestamp_skew_limit = _number(
         profile,
         measurement.get("max_timestamp_skew_s"),
@@ -354,8 +337,6 @@ def _validate_bpm_dispersion_workflow(
         "response_q_mm_per_kv",
         "fct_min",
         "q_action_range_mm",
-        "bpm05_max_offset_mm",
-        "quadrupole_max_delta_a",
     )
     for key in numeric_fields:
         value = calibration.get(key)
@@ -366,8 +347,6 @@ def _validate_bpm_dispersion_workflow(
             if key in {
                 "fct_min",
                 "q_action_range_mm",
-                "bpm05_max_offset_mm",
-                "quadrupole_max_delta_a",
             } and number <= 0:
                 _fail(profile, f"measurement.calibration.{key} must be positive")
     if ready:

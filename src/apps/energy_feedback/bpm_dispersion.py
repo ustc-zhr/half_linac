@@ -22,15 +22,37 @@ from .engine import (
 from .models import EnergyMeasurement, FeedbackObservable, MeasurementQuality, PVReading
 
 
-CALIBRATION_FIELDS = (
-    "a",
-    "b",
-    "response_q_mm_per_kv",
-    "fct_min",
-    "q_action_range_mm",
-    "bpm05_max_offset_mm",
-    "quadrupole_max_delta_a",
-)
+def _numeric_issue(calibration: Mapping[str, Any], key: str) -> str:
+    try:
+        value = float(calibration.get(key))
+    except (TypeError, ValueError):
+        return f"FIR calibration {key} is missing"
+    if not math.isfinite(value):
+        return f"FIR calibration {key} is not finite"
+    return ""
+
+
+def observable_calibration_issue(calibration: Mapping[str, Any]) -> str:
+    for key in ("a", "b"):
+        issue = _numeric_issue(calibration, key)
+        if issue:
+            return issue
+    return ""
+
+
+def shadow_calibration_issue(calibration: Mapping[str, Any]) -> str:
+    issue = observable_calibration_issue(calibration)
+    if issue:
+        return issue
+    for key in ("response_q_mm_per_kv", "q_action_range_mm"):
+        issue = _numeric_issue(calibration, key)
+        if issue:
+            return issue
+    if float(calibration["response_q_mm_per_kv"]) == 0:
+        return "FIR calibration response_q_mm_per_kv must be non-zero"
+    if float(calibration["q_action_range_mm"]) <= 0:
+        return "FIR calibration q_action_range_mm must be positive"
+    return ""
 
 
 def calibration_issue(calibration: Mapping[str, Any]) -> str:
@@ -39,65 +61,36 @@ def calibration_issue(calibration: Mapping[str, Any]) -> str:
     version = str(calibration.get("version", "")).strip()
     if not version:
         return "FIR calibration version is missing"
-    for key in CALIBRATION_FIELDS:
-        try:
-            value = float(calibration.get(key))
-        except (TypeError, ValueError):
-            return f"FIR calibration {key} is missing"
-        if not math.isfinite(value):
-            return f"FIR calibration {key} is not finite"
-    if float(calibration["response_q_mm_per_kv"]) == 0:
-        return "FIR calibration response_q_mm_per_kv must be non-zero"
-    for key in (
-        "fct_min",
-        "q_action_range_mm",
-        "bpm05_max_offset_mm",
-        "quadrupole_max_delta_a",
-    ):
-        if float(calibration[key]) <= 0:
-            return f"FIR calibration {key} must be positive"
+    issue = shadow_calibration_issue(calibration)
+    if issue:
+        return issue
+    issue = _numeric_issue(calibration, "fct_min")
+    if issue:
+        return issue
+    if float(calibration["fct_min"]) <= 0:
+        return "FIR calibration fct_min must be positive"
     return ""
 
 
 @dataclass(frozen=True)
 class FirSessionReference:
     target_q_mm: float
-    bpm05_x_mm: float
-    fct: float
-    quadrupoles_a: Mapping[str, float]
     window_sequence: int
 
 
 def capture_session_reference(
     target_q_mm: float,
-    aggregates: Mapping[str, float],
-    quadrupole_ids: tuple[str, ...],
     *,
     window_sequence: int,
 ) -> FirSessionReference:
-    required = ["bpm.BPM05.x", "fct", *(f"quad.{item}" for item in quadrupole_ids)]
-    missing = [
-        key
-        for key in required
-        if key not in aggregates or not math.isfinite(aggregates[key])
-    ]
-    if missing:
-        raise ValueError(f"session reference fields missing: {missing}")
-    return FirSessionReference(
-        target_q_mm=float(target_q_mm),
-        bpm05_x_mm=float(aggregates["bpm.BPM05.x"]),
-        fct=float(aggregates["fct"]),
-        quadrupoles_a={
-            item: float(aggregates[f"quad.{item}"]) for item in quadrupole_ids
-        },
-        window_sequence=int(window_sequence),
-    )
+    target_q_mm = float(target_q_mm)
+    if not math.isfinite(target_q_mm):
+        raise ValueError("FIR target is not finite")
+    return FirSessionReference(target_q_mm, int(window_sequence))
 
 
 def check_session_guards(
-    aggregates: Mapping[str, float],
-    reference: FirSessionReference,
-    calibration: Mapping[str, Any],
+    aggregates: Mapping[str, float], calibration: Mapping[str, Any]
 ) -> str:
     issue = calibration_issue(calibration)
     if issue:
@@ -105,18 +98,6 @@ def check_session_guards(
     fct = aggregates.get("fct")
     if fct is None or not math.isfinite(fct) or abs(fct) < float(calibration["fct_min"]):
         return "FCT beam-present threshold not met"
-    bpm05 = aggregates.get("bpm.BPM05.x")
-    if bpm05 is None or not math.isfinite(bpm05):
-        return "BPM05 exit orbit is unavailable"
-    if abs(bpm05 - reference.bpm05_x_mm) > float(calibration["bpm05_max_offset_mm"]):
-        return "BPM05 exit orbit offset exceeds limit"
-    tolerance = float(calibration["quadrupole_max_delta_a"])
-    for quad_id, initial in reference.quadrupoles_a.items():
-        current = aggregates.get(f"quad.{quad_id}")
-        if current is None or not math.isfinite(current):
-            return f"{quad_id} readback is unavailable"
-        if abs(current - initial) > tolerance:
-            return f"{quad_id} changed beyond session tolerance"
     return ""
 
 
@@ -133,6 +114,9 @@ class BpmDispersionProvider:
         )
         self.source_timestamp_policy = str(
             source.get("source_timestamp_policy", "enforce")
+        )
+        self.measurement_keys = frozenset(
+            source.get("measurement_keys", source["q_keys"])
         )
         self.bpm_signal_keys = frozenset(source["bpm_signal_keys"])
         self.source_timestamp_exempt_keys = frozenset(
@@ -167,6 +151,7 @@ class BpmDispersionProvider:
         timestamps: dict[str, float | None] = {}
         effective_timestamps: dict[str, float | None] = {}
         errors: dict[str, str] = {}
+        primary_issue = ""
         for key in self.required_keys:
             reading = readings.get(key)
             effective_reading = reading
@@ -178,7 +163,7 @@ class BpmDispersionProvider:
                 effective_reading = replace(
                     reading, source_timestamp=reading.monitor_received_at
                 )
-            value, issue = _reading_value(
+            value, reading_issue = _reading_value(
                 effective_reading,
                 sampled_at,
                 self.stale_timeout_s,
@@ -192,17 +177,19 @@ class BpmDispersionProvider:
             effective_timestamps[key] = (
                 effective_reading.source_timestamp if effective_reading else None
             )
-            if issue:
+            if reading_issue:
+                error = reading_issue
                 if (
                     key in self.bpm_signal_keys
                     and self.bpm_timestamp_policy == "monitor_receive"
                 ):
-                    errors[key] = f"BPM monitor event {issue}"
-                else:
-                    errors[key] = issue
+                    error = f"BPM monitor event {reading_issue}"
+                errors[key] = error
+                if key in self.measurement_keys and not primary_issue:
+                    primary_issue = error
 
-        issue = next(iter(errors.values()), "")
-        bpm_time_keys = tuple(self.source["bpm_signal_keys"]) + (self.source["fct_key"],)
+        issue = primary_issue
+        bpm_time_keys = tuple(self.source["bpm_signal_keys"])
         valid_times = [
             effective_timestamps[key]
             for key in bpm_time_keys
@@ -215,11 +202,11 @@ class BpmDispersionProvider:
             and len(valid_times) == len(bpm_time_keys)
         ):
             skew = max(valid_times) - min(valid_times)
-            diagnostics["bpm_fct_timestamp_skew_s"] = skew
+            diagnostics["bpm_timestamp_skew_s"] = skew
             if skew > self.max_timestamp_skew_s:
-                issue = f"BPM/FCT timestamp skew {skew:.3f} s exceeds limit"
+                issue = f"BPM timestamp skew {skew:.3f} s exceeds limit"
 
-        calibration_problem = calibration_issue(self.calibration)
+        calibration_problem = observable_calibration_issue(self.calibration)
         q_value: float | None = None
         try:
             a = float(self.calibration["a"])
@@ -237,17 +224,6 @@ class BpmDispersionProvider:
             issue = calibration_problem
         if not issue and q_value is None:
             issue = "FIR q observable is unavailable"
-        if (
-            not issue
-            and abs(q_value) >= float(self.calibration["q_action_range_mm"])
-        ):
-            issue = "FIR q exceeds action range"
-        if (
-            not issue
-            and abs(float(diagnostics[self.source["fct_key"]]))
-            < float(self.calibration["fct_min"])
-        ):
-            issue = "FCT beam-present threshold not met"
 
         source_times = [item for item in valid_times if item is not None]
         valid_reason = "FIR BPM-dispersion sample valid"
@@ -267,8 +243,14 @@ class BpmDispersionProvider:
             quality=MeasurementQuality(
                 "HOLD" if issue else "OK",
                 issue or valid_reason,
-                connected=not any("disconnected" in item for item in errors.values()),
-                stale=any("stale" in item for item in errors.values()),
+                connected=not any(
+                    key in self.measurement_keys and "disconnected" in error
+                    for key, error in errors.items()
+                ),
+                stale=any(
+                    key in self.measurement_keys and "stale" in error
+                    for key, error in errors.items()
+                ),
             ),
             diagnostic_source_timestamps=timestamps,
             observable=FeedbackObservable(
@@ -416,8 +398,6 @@ class FirFeedbackCoordinator:
             raise ValueError("wait for a complete FIR control window")
         self.reference = capture_session_reference(
             self.latest_window.measurement.control_value,
-            self.latest_window.aggregates,
-            tuple(self.source["quadrupole_ids"]),
             window_sequence=self.latest_window.sequence,
         )
         self.controller.reset(current_error=0.0)
@@ -471,12 +451,42 @@ def build_rf_hv_safety_checker(source: Mapping[str, Any]) -> SafetyChecker:
     return SafetyChecker(cfg, ref, str(raw["default_feedback_channel"]))
 
 
+def read_closed_loop_inputs(
+    client: PVClient,
+    source: Mapping[str, Any],
+    sampled_at: float,
+) -> tuple[dict[str, float], str]:
+    keys = tuple(source["closed_loop_keys"])
+    readings = client.read_many(keys)
+    values: dict[str, float] = {}
+    exempt_keys = frozenset(source.get("source_timestamp_exempt_keys", ()))
+    check_timestamps = str(
+        source.get("source_timestamp_policy", "enforce")
+    ) != "ignore"
+    for key in keys:
+        value, issue = _reading_value(
+            readings.get(key),
+            sampled_at,
+            float(source["stale_timeout_s"]),
+            check_source_timestamp=check_timestamps and key not in exempt_keys,
+        )
+        if issue:
+            return values, f"{key}: {issue}"
+        assert value is not None
+        values[key] = value
+    return values, ""
+
+
 def rf_hv_aggregate(
-    values: Mapping[str, float],
+    values: Mapping[str, float | None],
     source: Mapping[str, Any],
 ) -> dict[str, float]:
-    return {
-        name: float(values[key])
-        for name, key in source["guard_keys"].items()
-        if key in values
-    }
+    aggregate: dict[str, float] = {}
+    for name, key in source["guard_keys"].items():
+        value = values.get(key)
+        if value is None:
+            continue
+        value = float(value)
+        if math.isfinite(value):
+            aggregate[name] = value
+    return aggregate

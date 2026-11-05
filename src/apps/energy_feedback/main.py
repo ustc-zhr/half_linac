@@ -52,7 +52,9 @@ from half_linac.src.apps.energy_feedback.bpm_dispersion import (
     FirFeedbackCoordinator,
     build_rf_hv_safety_checker,
     check_session_guards,
+    read_closed_loop_inputs,
     rf_hv_aggregate,
+    shadow_calibration_issue,
 )
 from half_linac.src.apps.energy_feedback.client import EpicsPVClient
 from half_linac.src.apps.energy_feedback.cyclic import cyclic_delta
@@ -399,7 +401,6 @@ class AcquisitionThread(QThread):
                 settings = self._settings_snapshot()
                 group = self._configured_group(settings)
                 measurement = provider.sample()
-                instantaneous_diagnostics = measurement.diagnostics
                 fir_result = None
                 if fir is not None:
                     assert control_timing is not None
@@ -551,50 +552,89 @@ class AcquisitionThread(QThread):
                                 "HOLD", "Set Current as Target to capture the FIR reference", None
                             )
                         else:
-                            guard_issue = check_session_guards(
-                                fir_result.aggregates, fir.reference, source["calibration"]
+                            calibration_problem = shadow_calibration_issue(
+                                source["calibration"]
                             )
-                            aggregate = rf_hv_aggregate(
-                                instantaneous_diagnostics, source
-                            )
-                            rf_result = rf_hv_checker.check_aggregate(aggregate)
-                            if guard_issue or not rf_result.ok:
+                            if calibration_problem:
                                 decision = FeedbackDecision(
                                     "HOLD",
-                                    guard_issue or rf_result.reason,
+                                    calibration_problem,
                                     measurement.control_error,
                                 )
                             else:
-                                proposal = fir.proposal(measurement)
-                                parameters = {
-                                    **settings,
-                                    **timing_parameters,
-                                    "kp": fir.controller.kp,
-                                    "ki": fir.controller.ki,
-                                    "p_component": proposal.p_component,
-                                    "i_component": proposal.i_component,
-                                }
-                                decision = evaluate_shadow(
-                                    measurement,
-                                    group,
-                                    command_readings,
-                                    session_origins=origins if feedback_active else None,
-                                    stale_timeout_s=stale_timeout,
-                                    requested_knob_delta=proposal.knob_delta,
-                                    control_parameters=parameters,
-                                    check_source_timestamps=check_source_timestamps,
-                                )
-                                if decision.has_valid_suggestion:
-                                    hv_result = rf_hv_checker.check_aggregate(
-                                        aggregate, decision.commands[0].proposed
-                                    )
-                                    if not hv_result.ok:
-                                        decision = replace(
-                                            decision,
-                                            state="HOLD",
-                                            reason=hv_result.reason,
-                                            commands=(),
+                                aggregate: dict[str, float] = {}
+                                guard_read_issue = ""
+                                guard_issue = ""
+                                rf_result = None
+                                if feedback_active:
+                                    guard_values, guard_read_issue = (
+                                        read_closed_loop_inputs(
+                                            client,
+                                            source,
+                                            measurement.sampled_at,
                                         )
+                                    )
+                                    if not guard_read_issue:
+                                        guard_issue = check_session_guards(
+                                            guard_values,
+                                            source["calibration"],
+                                        )
+                                        aggregate = rf_hv_aggregate(
+                                            guard_values, source
+                                        )
+                                        rf_result = rf_hv_checker.check_aggregate(
+                                            aggregate
+                                        )
+                                if (
+                                    guard_read_issue
+                                    or guard_issue
+                                    or (
+                                        rf_result is not None
+                                        and not rf_result.ok
+                                    )
+                                ):
+                                    decision = FeedbackDecision(
+                                        "HOLD",
+                                        guard_read_issue
+                                        or guard_issue
+                                        or rf_result.reason,
+                                        measurement.control_error,
+                                    )
+                                else:
+                                    proposal = fir.proposal(measurement)
+                                    parameters = {
+                                        **settings,
+                                        **timing_parameters,
+                                        "kp": fir.controller.kp,
+                                        "ki": fir.controller.ki,
+                                        "p_component": proposal.p_component,
+                                        "i_component": proposal.i_component,
+                                    }
+                                    decision = evaluate_shadow(
+                                        measurement,
+                                        group,
+                                        command_readings,
+                                        session_origins=origins if feedback_active else None,
+                                        stale_timeout_s=stale_timeout,
+                                        requested_knob_delta=proposal.knob_delta,
+                                        control_parameters=parameters,
+                                        check_source_timestamps=check_source_timestamps,
+                                    )
+                                    if (
+                                        feedback_active
+                                        and decision.has_valid_suggestion
+                                    ):
+                                        hv_result = rf_hv_checker.check_aggregate(
+                                            aggregate,
+                                            decision.commands[0].proposed,
+                                        )
+                                        if not hv_result.ok:
+                                            decision = replace(
+                                                decision,
+                                                state="HOLD",
+                                                reason=hv_result.reason,
+                                                commands=(),
+                                            )
                     else:
                         try:
                             decision = evaluate_shadow(

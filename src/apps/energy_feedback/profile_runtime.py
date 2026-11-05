@@ -86,26 +86,13 @@ def load_runtime_config(
         for bpm_id in measurement["bpm_elements"]:
             bpm_id = str(bpm_id)
             bpm_keys[bpm_id] = {}
-            for channel in ("x", "y"):
-                key = f"bpm.{bpm_id}.{channel}"
-                add_signal(key, {"element": bpm_id, "channel": channel, "unit": "mm"})
-                bpm_keys[bpm_id][channel] = key
-                bpm_signal_keys.append(key)
-                source_signal_keys.append(key)
+            key = f"bpm.{bpm_id}.x"
+            add_signal(key, {"element": bpm_id, "channel": "x", "unit": "mm"})
+            bpm_keys[bpm_id]["x"] = key
+            bpm_signal_keys.append(key)
+            source_signal_keys.append(key)
         fct_key = "fct"
         add_signal(fct_key, measurement["fct"])
-        source_signal_keys.append(fct_key)
-        quadrupole_ids = tuple(str(item) for item in measurement["quadrupole_elements"])
-        quadrupole_keys: dict[str, str] = {}
-        for quadrupole_id in quadrupole_ids:
-            key = f"quad.{quadrupole_id}"
-            add_signal(
-                key,
-                {"element": quadrupole_id, "channel": "current_readback", "unit": "A"},
-            )
-            quadrupole_keys[quadrupole_id] = key
-            source_signal_keys.append(key)
-
         hv_profile = load_profile(context.profile.machine.id)
         hv_workflow = resolve_hv_feedback_workflow(hv_profile)
         safety_unit_id = str(workflow.get("safety", {}).get("hv_feedback_unit", ""))
@@ -129,7 +116,6 @@ def load_runtime_config(
             key = f"guard.{guard_name}"
             add_signal(key, signal)
             guard_keys[guard_name] = key
-            source_signal_keys.append(key)
         for channel in hv_unit["rf_channels"]:
             channel_id = str(channel["id"])
             for field in ("amplitude", "phase"):
@@ -137,8 +123,13 @@ def load_runtime_config(
                 key = f"guard.{guard_name}"
                 add_signal(key, channel[field])
                 guard_keys[guard_name] = key
-                source_signal_keys.append(key)
 
+        closed_loop_keys = (fct_key, *guard_keys.values())
+        q_keys = (
+            bpm_keys["BPM02"]["x"],
+            bpm_keys["BPM03"]["x"],
+            bpm_keys["BPM04"]["x"],
+        )
         observable = copy.deepcopy(dict(measurement["observable"]))
         measurement_sources[default_measurement_id] = {
             "id": default_measurement_id,
@@ -160,15 +151,11 @@ def load_runtime_config(
             ),
             "bpm_keys": bpm_keys,
             "bpm_signal_keys": tuple(bpm_signal_keys),
-            "q_keys": (
-                bpm_keys["BPM02"]["x"],
-                bpm_keys["BPM03"]["x"],
-                bpm_keys["BPM04"]["x"],
-            ),
+            "measurement_keys": q_keys,
+            "q_keys": q_keys,
             "fct_key": fct_key,
-            "quadrupole_ids": quadrupole_ids,
-            "quadrupole_keys": quadrupole_keys,
             "guard_keys": guard_keys,
+            "closed_loop_keys": closed_loop_keys,
             "source_timestamp_exempt_keys": (guard_keys["hv_setpoint"],),
             "rf_safety": {
                 "unit_id": safety_unit_id,
@@ -178,7 +165,8 @@ def load_runtime_config(
                 "safety": copy.deepcopy(dict(hv_unit["safety"])),
             },
             "resolved_signals": {
-                key: signals[key] for key in source_signal_keys
+                key: signals[key]
+                for key in (*source_signal_keys, *closed_loop_keys)
             },
             "diagnostic_keys": tuple(source_signal_keys),
             "marker_key": marker_key,

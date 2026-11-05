@@ -45,7 +45,7 @@ ACC2 → QM11 → QM12 → BPM07
 当前只有 FIR 束线正常运行，因此第一版仅覆盖：
 
 ```text
-BPM02、BPM03、BPM04、BPM05
+BPM02、BPM03、BPM04
 MODULATOR_HV1
 KLY1/ACC1、Buncher相关RF幅度和相位
 必要的束流存在信号
@@ -92,8 +92,6 @@ BPM02/03/04
   → ACC1场幅及束流能量变化
 ```
 
-BPM05只用于监视dogleg出口和波荡器入口前的轨道，不进入第一版反馈误差。
-
 低电平系统的相位反馈是高压能量反馈运行的外部前提。仓库当前的 `llrf_control` 是幅相操作界面，不包含软件自动相位补偿。第一版需要监视相位读回；如果相位漂移超过限制，能量反馈必须进入 `HOLD`，不能假设软件会自动纠正相位。
 
 ## 4. 现有代码结论
@@ -107,7 +105,7 @@ BPM05只用于监视dogleg出口和波荡器入口前的轨道，不进入第一
 - 通用 `ShadowControlGroup` 与一个或多个执行器；
 - 每步限幅、会话累计限幅、设备绝对范围；
 - setpoint写入、独立readback验证和失败回滚；
-- BPM时间戳、陈旧数据、时间偏斜及四极铁变化的HOLD保护；
+- BPM时间戳、陈旧数据及时间偏斜的HOLD保护；
 - CSV日志与运行元数据；
 - 能量控制互斥锁。
 
@@ -183,11 +181,11 @@ q_energy = x04 - a*x02 - b*x03 - q_reference
 
 其中：
 
+- 首次monitor可暂用 `a = 0`、`b = 0`，此时 `q_energy = x04`，仅用于确认采集链路，不代表轨道扣除已标定；
 - `x02`、`x03`、`x04`均使用水平位置，单位建议统一为mm；
 - `a`、`b`通过固定高压时的上游水平轨道小扫描标定；
 - `q_reference`在开始采集后由操作员确认或由一段稳定数据建立；
 - BPM04是色散区主测量点；
-- BPM05只作下游轨道保护和性能评价。
 
 如果已经有可信的BPM04色散值，可以进一步换算为：
 
@@ -214,25 +212,15 @@ delta_E = E_reference * delta
 7. 验证响应符号、线性区间、延迟和重复性。
 8. 将拟合参数、采样区间、设备读回、工作点及时间写入运行元数据。
 
-### 5.3 测量质量门槛
+### 5.3 分层就绪条件
 
-下列任一情况发生时，provider应返回无效测量并触发HOLD：
+为便于快速开展实机测试，监视、shadow和闭环使用不同的就绪条件：
 
-- BPM02、BPM03或BPM04断连；
-- 任一BPM位置非有限数；
-- BPM时间戳缺失或陈旧；
-- 三个BPM时间戳偏差超过配置值；
-- 束流不存在或强度低于阈值；
-- BPM04位置或 `q_energy` 超出合理范围；
-- 用于诊断的固定磁铁设置发生超限变化；
-- 校准参数缺失、非有限或版本不匹配。
+- q监视只要求BPM02.x、BPM03.x、BPM04.x可读，时间有效，并已配置有限的 `a`、`b`；
+- shadow在q监视基础上要求有限且非零的 `response_q_mm_per_kv`，以及正的 `q_action_range_mm`；
+- 自动闭环再要求标定版本、`fct_min`、FCT束流存在、RF幅相状态和高压状态全部有效。
 
-当前HiFEL machine profile未配置FCT元素，只配置了ICT02～ICT04和BPM的`s`通道。第一版需要明确选择一个beam-present信号：
-
-- 优先增加并使用FCT PV；或
-- 暂时使用可靠的BPM `s`/ICT信号并配置阈值。
-
-不能仅通过“BPM位置是否为零”判断束流存在。
+FCT、RF和高压保护PV不参与持续BPM采样，只在自动闭环启用后按需读取。它们异常时禁止高压写入，但不阻止q监视和shadow。BPM05和四极铁不属于第一版门禁。
 
 ## 6. 第一版控制器
 
@@ -328,7 +316,6 @@ Buncher/ACC1 ratio drift limit: 2%
 - 建议值超出绝对、单步或会话限制；
 - ACC1/Buncher相位漂移超限；
 - ACC1幅度或Buncher/ACC1幅度比超限；
-- BPM05出口轨道偏离参考值超过配置阈值；
 - 束流丢失；
 - 写入失败、验证超时或回滚失败；
 - 相同BPM样本被重复用于多次控制动作；
@@ -343,7 +330,7 @@ Buncher/ACC1 ratio drift limit: 2%
 每个1 s样本至少记录：
 
 - 本地采样时间和各PV源时间戳；
-- BPM01～BPM05的原始 `x`、`y`、`s`；
+- BPM02、BPM03、BPM04的水平位置；
 - `q_energy`、其原始值、滤波值和参考值；
 - `a`、`b`及响应标定版本；
 - BPM时间戳偏差和质量状态；
@@ -355,7 +342,6 @@ Buncher/ACC1 ratio drift limit: 2%
 - 控制器模式、`kp`、`ki`、P项、I项；
 - 原始控制建议、限幅后建议、实际写入值；
 - 写入验证、回滚和HOLD原因；
-- 相关磁铁读回或至少其稳定性检查结果；
 - 低电平相位反馈是否开启（如果存在可读状态PV）。
 
 日志中必须区分：
@@ -377,7 +363,7 @@ Buncher/ACC1 ratio drift limit: 2%
 
 HiFEL第一版建议提供以下模式：
 
-1. `Monitor`：采集BPM和RF/HV数据；
+1. `Monitor`：持续采集BPM02/03/04水平位置；
 2. `Shadow I/PI`：计算控制建议但不写入；
 3. `I/PI Feedback`：在获得控制锁和操作员确认后写入高压。
 
@@ -388,7 +374,7 @@ HiFEL第一版建议提供以下模式：
 - 执行器：MODULATOR_HV1；
 - 相位反馈前提状态；
 - 当前高压安全余量和会话累计变化；
-- 能量观测量、BPM05轨道和HOLD原因；
+- 能量观测量和HOLD原因；
 - 当前是只读、shadow还是实机写入状态。
 
 一旦 `configs/machines/irfel/apps/energy_feedback.json` 被profile加载，现有Control Room launcher应复用同一个 `Energy Feedback` 入口，不需要增加新的启动按钮。
@@ -405,7 +391,7 @@ HiFEL第一版建议提供以下模式：
   - 增加 `BpmDispersionEnergyProvider` 或更通用命名；
   - 实现时间戳、束流存在、范围和滤波检查。
 - 修改：`src/apps/energy_feedback/profile_runtime.py`
-  - 解析BPM02/03/04、BPM05、HV和RF保护信号；
+  - 持续解析BPM02/03/04，闭环启用后按需读取FCT、HV和RF保护信号；
   - 支持非模型型BPM诊断；
   - 解析通用执行器显示信息。
 - 修改：`src/apps/energy_feedback/engine.py`
@@ -478,7 +464,7 @@ HiFEL第一版建议提供以下模式：
 - 经操作员确认后开放写入；
 - 从现有I控制和较小增益开始；
 - 保持10 s动作周期；
-- 验证能量观测量收敛、BPM05轨道和RF相位稳定；
+- 验证能量观测量收敛和RF相位稳定；
 - 验证停止、HOLD和写入失败后的行为。
 
 ### 阶段E：PI测试
@@ -495,7 +481,6 @@ HiFEL第一版建议提供以下模式：
 - `q_energy`或换算能量的RMS；
 - 峰峰值和长期漂移；
 - 收敛时间与超调；
-- BPM05水平位置RMS；
 - ACC1/Buncher相位RMS；
 - FCT/ICT/BPM强度有效脉冲比例；
 - 高压动作次数、饱和次数和会话累计变化；
@@ -529,4 +514,4 @@ HiFEL第一版建议提供以下模式：
 
 ## 14. 提交给Codex的简要任务描述
 
-> 在 `half_linac` 仓库中扩展现有 `energy_feedback`，为HiFEL FIR束线增加基于BPM02/BPM03/BPM04的实测型色散能量诊断，并使用 `MODULATOR_HV1` 高压作为执行器。复用现有 `hv_feedback` 的RF幅相及高压安全限制，增加1 s采样/10 s动作节拍、I/PI控制、anti-windup、通用执行器UI、完整数据记录和统一控制锁。BPM05仅作出口轨道保护。第一版默认read-only，先完成monitor与shadow，不实现任何NN功能，也不要默认开放实机写权限。保持HALF现有能量反馈及HiFEL现有高压反馈行为和测试兼容。
+> 在 `half_linac` 仓库中扩展现有 `energy_feedback`，为HiFEL FIR束线增加基于BPM02/BPM03/BPM04的实测型色散能量诊断，并使用 `MODULATOR_HV1` 高压作为执行器。复用现有 `hv_feedback` 的RF幅相及高压安全限制，增加1 s采样/10 s动作节拍、I/PI控制、anti-windup、通用执行器UI、完整数据记录和统一控制锁。第一版先完成monitor与shadow，不实现任何NN功能，也不要默认开放实机写权限。保持HALF现有能量反馈及HiFEL现有高压反馈行为和测试兼容。

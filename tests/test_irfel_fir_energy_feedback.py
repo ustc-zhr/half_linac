@@ -17,6 +17,9 @@ from half_linac.src.apps.energy_feedback.bpm_dispersion import (
     build_rf_hv_safety_checker,
     calibration_issue,
     check_session_guards,
+    observable_calibration_issue,
+    read_closed_loop_inputs,
+    shadow_calibration_issue,
 )
 from half_linac.src.apps.energy_feedback.engine import (
     IncrementalPIController,
@@ -50,8 +53,6 @@ CALIBRATION = {
     "response_q_mm_per_kv": -2.0,
     "fct_min": 1.0,
     "q_action_range_mm": 20.0,
-    "bpm05_max_offset_mm": 0.5,
-    "quadrupole_max_delta_a": 0.1,
 }
 
 
@@ -104,7 +105,6 @@ def provider_source() -> dict[str, object]:
         "bpm.BPM02.x",
         "bpm.BPM03.x",
         "bpm.BPM04.x",
-        "bpm.BPM05.x",
         "fct",
     )
     return {
@@ -117,6 +117,7 @@ def provider_source() -> dict[str, object]:
         "max_timestamp_skew_s": 0.2,
         "signal_keys": signal_keys,
         "bpm_signal_keys": signal_keys[:-1],
+        "measurement_keys": signal_keys[:-1],
         "fct_key": "fct",
         "q_keys": ("bpm.BPM02.x", "bpm.BPM03.x", "bpm.BPM04.x"),
         "source_timestamp_policy": "enforce",
@@ -145,12 +146,11 @@ def measurement(
 
 
 class BpmDispersionProviderTests(unittest.TestCase):
-    def test_q_formula_excludes_bpm05(self):
+    def test_q_formula_uses_three_horizontal_bpms(self):
         values = {
             "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0),
             "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0),
             "bpm.BPM04.x": reading("bpm.BPM04.x", 8.0),
-            "bpm.BPM05.x": reading("bpm.BPM05.x", 999.0),
             "fct": reading("fct", 10.0),
         }
         result = BpmDispersionProvider(FakeClient(values), provider_source()).sample(100.0)
@@ -159,12 +159,11 @@ class BpmDispersionProviderTests(unittest.TestCase):
         self.assertIsNone(result.energy_mev)
         self.assertEqual(result.observable_unit, "mm")
 
-    def test_timestamp_skew_and_fct_loss_clear_sample_quality(self):
+    def test_timestamp_skew_holds_but_low_fct_remains_monitorable(self):
         values = {
             "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0, 100.0),
             "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0, 100.0),
             "bpm.BPM04.x": reading("bpm.BPM04.x", 8.0, 100.3),
-            "bpm.BPM05.x": reading("bpm.BPM05.x", 0.0, 100.0),
             "fct": reading("fct", 10.0, 100.0),
         }
         provider = BpmDispersionProvider(FakeClient(values), provider_source())
@@ -174,9 +173,56 @@ class BpmDispersionProviderTests(unittest.TestCase):
 
         values["bpm.BPM04.x"] = reading("bpm.BPM04.x", 8.0, 100.0)
         values["fct"] = reading("fct", 0.2, 100.0)
-        lost = provider.sample(100.0)
-        self.assertFalse(lost.quality.valid)
-        self.assertIn("FCT", lost.quality.reason)
+        low_beam = provider.sample(100.0)
+        self.assertTrue(low_beam.quality.valid, low_beam.quality.reason)
+
+    def test_disconnected_fct_is_diagnostic_only_during_monitoring(self):
+        values = {
+            "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0),
+            "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0),
+            "bpm.BPM04.x": reading("bpm.BPM04.x", 8.0),
+            "fct": PVReading(
+                "fct",
+                "PV:fct",
+                None,
+                False,
+                None,
+                "not connected",
+            ),
+        }
+
+        result = BpmDispersionProvider(
+            FakeClient(values), provider_source()
+        ).sample(100.0)
+
+        self.assertTrue(result.quality.valid, result.quality.reason)
+        self.assertIn("disconnected", result.diagnostic_errors["fct"])
+
+    def test_closed_loop_inputs_fail_closed_when_fct_is_disconnected(self):
+        source = {
+            "closed_loop_keys": ("fct",),
+            "source_timestamp_exempt_keys": (),
+            "source_timestamp_policy": "ignore",
+            "stale_timeout_s": 3.0,
+        }
+        values = {
+            "fct": PVReading(
+                "fct",
+                "PV:fct",
+                None,
+                False,
+                None,
+                "not connected",
+            )
+        }
+
+        resolved, issue = read_closed_loop_inputs(
+            FakeClient(values), source, 100.0
+        )
+
+        self.assertEqual(resolved, {})
+        self.assertIn("fct", issue)
+        self.assertIn("disconnected", issue)
 
     def test_monitor_receive_policy_accepts_legacy_bpm_source_timestamps(self):
         source = provider_source()
@@ -192,7 +238,6 @@ class BpmDispersionProviderTests(unittest.TestCase):
                 "bpm.BPM02.x": 2.0,
                 "bpm.BPM03.x": 4.0,
                 "bpm.BPM04.x": 8.0,
-                "bpm.BPM05.x": 0.0,
             }.items()
         }
         values["fct"] = reading("fct", 10.0, 100.0)
@@ -219,7 +264,6 @@ class BpmDispersionProviderTests(unittest.TestCase):
                 "bpm.BPM02.x": 2.0,
                 "bpm.BPM03.x": 4.0,
                 "bpm.BPM04.x": 8.0,
-                "bpm.BPM05.x": 0.0,
             }.items()
         }
         values["fct"] = reading("fct", 10.0, 100.0)
@@ -238,7 +282,6 @@ class BpmDispersionProviderTests(unittest.TestCase):
             "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0),
             "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0),
             "bpm.BPM04.x": reading("bpm.BPM04.x", 8.0),
-            "bpm.BPM05.x": reading("bpm.BPM05.x", 0.0),
             "fct": reading("fct", 10.0),
             "guard.hv_setpoint": reading("guard.hv_setpoint", 39.0, 1.0),
         }
@@ -254,7 +297,6 @@ class BpmDispersionProviderTests(unittest.TestCase):
             "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0, 1.0),
             "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0, 2.0),
             "bpm.BPM04.x": reading("bpm.BPM04.x", 8.0, 3.0),
-            "bpm.BPM05.x": reading("bpm.BPM05.x", 0.0, 4.0),
             "fct": reading("fct", 10.0, 5.0),
         }
 
@@ -319,23 +361,16 @@ class WindowAndControllerTests(unittest.TestCase):
         self.assertAlmostEqual(after_commit.p_component, 0.25)
 
     def test_target_capture_and_session_guards(self):
-        source = {
-            "calibration": dict(CALIBRATION),
-            "quadrupole_ids": ("QM05", "QM06"),
-        }
-        coordinator = FirFeedbackCoordinator(source, window_samples=2, kp=0.0, ki=0.1, period_s=2.0)
-        diagnostics1 = {
-            "bpm.BPM05.x": 1.0,
-            "fct": 10.0,
-            "quad.QM05": 5.0,
-            "quad.QM06": 6.0,
-        }
-        diagnostics2 = {
-            "bpm.BPM05.x": 1.2,
-            "fct": 12.0,
-            "quad.QM05": 5.0,
-            "quad.QM06": 6.0,
-        }
+        source = {"calibration": dict(CALIBRATION)}
+        coordinator = FirFeedbackCoordinator(
+            source,
+            window_samples=2,
+            kp=0.0,
+            ki=0.1,
+            period_s=2.0,
+        )
+        diagnostics1 = {"fct": 10.0}
+        diagnostics2 = {"fct": 12.0}
         self.assertIsNone(coordinator.accept(measurement(3.0, diagnostics1)))
         self.assertIsNone(coordinator.accept(measurement(99.0, diagnostics2)))
         self.assertEqual(coordinator.window.pending, 1)
@@ -345,18 +380,21 @@ class WindowAndControllerTests(unittest.TestCase):
         self.assertIsNotNone(completed)
         reference = coordinator.capture_latest()
         self.assertEqual(reference.target_q_mm, 4.0)
-        self.assertAlmostEqual(reference.bpm05_x_mm, 1.1)
-        self.assertEqual(reference.fct, 11.0)
-        self.assertEqual(check_session_guards(completed.aggregates, reference, CALIBRATION), "")
+        self.assertEqual(reference.window_sequence, completed.sequence)
+        self.assertEqual(
+            check_session_guards(completed.aggregates, CALIBRATION),
+            "",
+        )
 
-        bad_bpm = dict(completed.aggregates, **{"bpm.BPM05.x": 2.0})
-        self.assertIn("BPM05", check_session_guards(bad_bpm, reference, CALIBRATION))
-        bad_quad = dict(completed.aggregates, **{"quad.QM05": 5.2})
-        self.assertIn("QM05", check_session_guards(bad_quad, reference, CALIBRATION))
+        low_fct = dict(completed.aggregates, fct=0.2)
+        self.assertIn(
+            "FCT",
+            check_session_guards(low_fct, CALIBRATION),
+        )
 
 
 class IrfelProfileTests(unittest.TestCase):
-    def test_unready_calibration_allows_acquisition_but_blocks_feedback(self):
+    def test_commissioning_calibration_allows_feedback(self):
         context = load_app_context(
             "energy_feedback", machine_id="irfel", control_backend="real"
         )
@@ -382,24 +420,40 @@ class IrfelProfileTests(unittest.TestCase):
             ],
             "ignore",
         )
-        self.assertNotIn("bpm.BPM01.s", config["pvs"])
+        source = config["measurement_sources"][config["measurement_source_id"]]
+        calibration = source["calibration"]
+        self.assertEqual(observable_calibration_issue(calibration), "")
+        self.assertEqual(shadow_calibration_issue(calibration), "")
+        self.assertTrue(calibration["ready"])
+        self.assertEqual(
+            calibration["version"], "irfel-fir-commissioning-20261105-v1"
+        )
+        self.assertAlmostEqual(calibration["response_q_mm_per_kv"], 0.01)
+        self.assertAlmostEqual(calibration["fct_min"], 1000.0)
+        self.assertAlmostEqual(calibration["q_action_range_mm"], 3.0)
+        self.assertEqual(
+            source["measurement_keys"],
+            ("bpm.BPM02.x", "bpm.BPM03.x", "bpm.BPM04.x"),
+        )
+        self.assertEqual(source["signal_keys"], source["measurement_keys"])
+        self.assertIn("fct", source["closed_loop_keys"])
         self.assertFalse(
             any(
-                key.endswith(".s")
-                for key in config["measurement_sources"][
-                    config["measurement_source_id"]
-                ]["signal_keys"]
+                key.startswith("bpm.BPM01")
+                or key.startswith("bpm.BPM05")
+                or key.endswith(".y")
+                or key.startswith("quad.")
+                for key in source["signal_keys"]
             )
         )
         self.assertEqual(config["pvs"]["fct"], "IRFEL:BD:CT:CH1:WAV:ASUM")
-        source = config["measurement_sources"][config["measurement_source_id"]]
         self.assertEqual(
             source["source_timestamp_exempt_keys"],
             (source["guard_keys"]["hv_setpoint"],),
         )
         self.assertTrue(config["write_enabled"])
-        self.assertFalse(config["feedback_ready"])
-        self.assertIn("not marked ready", config["feedback_block_reason"])
+        self.assertTrue(config["feedback_ready"])
+        self.assertEqual(config["feedback_block_reason"], "")
         self.assertEqual(
             real_commissioning_status(context, "energy_feedback"),
             REAL_STATUS_COMMISSIONING,
@@ -427,13 +481,26 @@ class IrfelProfileTests(unittest.TestCase):
         result = checker.check_aggregate(aggregate)
         self.assertTrue(result.ok, result.reason)
 
-    def test_calibration_requires_all_finite_fields_and_version(self):
+    def test_calibration_readiness_is_layered(self):
         calibration = dict(CALIBRATION)
+        self.assertEqual(observable_calibration_issue(calibration), "")
+        self.assertEqual(shadow_calibration_issue(calibration), "")
         self.assertEqual(calibration_issue(calibration), "")
-        calibration["a"] = math.nan
-        self.assertIn("not finite", calibration_issue(calibration))
-        calibration = dict(CALIBRATION, version="")
-        self.assertIn("version", calibration_issue(calibration))
+
+        missing_response = dict(calibration, response_q_mm_per_kv=None)
+        self.assertEqual(observable_calibration_issue(missing_response), "")
+        self.assertIn("response", shadow_calibration_issue(missing_response))
+
+        missing_fct = dict(calibration, fct_min=None)
+        self.assertEqual(shadow_calibration_issue(missing_fct), "")
+        self.assertIn("fct_min", calibration_issue(missing_fct))
+
+        invalid_observable = dict(calibration, a=math.nan)
+        self.assertIn(
+            "not finite",
+            observable_calibration_issue(invalid_observable),
+        )
+        self.assertIn("version", calibration_issue(dict(calibration, version="")))
 
     def test_legacy_mev_measurement_remains_generic_observable_fallback(self):
         legacy = EnergyMeasurement(

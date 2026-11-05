@@ -15,25 +15,21 @@
     "geometry": {
       "upstream_bpms": ["BPM02", "BPM03"],
       "dispersive_bpm": "BPM04",
-      "exit_guard_bpm": "BPM05",
-      "note": "BPM02 and BPM03 are upstream of the DM5/DM6 dogleg; BPM04 is inside it; BPM05 is exit-orbit protection only. No bend-PV mapping is assumed."
+      "note": "BPM02 and BPM03 are upstream of the DM5/DM6 dogleg; BPM04 is inside it. No bend-PV mapping is assumed."
     },
-    "bpm_elements": ["BPM01", "BPM02", "BPM03", "BPM04", "BPM05"],
+    "bpm_elements": ["BPM02", "BPM03", "BPM04"],
     "bpm_timestamp_policy": "monitor_receive",
     "source_timestamp_policy": "ignore",
     "fct": {"element": "FCT1", "channel": "sum", "unit": "a.u."},
-    "quadrupole_elements": ["QM05", "QM06", "QM07", "QM08", "QM09", "QM10"],
     "max_timestamp_skew_s": 0.08,
     "calibration": {
-      "ready": false,
-      "version": "",
-      "a": null,
-      "b": null,
-      "response_q_mm_per_kv": null,
-      "fct_min": null,
-      "q_action_range_mm": null,
-      "bpm05_max_offset_mm": null,
-      "quadrupole_max_delta_a": null
+      "ready": true,
+      "version": "irfel-fir-commissioning-20261105-v1",
+      "a": 0.0,
+      "b": 0.0,
+      "response_q_mm_per_kv": 0.01,
+      "fct_min": 1000,
+      "q_action_range_mm": 3.0
     }
   },
   "default_measurement_source": "fir_bpm_dispersion",
