@@ -250,7 +250,8 @@ class IrfelProfileTests(unittest.TestCase):
             config["runtime"]["sample_period_s"],
             config["controller"]["control_period_s"],
         )
-        self.assertEqual(timing.window_samples, 100)
+        self.assertAlmostEqual(config["runtime"]["sample_period_s"], 0.2)
+        self.assertEqual(timing.window_samples, 50)
         self.assertAlmostEqual(timing.effective_control_period_s, 10.0)
         self.assertEqual(config["pvs"]["fct"], "IRFEL:BD:CT:CH1:WAV:ASUM")
         self.assertTrue(config["write_enabled"])

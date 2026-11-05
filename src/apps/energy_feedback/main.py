@@ -502,7 +502,7 @@ class AcquisitionThread(QThread):
                             if not self.config.get("feedback_ready", True):
                                 raise MachineProfileError(self.config["feedback_block_reason"])
                             if fir is not None and fir.reference is None:
-                                raise MachineProfileError("Set Current Energy before starting feedback")
+                                raise MachineProfileError("Set Current as Target before starting feedback")
                             require_workflow_write_allowed(
                                 self.context, WORKFLOW_NAME, "Energy feedback"
                             )
@@ -544,7 +544,7 @@ class AcquisitionThread(QThread):
                             )
                         elif fir.reference is None:
                             decision = FeedbackDecision(
-                                "HOLD", "Set Current Energy to capture the FIR reference", None
+                                "HOLD", "Set Current as Target to capture the FIR reference", None
                             )
                         else:
                             guard_issue = check_session_guards(
@@ -873,12 +873,6 @@ class EnergyFeedbackWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(10)
 
-        operation_group = QGroupBox("Control")
-        operation_group.setProperty("themeCard", True)
-        operation_layout = QVBoxLayout(operation_group)
-        operation_layout.setContentsMargins(12, 32, 12, 10)
-        operation_layout.setSpacing(7)
-
         acquisition_card, acquisition_grid = self._create_section_card(
             "Acquisition",
             (
@@ -946,7 +940,7 @@ class EnergyFeedbackWindow(QMainWindow):
             self.config["measurement_kind"] in {"bpm_transport", "bpm_dispersion"}
         )
         acquisition_grid.addWidget(self.source_detail_value, detail_row, 0, 1, 2)
-        operation_layout.addWidget(acquisition_card)
+        right_layout.addWidget(acquisition_card)
 
         plot_card, plot_grid = self._create_section_card(
             "Plot View", "Display controls do not affect feedback"
@@ -969,7 +963,7 @@ class EnergyFeedbackWindow(QMainWindow):
         plot_grid.addWidget(self.plot_range_combo, 1, 3)
         plot_grid.addWidget(self._field_label("X"), 1, 4)
         plot_grid.addWidget(self.plot_axis_combo, 1, 5)
-        operation_layout.addWidget(plot_card)
+        right_layout.addWidget(plot_card)
 
         feedback_card, feedback_grid = self._create_section_card(
             "Feedback Loop",
@@ -980,7 +974,7 @@ class EnergyFeedbackWindow(QMainWindow):
         feedback_grid.addWidget(self._field_label("Feedback"), 0, 0)
         feedback_grid.addWidget(self.feedback_start_button, 0, 1)
         feedback_grid.addWidget(self.feedback_stop_button, 0, 2)
-        self.capture_target_button = QPushButton("Set Current Energy")
+        self.capture_target_button = QPushButton("Set Current as Target")
         self.capture_target_button.setVisible(self._reference_capture_required)
         feedback_grid.addWidget(self.capture_target_button, 1, 0, 1, 3)
         self.controller_mode_combo = QComboBox()
@@ -1080,8 +1074,7 @@ class EnergyFeedbackWindow(QMainWindow):
         for row, (label, spin) in enumerate(parameter_rows, start=3):
             feedback_grid.addWidget(self._field_label(label), row, 0)
             feedback_grid.addWidget(spin, row, 1, 1, 2)
-        operation_layout.addWidget(feedback_card)
-        right_layout.addWidget(operation_group)
+        right_layout.addWidget(feedback_card)
 
         actuator_title = (
             "Phase Shifter"

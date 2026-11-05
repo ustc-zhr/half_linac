@@ -906,10 +906,10 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
         try:
             self.assertIsNotNone(window.sample_period_spin)
             self.assertIsNotNone(window.control_period_spin)
-            self.assertAlmostEqual(window.sample_period_spin.value(), 0.1)
+            self.assertAlmostEqual(window.sample_period_spin.value(), 0.2)
             self.assertAlmostEqual(window.control_period_spin.value(), 10.0)
             self.assertEqual(
-                window.control_window_value.text(), "100 samples · 10 s"
+                window.control_window_value.text(), "50 samples · 10 s"
             )
 
             window.sample_period_spin.setValue(0.3)
@@ -1028,10 +1028,10 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
                 {
                     "Figure",
                     "Energy Tracking",
-                    "Control",
                     "Phase Shifter",
                 }.issubset(titles)
             )
+            self.assertNotIn("Control", titles)
             self.assertNotIn("Spectrum Diagnostics", titles)
             self.assertIsNone(window.energy_axis)
             self.assertIsNotNone(window.error_axis)
