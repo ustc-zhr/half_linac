@@ -155,6 +155,9 @@ def load_runtime_config(
             "bpm_timestamp_policy": str(
                 measurement.get("bpm_timestamp_policy", "source")
             ),
+            "source_timestamp_policy": str(
+                measurement.get("source_timestamp_policy", "enforce")
+            ),
             "bpm_keys": bpm_keys,
             "bpm_signal_keys": tuple(bpm_signal_keys),
             "q_keys": (

@@ -320,6 +320,9 @@ class AcquisitionThread(QThread):
 
         sample_period = float(self.config["runtime"]["sample_period_s"])
         stale_timeout = float(self.config["runtime"]["stale_timeout_s"])
+        check_source_timestamps = (
+            str(source.get("source_timestamp_policy", "enforce")) != "ignore"
+        )
         verification = self.config["write_verification"]
         groups = tuple(self.config["control_groups"])
         group_template = groups[0] if groups else None
@@ -579,6 +582,7 @@ class AcquisitionThread(QThread):
                                     stale_timeout_s=stale_timeout,
                                     requested_knob_delta=proposal.knob_delta,
                                     control_parameters=parameters,
+                                    check_source_timestamps=check_source_timestamps,
                                 )
                                 if decision.has_valid_suggestion:
                                     hv_result = rf_hv_checker.check_aggregate(
@@ -599,6 +603,7 @@ class AcquisitionThread(QThread):
                                 command_readings,
                                 session_origins=origins if feedback_active else None,
                                 stale_timeout_s=stale_timeout,
+                                check_source_timestamps=check_source_timestamps,
                             )
                         except Exception as exc:  # noqa: BLE001
                             decision = FeedbackDecision(
@@ -1394,7 +1399,9 @@ class EnergyFeedbackWindow(QMainWindow):
             source = self.config["measurement_sources"][
                 self.config["measurement_source_id"]
             ]
-            if source.get("bpm_timestamp_policy") == "monitor_receive":
+            if source.get("source_timestamp_policy") == "ignore":
+                value, tone = "TS OFF", "warning"
+            elif source.get("bpm_timestamp_policy") == "monitor_receive":
                 value, tone = "RX Time", "warning"
             else:
                 value, tone = "OK", "success"
@@ -2186,6 +2193,15 @@ class EnergyFeedbackWindow(QMainWindow):
             self.source_detail_value.setText(
                 f"Model ready · {details.get('model_line', '—')} · {quadrupoles}"
             )
+        elif details.get("source_timestamp_policy") == "ignore":
+            self.source_detail_value.setVisible(True)
+            self.source_detail_value.setText(
+                "Commissioning mode · EPICS source timestamp checks disabled"
+            )
+            self.source_detail_value.setToolTip(
+                "Source timestamps are retained for diagnostics but do not gate "
+                "feedback. Connection, read errors and finite values remain enforced."
+            )
         elif details.get("bpm_timestamp_policy") == "monitor_receive":
             self.source_detail_value.setVisible(True)
             self.source_detail_value.setText(
@@ -2201,12 +2217,15 @@ class EnergyFeedbackWindow(QMainWindow):
             source = self.config["measurement_sources"][
                 self.config["measurement_source_id"]
             ]
-            compatibility_mode = (
+            timestamps_ignored = source.get("source_timestamp_policy") == "ignore"
+            compatibility_mode = timestamps_ignored or (
                 source.get("bpm_timestamp_policy") == "monitor_receive"
             )
             self.source_detail_value.setVisible(compatibility_mode)
             self.source_detail_value.setText(
-                "Commissioning mode · BPM freshness uses monitor receive time"
+                "Commissioning mode · EPICS source timestamp checks disabled"
+                if timestamps_ignored
+                else "Commissioning mode · BPM freshness uses monitor receive time"
                 if compatibility_mode
                 else ""
             )

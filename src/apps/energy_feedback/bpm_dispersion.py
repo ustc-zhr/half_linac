@@ -131,6 +131,9 @@ class BpmDispersionProvider:
         self.bpm_timestamp_policy = str(
             source.get("bpm_timestamp_policy", "source")
         )
+        self.source_timestamp_policy = str(
+            source.get("source_timestamp_policy", "enforce")
+        )
         self.bpm_signal_keys = frozenset(source["bpm_signal_keys"])
         self.source_timestamp_exempt_keys = frozenset(
             source.get("source_timestamp_exempt_keys", ())
@@ -143,6 +146,7 @@ class BpmDispersionProvider:
             "calibration": dict(source["calibration"]),
             "resolved_signals": dict(source["resolved_signals"]),
             "bpm_timestamp_policy": self.bpm_timestamp_policy,
+            "source_timestamp_policy": self.source_timestamp_policy,
         }
 
     @property
@@ -179,7 +183,8 @@ class BpmDispersionProvider:
                 sampled_at,
                 self.stale_timeout_s,
                 check_source_timestamp=(
-                    key not in self.source_timestamp_exempt_keys
+                    self.source_timestamp_policy != "ignore"
+                    and key not in self.source_timestamp_exempt_keys
                 ),
             )
             diagnostics[key] = value
@@ -205,6 +210,7 @@ class BpmDispersionProvider:
         ]
         if (
             not issue
+            and self.source_timestamp_policy != "ignore"
             and self.bpm_timestamp_policy == "source"
             and len(valid_times) == len(bpm_time_keys)
         ):
@@ -245,7 +251,9 @@ class BpmDispersionProvider:
 
         source_times = [item for item in valid_times if item is not None]
         valid_reason = "FIR BPM-dispersion sample valid"
-        if self.bpm_timestamp_policy == "monitor_receive":
+        if self.source_timestamp_policy == "ignore":
+            valid_reason += "; EPICS source timestamp checks disabled"
+        elif self.bpm_timestamp_policy == "monitor_receive":
             valid_reason += "; BPM freshness uses monitor receive time"
         return EnergyMeasurement(
             sampled_at=sampled_at,

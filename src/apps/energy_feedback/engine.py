@@ -119,6 +119,7 @@ def evaluate_shadow(
     now: float | None = None,
     requested_knob_delta: float | None = None,
     control_parameters: Mapping[str, float] | None = None,
+    check_source_timestamps: bool = True,
 ) -> FeedbackDecision:
     """Return a complete suggestion or HOLD; partial commands are never emitted."""
 
@@ -162,7 +163,9 @@ def evaluate_shadow(
             reading,
             timestamp,
             stale_timeout_s,
-            check_source_timestamp=(actuator.command_basis != "setpoint"),
+            check_source_timestamp=(
+                check_source_timestamps and actuator.command_basis != "setpoint"
+            ),
         )
         if issue:
             return FeedbackDecision(

@@ -119,6 +119,7 @@ def provider_source() -> dict[str, object]:
         "bpm_signal_keys": signal_keys[:-1],
         "fct_key": "fct",
         "q_keys": ("bpm.BPM02.x", "bpm.BPM03.x", "bpm.BPM04.x"),
+        "source_timestamp_policy": "enforce",
         "source_timestamp_exempt_keys": (),
     }
 
@@ -246,6 +247,22 @@ class BpmDispersionProviderTests(unittest.TestCase):
 
         self.assertTrue(result.quality.valid, result.quality.reason)
 
+    def test_ignore_policy_accepts_legacy_timestamps_for_all_signals(self):
+        source = provider_source()
+        source["source_timestamp_policy"] = "ignore"
+        values = {
+            "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0, 1.0),
+            "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0, 2.0),
+            "bpm.BPM04.x": reading("bpm.BPM04.x", 8.0, 3.0),
+            "bpm.BPM05.x": reading("bpm.BPM05.x", 0.0, 4.0),
+            "fct": reading("fct", 10.0, 5.0),
+        }
+
+        result = BpmDispersionProvider(FakeClient(values), source).sample(100.0)
+
+        self.assertTrue(result.quality.valid, result.quality.reason)
+        self.assertIn("timestamp checks disabled", result.quality.reason)
+
 
 class WindowAndControllerTests(unittest.TestCase):
     def test_nonoverlapping_window_is_single_use_and_bad_sample_resets(self):
@@ -358,6 +375,12 @@ class IrfelProfileTests(unittest.TestCase):
                 "bpm_timestamp_policy"
             ],
             "monitor_receive",
+        )
+        self.assertEqual(
+            config["measurement_sources"][config["measurement_source_id"]][
+                "source_timestamp_policy"
+            ],
+            "ignore",
         )
         self.assertNotIn("bpm.BPM01.s", config["pvs"])
         self.assertFalse(

@@ -20,6 +20,7 @@
     },
     "bpm_elements": ["BPM01", "BPM02", "BPM03", "BPM04", "BPM05"],
     "bpm_timestamp_policy": "monitor_receive",
+    "source_timestamp_policy": "ignore",
     "fct": {"element": "FCT1", "channel": "sum", "unit": "a.u."},
     "quadrupole_elements": ["QM05", "QM06", "QM07", "QM08", "QM09", "QM10"],
     "max_timestamp_skew_s": 0.08,

@@ -348,6 +348,19 @@ class ShadowEngineTests(unittest.TestCase):
         self.assertEqual(result.state, "SHADOW")
         self.assertTrue(result.commands)
 
+    def test_commissioning_mode_can_bypass_readback_source_timestamps(self):
+        result = evaluate_shadow(
+            measurement(),
+            group(actuator("a")),
+            {"a": reading("a", 0.0, timestamp=1.0)},
+            stale_timeout_s=3.0,
+            now=101.0,
+            check_source_timestamps=False,
+        )
+
+        self.assertEqual(result.state, "SHADOW")
+        self.assertTrue(result.commands)
+
     def test_cyclic_phase_crosses_positive_boundary_continuously(self):
         phase = actuator(
             "phase",
