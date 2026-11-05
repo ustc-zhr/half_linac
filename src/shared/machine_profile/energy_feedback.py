@@ -301,7 +301,7 @@ def _validate_bpm_dispersion_workflow(
         element = profile.get_element(bpm_id)
         if element.kind != "bpm":
             _fail(profile, f"measurement element {bpm_id!r} is not a BPM")
-        for channel in ("x", "y", "s"):
+        for channel in ("x", "y"):
             for backend in backends:
                 if backend not in element.channels.get(channel, {}):
                     _fail(profile, f"{bpm_id}.{channel} is unavailable on {backend}")

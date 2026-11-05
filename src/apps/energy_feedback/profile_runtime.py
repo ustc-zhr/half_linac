@@ -86,7 +86,7 @@ def load_runtime_config(
         for bpm_id in measurement["bpm_elements"]:
             bpm_id = str(bpm_id)
             bpm_keys[bpm_id] = {}
-            for channel in ("x", "y", "s"):
+            for channel in ("x", "y"):
                 key = f"bpm.{bpm_id}.{channel}"
                 add_signal(key, {"element": bpm_id, "channel": channel, "unit": "mm"})
                 bpm_keys[bpm_id][channel] = key

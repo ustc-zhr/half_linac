@@ -341,6 +341,15 @@ class IrfelProfileTests(unittest.TestCase):
             ],
             "monitor_receive",
         )
+        self.assertNotIn("bpm.BPM01.s", config["pvs"])
+        self.assertFalse(
+            any(
+                key.endswith(".s")
+                for key in config["measurement_sources"][
+                    config["measurement_source_id"]
+                ]["signal_keys"]
+            )
+        )
         self.assertEqual(config["pvs"]["fct"], "IRFEL:BD:CT:CH1:WAV:ASUM")
         self.assertTrue(config["write_enabled"])
         self.assertFalse(config["feedback_ready"])
