@@ -31,6 +31,8 @@ if QtWidgets is not None:
             self._knob_specs_by_id = {knob.id: knob for knob in self._knobs}
 
             layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(20, 20, 20, 16)
+            layout.setSpacing(12)
             helper_row = QtWidgets.QHBoxLayout()
             self.fetch_current_button = QtWidgets.QPushButton("Fetch Current")
             self.apply_step_hint_button = QtWidgets.QPushButton("Apply ± Step Hint ×")
@@ -43,7 +45,7 @@ if QtWidgets is not None:
                 self.apply_step_hint_button,
                 self.more_button,
             ):
-                button.setMinimumHeight(40)
+                button.setMinimumHeight(34)
             self.step_hint_factor_spin = QtWidgets.QDoubleSpinBox()
             self.step_hint_factor_spin.setRange(0.0, 1.0e6)
             self.step_hint_factor_spin.setDecimals(3)
@@ -92,10 +94,10 @@ if QtWidgets is not None:
             cancel_button = buttons.button(QtWidgets.QDialogButtonBox.Cancel)
             if ok_button is not None:
                 ok_button.setProperty("role", "control")
-                ok_button.setMinimumHeight(40)
+                ok_button.setMinimumHeight(34)
             if cancel_button is not None:
                 cancel_button.setProperty("role", "subtle")
-                cancel_button.setMinimumHeight(40)
+                cancel_button.setMinimumHeight(34)
             buttons.accepted.connect(self.accept)
             buttons.rejected.connect(self.reject)
             layout.addWidget(buttons)

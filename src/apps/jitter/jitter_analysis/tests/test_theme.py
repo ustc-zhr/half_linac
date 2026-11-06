@@ -18,6 +18,7 @@ from jitter_analysis.gui.plots.theme import plot_theme_spec
 
 
 def test_default_theme_exists():
+    assert DEFAULT_THEME_ID == "control_room"
     spec = theme_spec(DEFAULT_THEME_ID)
     assert spec.theme_id == DEFAULT_THEME_ID
     assert theme_label(DEFAULT_THEME_ID)
@@ -35,15 +36,15 @@ def test_stylesheet_contains_theme_specific_menu_and_tab_rules():
     assert "QMenuBar" in stylesheet
     assert "workspaceTabBar" in stylesheet
     assert "analysisTabBar" in stylesheet
-    assert "#e0ecff" in stylesheet
+    assert "#e8f0ff" in stylesheet
 
 
 def test_dark_theme_stylesheet_contains_dark_palette_tokens():
     stylesheet = build_app_stylesheet("night_shift")
-    assert "#0f1519" in stylesheet
-    assert "#172027" in stylesheet
-    assert "#45d0bc" in stylesheet
-    assert '"IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif' in stylesheet
+    assert "#202123" in stylesheet
+    assert "#2b2c32" in stylesheet
+    assert "#60a5fa" in stylesheet
+    assert '"Segoe UI", "Microsoft YaHei UI", "Source Han Sans SC", sans-serif' in stylesheet
 
 
 def test_stylesheet_sets_file_dialog_tool_button_icon_size():
@@ -60,5 +61,5 @@ def test_stylesheet_contains_compact_global_status_bar_rules():
 
 
 def test_plot_theme_background_tracks_gui_theme():
-    assert plot_theme_spec("night_shift").background == "#11181e"
-    assert plot_theme_spec("control_room").background == "#fffdf8"
+    assert plot_theme_spec("night_shift").background == "#2b2c32"
+    assert plot_theme_spec("control_room").background == "#ffffff"

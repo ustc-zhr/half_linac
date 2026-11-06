@@ -5,3 +5,5 @@ scipy>=1.10
 pandas>=2.0
 h5py>=3.10
 pyepics>=3.5
+scikit-learn>=1.5,<2
+joblib>=1.4

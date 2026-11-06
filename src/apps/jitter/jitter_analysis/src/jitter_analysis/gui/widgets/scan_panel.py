@@ -49,7 +49,21 @@ if QtWidgets is not None:
 
         def _build_monitor_page(self):
             widget = QtWidgets.QWidget()
-            form = QtWidgets.QFormLayout(widget)
+            outer = QtWidgets.QVBoxLayout(widget)
+            outer.setContentsMargins(0, 0, 0, 0)
+            outer.setSpacing(0)
+
+            form_host = QtWidgets.QWidget()
+            form_host.setObjectName("monitorSetupForm")
+            form_host.setMaximumWidth(600)
+            form_host.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+            form = QtWidgets.QFormLayout(form_host)
+            form.setContentsMargins(12, 8, 12, 8)
+            form.setHorizontalSpacing(20)
+            form.setVerticalSpacing(10)
+            form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
             self.interval_spin = QtWidgets.QDoubleSpinBox()
             self.interval_spin.setRange(0.01, 3600.0)
             self.interval_spin.setValue(0.2)
@@ -66,6 +80,15 @@ if QtWidgets is not None:
             self.duration_spin.setValue(60.0)
             self.duration_spin.setDecimals(1)
             self.duration_spin.setSuffix(" s")
+            for field in (
+                self.interval_spin,
+                self.count_spin,
+                self.stop_condition_combo,
+                self.duration_spin,
+            ):
+                field.setMinimumWidth(280)
+                field.setMaximumWidth(360)
+
             self.monitor_estimate_label = QtWidgets.QLabel()
             self.monitor_estimate_label.setProperty("role", "pageHint")
             self.monitor_estimate_label.setWordWrap(True)
@@ -81,6 +104,9 @@ if QtWidgets is not None:
             self.count_spin.valueChanged.connect(self._update_monitor_estimate)
             self.duration_spin.valueChanged.connect(self._update_monitor_estimate)
             self._update_monitor_controls()
+
+            outer.addWidget(form_host, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+            outer.addStretch(1)
             return widget
 
         def _build_single_knob_page(self):

@@ -11,13 +11,16 @@ if QtWidgets is not None:
     class ObjectPanel(QtWidgets.QWidget):
         def __init__(self, parent=None) -> None:
             super().__init__(parent)
+            self.setObjectName("objectSelectionPanel")
             layout = QtWidgets.QVBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(8)
 
             controls = QtWidgets.QHBoxLayout()
-            self.select_button = QtWidgets.QPushButton("Choose PVs...")
-            self.clear_button = QtWidgets.QPushButton("Clear Selection")
+            self.select_button = QtWidgets.QPushButton("Choose PVs")
+            self.clear_button = QtWidgets.QPushButton("Clear")
+            self.clear_button.setProperty("role", "linkDanger")
+            self.clear_button.setVisible(False)
             controls.addWidget(self.select_button)
             controls.addWidget(self.clear_button)
             layout.addLayout(controls)
@@ -25,24 +28,27 @@ if QtWidgets is not None:
             self._selected_objects = []
             self._selected_knobs = []
             self.loaded_summary_label = QtWidgets.QLabel("Library: Not loaded")
+            self.loaded_summary_label.setProperty("role", "sidebarSummary")
             self.loaded_summary_label.setWordWrap(True)
             layout.addWidget(self.loaded_summary_label)
 
             self.selection_summary_label = QtWidgets.QLabel("Selected: None")
+            self.selection_summary_label.setProperty("role", "sidebarSummary")
             self.selection_summary_label.setWordWrap(True)
             layout.addWidget(self.selection_summary_label)
 
             self.selection_detail_label = QtWidgets.QLabel()
+            self.selection_detail_label.setProperty("role", "sidebarDetail")
             self.selection_detail_label.setWordWrap(True)
             self.selection_detail_label.setVisible(False)
             layout.addWidget(self.selection_detail_label)
-            layout.addStretch(1)
 
         def set_library_empty(self) -> None:
             self.loaded_summary_label.setText("Library: Not loaded")
             self.selection_summary_label.setText("Selected: None")
             self.selection_detail_label.clear()
             self.selection_detail_label.setVisible(False)
+            self.clear_button.setVisible(False)
 
         def set_library_objects(self, objects, group_labels: dict[str, str]) -> None:
             group_count = len({obj.group for obj in objects})
@@ -66,11 +72,13 @@ if QtWidgets is not None:
                 self.selection_summary_label.setText("Selected: None")
                 self.selection_detail_label.clear()
                 self.selection_detail_label.setVisible(False)
+                self.clear_button.setVisible(False)
                 return
 
             self.selection_summary_label.setText(
                 f"Selected: {len(objects)} read | {len(knobs)} control"
             )
+            self.clear_button.setVisible(True)
 
             details = []
             object_names = ", ".join(obj.name for obj in objects[:4])

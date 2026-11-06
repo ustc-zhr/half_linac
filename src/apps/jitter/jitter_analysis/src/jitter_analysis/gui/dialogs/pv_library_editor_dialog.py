@@ -42,6 +42,8 @@ if QtWidgets is not None:
             self._color = "#607d8b"
 
             layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(20, 20, 20, 16)
+            layout.setSpacing(12)
             form = QtWidgets.QFormLayout()
             self.name_edit = QtWidgets.QLineEdit()
             self.id_edit = QtWidgets.QLineEdit()
@@ -58,6 +60,12 @@ if QtWidgets is not None:
             buttons = QtWidgets.QDialogButtonBox(
                 QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self
             )
+            ok_button = buttons.button(QtWidgets.QDialogButtonBox.Ok)
+            cancel_button = buttons.button(QtWidgets.QDialogButtonBox.Cancel)
+            if ok_button is not None:
+                ok_button.setProperty("role", "control")
+            if cancel_button is not None:
+                cancel_button.setProperty("role", "subtle")
             buttons.accepted.connect(self.accept)
             buttons.rejected.connect(self.reject)
             layout.addWidget(buttons)
@@ -135,6 +143,8 @@ if QtWidgets is not None:
             self._add_group_callback = add_group_callback
 
             layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(20, 20, 20, 16)
+            layout.setSpacing(12)
             form = QtWidgets.QFormLayout()
             self.id_edit = QtWidgets.QLineEdit(str(self._object_data.get("id", "")))
             self.name_edit = QtWidgets.QLineEdit(str(self._object_data.get("name", "")))
@@ -245,6 +255,12 @@ if QtWidgets is not None:
             buttons = QtWidgets.QDialogButtonBox(
                 QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self
             )
+            ok_button = buttons.button(QtWidgets.QDialogButtonBox.Ok)
+            cancel_button = buttons.button(QtWidgets.QDialogButtonBox.Cancel)
+            if ok_button is not None:
+                ok_button.setProperty("role", "control")
+            if cancel_button is not None:
+                cancel_button.setProperty("role", "subtle")
             buttons.accepted.connect(self.accept)
             buttons.rejected.connect(self.reject)
             layout.addWidget(buttons)
@@ -369,6 +385,8 @@ if QtWidgets is not None:
             self._library_path = str(library_path).strip()
 
             layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(20, 20, 20, 16)
+            layout.setSpacing(12)
             self.library_label = QtWidgets.QLabel(self)
             library_font = self.library_label.font()
             library_font.setBold(True)
@@ -396,6 +414,9 @@ if QtWidgets is not None:
             self.add_button = QtWidgets.QPushButton("Add PV")
             self.edit_button = QtWidgets.QPushButton("Edit PV")
             self.delete_button = QtWidgets.QPushButton("Delete PV")
+            self.add_button.setProperty("role", "diagnostic")
+            self.edit_button.setProperty("role", "subtle")
+            self.delete_button.setProperty("role", "linkDanger")
             actions.addWidget(self.add_button)
             actions.addWidget(self.edit_button)
             actions.addWidget(self.delete_button)
@@ -406,6 +427,9 @@ if QtWidgets is not None:
             self.save_button = buttons.addButton("Save", QtWidgets.QDialogButtonBox.AcceptRole)
             self.save_as_button = buttons.addButton("Save As...", QtWidgets.QDialogButtonBox.ActionRole)
             self.close_button = buttons.addButton("Close", QtWidgets.QDialogButtonBox.RejectRole)
+            self.save_button.setProperty("role", "control")
+            self.save_as_button.setProperty("role", "diagnostic")
+            self.close_button.setProperty("role", "subtle")
             layout.addWidget(buttons)
 
             self.add_button.clicked.connect(self._add_object)

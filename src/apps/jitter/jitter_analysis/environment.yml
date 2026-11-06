@@ -11,5 +11,7 @@ dependencies:
   - pyqt
   - pyqtgraph>=0.13
   - pytest>=8
+  - scikit-learn>=1.5,<2
+  - joblib>=1.4
   - pip:
       - pyepics>=3.5

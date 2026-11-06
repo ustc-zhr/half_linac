@@ -35,9 +35,43 @@ def window(qt_app, monkeypatch):
     result.close()
 
 
-def test_setup_banner_offers_direct_action_when_config_is_missing(window):
-    assert window.mode_status_action_button.text() == "Load PV Library"
-    assert not window.mode_status_action_button.isHidden()
+def test_setup_banner_uses_persistent_sidebar_actions_when_config_is_missing(window):
+    assert window.mode_status_action_button.isHidden()
+    assert window.config_panel.load_button.isVisibleTo(window.config_panel)
+    choose_buttons = [
+        button
+        for button in window.findChildren(main_window_module.QtWidgets.QPushButton)
+        if button.text() == "Choose PVs"
+    ]
+    assert choose_buttons == [window.object_panel.select_button]
+
+
+
+def test_config_workspace_is_compact_and_responsive(window):
+    sidebar = window.findChild(main_window_module.QtWidgets.QScrollArea, "configSidebar")
+    task_scroll = window.findChild(main_window_module.QtWidgets.QScrollArea, "taskSetupScroll")
+    task_content = window.findChild(main_window_module.QtWidgets.QWidget, "taskSetupContent")
+
+    assert sidebar.minimumWidth() == 280
+    assert sidebar.maximumWidth() == 340
+    assert task_scroll is not None
+    assert task_content.maximumWidth() == 760
+    assert window.mode_buttons["timed_acquisition"].parentWidget().maximumWidth() == 560
+    assert window.scan_panel.interval_spin.maximumWidth() == 360
+    assert window.scan_panel.interval_spin.minimumWidth() == 280
+    assert window.object_panel.clear_button.isHidden()
+
+
+def test_clear_selection_is_only_visible_when_selection_exists(window):
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "irfel_pvlist.json"
+    assert window._load_config_path(config_path)
+    window.state.selected_object_ids = [window.loaded_config.objects[0].id]
+    window._refresh_selected_pvs()
+
+    assert not window.object_panel.clear_button.isHidden()
+
+    window.clear_selected_pvs()
+    assert window.object_panel.clear_button.isHidden()
 
 
 def test_jitter_summary_table_and_plot_are_resizable(window):

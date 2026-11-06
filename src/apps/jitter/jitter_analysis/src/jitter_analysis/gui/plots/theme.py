@@ -5,7 +5,7 @@ from dataclasses import dataclass
 try:
     from ..theme import DEFAULT_THEME_ID, current_theme_id
 except ImportError:  # pragma: no cover - fallback when imported out of package context
-    DEFAULT_THEME_ID = "night_shift"
+    DEFAULT_THEME_ID = "control_room"
     current_theme_id = None
 
 try:
@@ -34,20 +34,20 @@ def plot_theme_spec(theme_id: str | None = None) -> PlotThemeSpec:
     token = str(theme_id or _active_theme_id()).strip().lower()
     if token == "night_shift":
         return PlotThemeSpec(
-            background="#11181e",
-            foreground="#d7e2ea",
-            axis="#445764",
-            grid_alpha=0.2,
-            legend_bg="#172027",
-            legend_border="#31424d",
+            background="#2b2c32",
+            foreground="#e4e4e7",
+            axis="#60616b",
+            grid_alpha=0.16,
+            legend_bg="#303138",
+            legend_border="#45464f",
         )
     return PlotThemeSpec(
-        background="#fffdf8",
-        foreground="#304049",
-        axis="#b5aa9a",
-        grid_alpha=0.2,
-        legend_bg="#fffdf9",
-        legend_border="#d9d0c3",
+        background="#ffffff",
+        foreground="#374151",
+        axis="#c7cbd1",
+        grid_alpha=0.14,
+        legend_bg="#ffffff",
+        legend_border="#e5e7eb",
     )
 
 

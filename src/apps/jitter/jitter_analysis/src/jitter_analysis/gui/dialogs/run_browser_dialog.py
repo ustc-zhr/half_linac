@@ -20,6 +20,8 @@ if QtWidgets is not None:
             self.resize(940, 560)
 
             layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(20, 20, 20, 16)
+            layout.setSpacing(12)
 
             controls = QtWidgets.QHBoxLayout()
             controls.addWidget(QtWidgets.QLabel("Run Root"))
@@ -29,8 +31,8 @@ if QtWidgets is not None:
             self.refresh_button = QtWidgets.QPushButton("Refresh")
             self.browse_button.setProperty("role", "diagnostic")
             self.refresh_button.setProperty("role", "diagnostic")
-            self.browse_button.setMinimumHeight(40)
-            self.refresh_button.setMinimumHeight(40)
+            self.browse_button.setMinimumHeight(34)
+            self.refresh_button.setMinimumHeight(34)
             controls.addWidget(self.root_edit, 1)
             controls.addWidget(self.browse_button)
             controls.addWidget(self.refresh_button)
@@ -66,8 +68,8 @@ if QtWidgets is not None:
             self.cancel_button = button_box.addButton(QtWidgets.QDialogButtonBox.Cancel)
             self.open_button.setProperty("role", "control")
             self.cancel_button.setProperty("role", "subtle")
-            self.open_button.setMinimumHeight(40)
-            self.cancel_button.setMinimumHeight(40)
+            self.open_button.setMinimumHeight(34)
+            self.cancel_button.setMinimumHeight(34)
             self.open_button.setEnabled(False)
             layout.addWidget(button_box)
 

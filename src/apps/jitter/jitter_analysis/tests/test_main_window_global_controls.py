@@ -43,8 +43,9 @@ def test_run_controls_are_persistent_children_of_the_app_header(qt_app, monkeypa
     assert controls.isAncestorOf(window.run_check_button)
     assert controls.isAncestorOf(window.run_start_button)
     assert controls.isAncestorOf(window.run_stop_button)
+    assert window.run_action_stack.currentWidget() is window.run_start_button
     assert window.status_panel.isAncestorOf(controls) is False
-    assert header.height() == 48
+    assert header.height() == 52
     assert window.global_epics_status_label.text() == "●  EPICS  Load PV library"
     assert window.global_mode_status_label.text() == "MODE  Monitor"
     assert window.global_run_status_label.text() == "RUN  Idle"

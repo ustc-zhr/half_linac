@@ -50,6 +50,24 @@ python main.py
 
 The GUI auto-loads `configs/irfel_pvlist.json` when present. You can load another PV library from the interface.
 
+## Offline Training
+
+Version 0.3.0 adds a top-level **Training** workspace for saved
+`timed_acquisition` runs. The first task forecasts the next-window FIR BPM04
+position or the supplied orbit-subtracted target
+`q = BPM04.x - a·BPM02.x - b·BPM03.x`. It compares fixed persistence, trend,
+Ridge, histogram gradient boosting, and MLP candidates across separate Train
+and Test runs.
+
+Training reads `raw.h5` files offline and never connects to EPICS or writes a
+PV. Choose roles in the run table, start training, inspect pooled and per-run
+metrics, then manually export a candidate as a ZIP model package. Completed
+experiments are written under `<run_root>/training_experiments/` by default and
+contain the full specification, data-quality summary, metrics, predictions,
+serialized candidates, and comparison plots. When upstream subtraction is
+disabled, the target is BPM04 position and must not be interpreted as an
+energy residual.
+
 ## Spectrum Analysis
 
 Version 0.2.0 changes FFT amplitude results to physical one-sided peak

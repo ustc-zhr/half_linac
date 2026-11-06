@@ -49,6 +49,8 @@ if QtWidgets is not None:
             }
 
             layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(20, 20, 20, 16)
+            layout.setSpacing(12)
 
             intro = QtWidgets.QLabel(
                 "Load a PV library if needed, then choose control PVs, scalar read PVs, and raw waveforms."
@@ -78,10 +80,10 @@ if QtWidgets is not None:
             cancel_button = button_box.button(QtWidgets.QDialogButtonBox.Cancel)
             if ok_button is not None:
                 ok_button.setProperty("role", "control")
-                ok_button.setMinimumHeight(40)
+                ok_button.setMinimumHeight(34)
             if cancel_button is not None:
                 cancel_button.setProperty("role", "subtle")
-                cancel_button.setMinimumHeight(40)
+                cancel_button.setMinimumHeight(34)
             button_box.accepted.connect(self.accept)
             button_box.rejected.connect(self.reject)
             layout.addWidget(button_box)
@@ -99,13 +101,13 @@ if QtWidgets is not None:
                 group_box.addItem(self._group_labels.get(group_id, group_id), group_id)
             clear_button = QtWidgets.QPushButton("Clear Selection", tab)
             clear_button.setProperty("role", "danger")
-            clear_button.setMinimumHeight(40)
+            clear_button.setMinimumHeight(34)
             select_visible_button = QtWidgets.QPushButton("Select Visible", tab)
             select_visible_button.setProperty("role", "diagnostic")
-            select_visible_button.setMinimumHeight(40)
+            select_visible_button.setMinimumHeight(34)
             clear_visible_button = QtWidgets.QPushButton("Clear Visible", tab)
             clear_visible_button.setProperty("role", "subtle")
-            clear_visible_button.setMinimumHeight(40)
+            clear_visible_button.setMinimumHeight(34)
             filters.addWidget(search, 1)
             filters.addWidget(group_box)
             filters.addWidget(select_visible_button)

@@ -109,6 +109,7 @@ if __package__ in {None, ""}:
     from jitter_analysis.gui.plots.trend_plot import TrendPlot
     from jitter_analysis.gui.plots.waveform_plot import WaveformPlot
     from jitter_analysis.gui.state import AppState
+    from jitter_analysis.gui.training_page import TrainingPage
     from jitter_analysis.gui.widgets.config_panel import ConfigPanel
     from jitter_analysis.gui.widgets.object_panel import ObjectPanel
     from jitter_analysis.gui.widgets.scan_panel import ScanPanel
@@ -207,6 +208,7 @@ else:
     from .plots.trend_plot import TrendPlot
     from .plots.waveform_plot import WaveformPlot
     from .state import AppState
+    from .training_page import TrainingPage
     from .widgets.config_panel import ConfigPanel
     from .widgets.object_panel import ObjectPanel
     from .widgets.scan_panel import ScanPanel
@@ -299,6 +301,7 @@ class MainWindow(_MainWindowBase):
         self._last_saved_run_path: Path | None = None
         self._setup_action_key: str | None = None
         self._random_preview_seed: int | None = None
+        self._training_active = False
         apply_plot_theme(current_theme_id(QtWidgets.QApplication.instance()))
         self.setWindowTitle("Jitter Analysis")
         self.resize(1540, 900)
@@ -309,6 +312,9 @@ class MainWindow(_MainWindowBase):
         self._try_load_default_config()
 
     def closeEvent(self, event) -> None:
+        if hasattr(self, "training_page") and not self.training_page.prepare_close():
+            event.ignore()
+            return
         self._save_preferences()
         super().closeEvent(event)
 
@@ -361,8 +367,8 @@ class MainWindow(_MainWindowBase):
         central = QtWidgets.QWidget()
         central.setObjectName("appShell")
         root_layout = QtWidgets.QVBoxLayout(central)
-        root_layout.setContentsMargins(12, 12, 12, 12)
-        root_layout.setSpacing(10)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
         self.scan_panel = ScanPanel()
         self._create_run_action_buttons()
         self.main_tabs = QtWidgets.QTabWidget()
@@ -376,6 +382,12 @@ class MainWindow(_MainWindowBase):
         self.config_tab_index = self.main_tabs.addTab(self._build_config_tab(), "Config")
         self.run_tab_index = self.main_tabs.addTab(self._build_run_tab(), "Run")
         self.analysis_page_index = self.main_tabs.addTab(self._build_analysis_page(), "Analysis")
+        self.training_page = TrainingPage(
+            settings=self.settings,
+            default_run_root=str(self._default_runs_dir()),
+            parent=self,
+        )
+        self.training_page_index = self.main_tabs.addTab(self.training_page, "Training")
         self.main_tabs.setCurrentIndex(self.config_tab_index)
 
         self.log_view = QtWidgets.QPlainTextEdit()
@@ -429,9 +441,9 @@ class MainWindow(_MainWindowBase):
         self.run_start_button = QtWidgets.QPushButton("Start")
         self.run_stop_button = QtWidgets.QPushButton("Stop")
         button_specs = (
-            (self.run_check_button, 112, "info"),
-            (self.run_start_button, 192, "control"),
-            (self.run_stop_button, 82, "danger"),
+            (self.run_check_button, 104, "info"),
+            (self.run_start_button, 176, "control"),
+            (self.run_stop_button, 176, "danger"),
         )
         for button, width, tone in button_specs:
             button.setFixedSize(width, 30)
@@ -448,31 +460,31 @@ class MainWindow(_MainWindowBase):
         controls.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         layout = QtWidgets.QHBoxLayout(controls)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
         self.global_epics_status_label = QtWidgets.QLabel("●  EPICS  Not checked")
         self.global_epics_status_label.setObjectName("globalEpicsStatus")
         self.global_epics_status_label.setProperty("role", "globalStatus")
         self.global_epics_status_label.setProperty("tone", "subtle")
-        self.global_epics_status_label.setMinimumWidth(168)
         self.global_mode_status_label = QtWidgets.QLabel("MODE  Monitor")
         self.global_mode_status_label.setObjectName("globalModeStatus")
         self.global_mode_status_label.setProperty("role", "globalStatus")
         self.global_mode_status_label.setProperty("tone", "info")
-        self.global_mode_status_label.setMinimumWidth(132)
         self.global_run_status_label = QtWidgets.QLabel("RUN  Idle")
         self.global_run_status_label.setObjectName("globalRunStatus")
         self.global_run_status_label.setProperty("role", "globalStatus")
         self.global_run_status_label.setProperty("tone", "subtle")
-        self.global_run_status_label.setMinimumWidth(92)
         layout.addWidget(self.global_epics_status_label)
-        layout.addWidget(self._build_global_status_separator())
         layout.addWidget(self.global_mode_status_label)
-        layout.addWidget(self._build_global_status_separator())
         layout.addWidget(self.global_run_status_label)
         layout.addStretch(1)
         layout.addWidget(self.run_check_button)
-        layout.addWidget(self.run_start_button)
-        layout.addWidget(self.run_stop_button)
+        self.run_action_stack = QtWidgets.QStackedWidget()
+        self.run_action_stack.setObjectName("runActionStack")
+        self.run_action_stack.setFixedSize(176, 30)
+        self.run_action_stack.addWidget(self.run_start_button)
+        self.run_action_stack.addWidget(self.run_stop_button)
+        self.run_action_stack.setCurrentWidget(self.run_start_button)
+        layout.addWidget(self.run_action_stack)
         return controls
 
     @staticmethod
@@ -486,15 +498,14 @@ class MainWindow(_MainWindowBase):
     def _build_app_header(self):
         header = QtWidgets.QFrame()
         header.setObjectName("globalStatusBar")
-        header.setFixedHeight(48)
+        header.setFixedHeight(52)
         layout = QtWidgets.QHBoxLayout(header)
-        layout.setContentsMargins(12, 6, 12, 6)
+        layout.setContentsMargins(16, 8, 16, 8)
         layout.setSpacing(10)
 
         app_title = QtWidgets.QLabel("Jitter Analysis")
         app_title.setObjectName("appTitle")
         layout.addWidget(app_title, 0, QtCore.Qt.AlignVCenter)
-        layout.addWidget(self._build_global_status_separator())
 
         self.global_run_controls = self._build_global_run_controls()
         layout.addWidget(self.global_run_controls, 1, QtCore.Qt.AlignVCenter)
@@ -548,25 +559,32 @@ class MainWindow(_MainWindowBase):
         )
 
     def _build_left_panel(self):
+        scroll = QtWidgets.QScrollArea()
+        scroll.setObjectName("configSidebar")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll.setMinimumWidth(280)
+        scroll.setMaximumWidth(340)
+        scroll.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+
         panel = QtWidgets.QWidget()
-        panel.setMinimumWidth(390)
-        panel.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        panel.setObjectName("configSidebarContent")
         layout = QtWidgets.QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 16, 16, 20)
+        layout.setSpacing(12)
 
-        self.config_panel = ConfigPanel()
+        sidebar_title = QtWidgets.QLabel("Setup")
+        sidebar_title.setProperty("role", "sidebarTitle")
+        layout.addWidget(sidebar_title)
+
         self.object_panel = ObjectPanel()
+        self.config_panel = ConfigPanel(object_panel=self.object_panel)
         self._apply_panel_button_roles()
-
-        run_info_box = self._wrap_setup_section("Run Info", self.config_panel)
-        pv_selection_box = self._wrap_setup_section("PV Selection", self.object_panel)
-        run_info_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
-        pv_selection_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
-
-        layout.addWidget(run_info_box, 1)
-        layout.addWidget(pv_selection_box, 1)
-        return panel
+        layout.addWidget(self.config_panel)
+        layout.addStretch(1)
+        scroll.setWidget(panel)
+        return scroll
 
     def _apply_panel_button_roles(self) -> None:
         for button in (
@@ -578,16 +596,19 @@ class MainWindow(_MainWindowBase):
             self.object_panel.select_button,
         ):
             self._apply_action_button_role(button, "diagnostic")
-            button.setMinimumHeight(40)
-        self._apply_action_button_role(self.object_panel.clear_button, "danger")
-        self.object_panel.clear_button.setMinimumHeight(40)
+            button.setMinimumHeight(30)
+        self._apply_action_button_role(self.object_panel.clear_button, "linkDanger")
+        self.object_panel.clear_button.setMinimumHeight(30)
 
     def _build_mode_switcher(self):
         box = QtWidgets.QWidget()
+        box.setObjectName("modeSwitcher")
+        box.setMaximumWidth(560)
         layout = QtWidgets.QVBoxLayout(box)
         layout.setContentsMargins(0, 0, 0, 0)
 
         row = QtWidgets.QHBoxLayout()
+        row.setSpacing(4)
         self.mode_buttons = {}
         self.mode_button_group = QtWidgets.QButtonGroup(self)
         self.mode_button_group.setExclusive(True)
@@ -645,33 +666,39 @@ class MainWindow(_MainWindowBase):
         splitter.setCollapsible(1, False)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([400, 1000])
+        splitter.setHandleWidth(1)
+        splitter.setSizes([300, 1000])
         layout.addWidget(splitter, 1)
         return container
 
     def _build_run_tab(self):
         container = QtWidgets.QWidget()
+        container.setObjectName("runWorkspace")
         layout = QtWidgets.QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 12, 16, 16)
+        layout.setSpacing(10)
 
-        box = self._create_section_group("Run")
-        inner = QtWidgets.QVBoxLayout(box)
-        inner.setContentsMargins(12, 14, 12, 12)
-        inner.setSpacing(10)
+        title = QtWidgets.QLabel("Run")
+        title.setProperty("role", "pageTitle")
+        layout.addWidget(title)
 
         self.status_panel = StatusPanel()
-        inner.addWidget(self.status_panel)
-        inner.addWidget(self._build_run_completion_banner())
-        inner.addWidget(self._build_random_point_context())
+        layout.addWidget(self.status_panel)
+        layout.addWidget(self._build_run_completion_banner())
+        layout.addWidget(self._build_random_point_context())
 
+        plot_surface = QtWidgets.QFrame()
+        plot_surface.setObjectName("runPlotSurface")
+        plot_layout = QtWidgets.QVBoxLayout(plot_surface)
+        plot_layout.setContentsMargins(8, 8, 8, 8)
+        plot_layout.setSpacing(0)
         self.run_plot_stack = QtWidgets.QStackedWidget()
         self.trend_plot = TrendPlot()
         self.run_response_plot = ResponsePlot(show_channel_selector=True)
         self.run_plot_stack.addWidget(self.trend_plot)
         self.run_plot_stack.addWidget(self.run_response_plot)
-        inner.addWidget(self.run_plot_stack, 1)
-        layout.addWidget(box, 1)
+        plot_layout.addWidget(self.run_plot_stack, 1)
+        layout.addWidget(plot_surface, 1)
         return container
 
     def _build_random_point_context(self):
@@ -728,27 +755,24 @@ class MainWindow(_MainWindowBase):
 
     def _build_analysis_page(self):
         container = QtWidgets.QWidget()
+        container.setObjectName("analysisWorkspace")
         layout = QtWidgets.QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-
-        box = QtWidgets.QFrame()
-        box.setObjectName("analysisSection")
-        inner = QtWidgets.QVBoxLayout(box)
-        inner.setContentsMargins(12, 10, 12, 12)
-        inner.setSpacing(10)
+        layout.setContentsMargins(16, 12, 16, 16)
+        layout.setSpacing(10)
+        inner = layout
 
         section_header = QtWidgets.QHBoxLayout()
-        section_header.setContentsMargins(4, 0, 0, 0)
+        section_header.setContentsMargins(0, 0, 0, 0)
         section_header.setSpacing(8)
         section_title = QtWidgets.QLabel("Analysis")
         section_title.setObjectName("analysisSectionTitle")
+        section_title.setProperty("role", "pageTitle")
         section_header.addWidget(section_title, 0, QtCore.Qt.AlignVCenter)
         section_header.addStretch(1)
         self.analysis_open_run_button = QtWidgets.QPushButton("Run Browser")
         self._apply_action_button_role(self.analysis_open_run_button, "diagnostic")
         self.analysis_open_run_button.setProperty("compactControl", "true")
-        self.analysis_open_run_button.setFixedSize(128, 28)
+        self.analysis_open_run_button.setFixedSize(116, 28)
         section_header.addWidget(self.analysis_open_run_button, 0, QtCore.Qt.AlignVCenter)
         inner.addLayout(section_header)
 
@@ -756,16 +780,19 @@ class MainWindow(_MainWindowBase):
         self.analysis_tabs.setObjectName("analysisTabs")
         self.analysis_tabs.setDocumentMode(True)
         self.analysis_tabs.setMovable(False)
+        self.analysis_tabs.setSizePolicy(
+            QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored
+        )
         set_scroll_buttons = getattr(self.analysis_tabs, "setUsesScrollButtons", None)
         if callable(set_scroll_buttons):
-            set_scroll_buttons(False)
+            set_scroll_buttons(True)
         analysis_tab_bar = self.analysis_tabs.tabBar()
         analysis_tab_bar.setObjectName("analysisTabBar")
         set_analysis_draw_base = getattr(analysis_tab_bar, "setDrawBase", None)
         if callable(set_analysis_draw_base):
             set_analysis_draw_base(False)
         analysis_tab_bar.setElideMode(QtCore.Qt.ElideNone)
-        analysis_tab_bar.setExpanding(True)
+        analysis_tab_bar.setExpanding(False)
 
         corner = QtWidgets.QWidget()
         corner_layout = QtWidgets.QHBoxLayout(corner)
@@ -832,7 +859,6 @@ class MainWindow(_MainWindowBase):
         }
         self._mark_analysis_tabs_dirty()
         inner.addWidget(self.analysis_tabs, 1)
-        layout.addWidget(box, 1)
         return container
 
     def _build_analysis_outlier_filter_panel(self):
@@ -867,12 +893,37 @@ class MainWindow(_MainWindowBase):
         return frame
 
     def _build_task_setup_group(self):
-        box = self._create_section_group("Task Setup")
-        layout = QtWidgets.QVBoxLayout(box)
-        layout.addWidget(self._build_mode_switcher())
+        scroll = QtWidgets.QScrollArea()
+        scroll.setObjectName("taskSetupScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+
+        surface = QtWidgets.QWidget()
+        surface.setObjectName("taskSetupSurface")
+        surface_layout = QtWidgets.QHBoxLayout(surface)
+        surface_layout.setContentsMargins(24, 16, 24, 24)
+        surface_layout.addStretch(1)
+
+        content = QtWidgets.QWidget()
+        content.setObjectName("taskSetupContent")
+        content.setMaximumWidth(760)
+        content.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        layout = QtWidgets.QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+        title = QtWidgets.QLabel("Task Setup")
+        title.setProperty("role", "pageTitle")
+        layout.addWidget(title)
+        layout.addWidget(self._build_mode_switcher(), 0, QtCore.Qt.AlignHCenter)
         layout.addWidget(self._build_mode_status_banner())
         layout.addWidget(self.scan_panel)
-        return box
+        layout.addStretch(1)
+
+        surface_layout.addWidget(content, 1)
+        surface_layout.addStretch(1)
+        scroll.setWidget(surface)
+        return scroll
 
     def _build_mode_status_banner(self):
         frame = QtWidgets.QFrame()
@@ -880,29 +931,24 @@ class MainWindow(_MainWindowBase):
         frame.setProperty("tone", "subtle")
         self.mode_status_banner = frame
         layout = QtWidgets.QHBoxLayout(frame)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(12)
-
-        text_layout = QtWidgets.QVBoxLayout()
-        text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(4)
+        layout.setContentsMargins(10, 7, 10, 7)
+        layout.setSpacing(8)
 
         self.mode_status_title_label = QtWidgets.QLabel("Setup status")
-        self.mode_status_title_label.setProperty("role", "title")
+        self.mode_status_title_label.setProperty("role", "statusTitle")
         self.mode_status_message_label = QtWidgets.QLabel("Load a PV library.")
         self.mode_status_message_label.setWordWrap(True)
         self.mode_status_message_label.setProperty("role", "message")
         self.mode_status_context_label = QtWidgets.QLabel()
-        self.mode_status_context_label.setWordWrap(True)
         self.mode_status_context_label.setProperty("role", "context")
+        self.mode_status_context_label.setVisible(False)
 
-        text_layout.addWidget(self.mode_status_title_label)
-        text_layout.addWidget(self.mode_status_message_label)
-        text_layout.addWidget(self.mode_status_context_label)
-        layout.addLayout(text_layout, 1)
+        layout.addWidget(self.mode_status_title_label, 0, QtCore.Qt.AlignVCenter)
+        layout.addWidget(self.mode_status_message_label, 1, QtCore.Qt.AlignVCenter)
+        layout.addWidget(self.mode_status_context_label, 0, QtCore.Qt.AlignVCenter)
         self.mode_status_action_button = QtWidgets.QPushButton()
         self.mode_status_action_button.setProperty("role", "diagnostic")
-        self.mode_status_action_button.setMinimumHeight(34)
+        self.mode_status_action_button.setProperty("compactControl", "true")
         self.mode_status_action_button.setVisible(False)
         layout.addWidget(self.mode_status_action_button, 0, QtCore.Qt.AlignVCenter)
         return frame
@@ -1215,6 +1261,8 @@ class MainWindow(_MainWindowBase):
         self.analysis_axis_combo.currentIndexChanged.connect(self._on_single_knob_axis_changed)
         self.analysis_tabs.currentChanged.connect(self._on_analysis_tab_changed)
         self.main_tabs.currentChanged.connect(self._on_main_tab_changed)
+        self.training_page.trainingStateChanged.connect(self._on_training_state_changed)
+        self.training_page.logMessage.connect(self.append_log)
 
         self.config_panel.load_button.clicked.connect(self.load_config_file)
         self.config_panel.edit_library_button.clicked.connect(self.open_pv_library_editor)
@@ -1276,6 +1324,7 @@ class MainWindow(_MainWindowBase):
     def _sync_mode_buttons(self) -> None:
         knob_modes_enabled = self.scan_panel.knob_scan_available()
         running = self.state.run_status == RunStatus.RUNNING
+        training_active = bool(self._training_active)
         current_mode = self.scan_panel.task_mode()
         if current_mode != "timed_acquisition" and not knob_modes_enabled:
             self.scan_panel.set_task_mode("timed_acquisition")
@@ -1285,7 +1334,7 @@ class MainWindow(_MainWindowBase):
         try:
             for mode, button in self.mode_buttons.items():
                 allowed = mode == "timed_acquisition" or knob_modes_enabled
-                button.setEnabled(allowed and not running)
+                button.setEnabled(allowed and not running and not training_active)
                 button.setChecked(mode == current_mode)
         finally:
             del blockers
@@ -1316,7 +1365,7 @@ class MainWindow(_MainWindowBase):
         geometry = self.settings.value("ui/geometry")
         if geometry:
             self.restoreGeometry(geometry)
-        splitter_state = self.settings.value("ui/config_splitter")
+        splitter_state = self.settings.value("ui/config_splitter_v2")
         if splitter_state:
             self.config_splitter.restoreState(splitter_state)
         save_dir = str(self.settings.value("run/save_dir", "") or "").strip()
@@ -1335,10 +1384,11 @@ class MainWindow(_MainWindowBase):
         if not self._settings_enabled:
             return
         self.settings.setValue("ui/geometry", self.saveGeometry())
-        self.settings.setValue("ui/config_splitter", self.config_splitter.saveState())
+        self.settings.setValue("ui/config_splitter_v2", self.config_splitter.saveState())
         self.settings.setValue("ui/theme", current_theme_id(QtWidgets.QApplication.instance()))
         self.settings.setValue("run/save_dir", self.config_panel.save_dir_edit.text().strip() or "runs")
         self.settings.setValue("run/operator", self.config_panel.operator_edit.text().strip())
+        self.training_page.save_preferences()
         if self.loaded_config is not None and self.loaded_config.source_path:
             self.settings.setValue("config/recent_path", self.loaded_config.source_path)
         self.settings.sync()
@@ -2304,6 +2354,7 @@ class MainWindow(_MainWindowBase):
     def _refresh_ui_affordances(self) -> None:
         mode = self.scan_panel.task_mode()
         running = self.state.run_status == RunStatus.RUNNING
+        training_active = bool(self._training_active)
         loaded = self.loaded_config is not None
         selected_objects = self._selected_objects() if loaded else []
         selected_knobs = self._selected_knobs() if loaded else []
@@ -2322,18 +2373,23 @@ class MainWindow(_MainWindowBase):
         self.run_start_button.setText(self.action_start.text())
         self.run_stop_button.setText("Stop")
         self.run_stop_button.setToolTip(self.action_stop.text())
+        self.run_action_stack.setCurrentWidget(
+            self.run_stop_button if running else self.run_start_button
+        )
 
         self.config_panel.edit_library_button.setEnabled(
             loaded and not running and not self._viewing_saved_run
         )
         self.object_panel.select_button.setEnabled(loaded and not running)
-        self.action_connect_epics.setEnabled(loaded and has_selection and not running)
-        self.action_start.setEnabled(ready)
-        self.run_check_button.setEnabled(loaded and has_selection and not running)
-        self.run_start_button.setEnabled(ready)
+        acquisition_ready = ready and not training_active
+        self.action_connect_epics.setEnabled(loaded and has_selection and not running and not training_active)
+        self.action_start.setEnabled(acquisition_ready)
+        self.run_check_button.setEnabled(loaded and has_selection and not running and not training_active)
+        self.run_start_button.setEnabled(acquisition_ready)
         self.analysis_open_run_button.setEnabled(not running)
-        self.run_start_button.setToolTip(next_step)
-        self.action_start.setToolTip(next_step)
+        acquisition_tip = "Offline training is running." if training_active else next_step
+        self.run_start_button.setToolTip(acquisition_tip)
+        self.action_start.setToolTip(acquisition_tip)
         show_result_mode = (running or self._viewing_saved_run) and self.current_run_mode is not None
         mode_for_status = self._mode_display_name(
             self._mode_key_from_run_mode(self.current_run_mode) if show_result_mode else mode
@@ -2344,7 +2400,10 @@ class MainWindow(_MainWindowBase):
             mode_for_status,
             "info",
         )
-        if self._viewing_saved_run:
+        if training_active:
+            run_status_text = "Training"
+            run_status_tone_value = "info"
+        elif self._viewing_saved_run:
             run_status_text = "Loaded"
             run_status_tone_value = "info"
         else:
@@ -2429,16 +2488,9 @@ class MainWindow(_MainWindowBase):
     def _setup_status_action(self, mode: str, ready: bool) -> tuple[str | None, str]:
         if ready or self.state.run_status == RunStatus.RUNNING or self._viewing_saved_run:
             return None, ""
-        if self.loaded_config is None:
-            return "load_config", "Load PV Library"
-        if mode in {"single_knob_scan", "multi_knob_random"} and not self._selected_knobs():
-            return "choose_pvs", "Choose PVs"
-        if not self._selected_objects():
-            return "choose_pvs", "Choose PVs"
-        if mode == "single_knob_scan" and self._active_knob() is None:
-            return "choose_pvs", "Choose Knob"
-        if mode == "multi_knob_random":
-            return "configure_ranges", "Configure Ranges"
+        if mode == "multi_knob_random" and self.loaded_config is not None:
+            if self._selected_objects() and self._selected_knobs():
+                return "configure_ranges", "Configure Ranges"
         return None, ""
 
     def _run_setup_status_action(self) -> None:
@@ -3485,6 +3537,10 @@ class MainWindow(_MainWindowBase):
             seed,
         )
 
+    def _on_training_state_changed(self, active: bool) -> None:
+        self._training_active = bool(active)
+        self._refresh_ui_affordances()
+
     def _set_running_state(self, running: bool) -> None:
         self.action_stop.setEnabled(running)
         self.run_stop_button.setEnabled(running)
@@ -3499,6 +3555,7 @@ class MainWindow(_MainWindowBase):
         self.object_panel.clear_button.setEnabled(not running)
         self.scan_panel.setEnabled(not running)
         self._sync_mode_buttons()
+        self.training_page.set_acquisition_active(running)
         self._refresh_ui_affordances()
 
     @staticmethod
@@ -3650,6 +3707,9 @@ class MainWindow(_MainWindowBase):
             self.append_log(f"All {connected} selected PV endpoint(s) are connected.")
 
     def start_selected_mode(self) -> None:
+        if self._training_active:
+            self.append_log("Stop offline training before starting acquisition.")
+            return
         task_mode = self.scan_panel.task_mode()
         if task_mode == "single_knob_scan":
             self.start_knob_scan()

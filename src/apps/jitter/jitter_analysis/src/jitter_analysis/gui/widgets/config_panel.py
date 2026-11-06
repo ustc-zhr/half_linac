@@ -15,8 +15,9 @@ if QtWidgets is not None:
         BROWSE_BUTTON_WIDTH = 96
         LABEL_WIDTH = 82
 
-        def __init__(self, parent=None) -> None:
+        def __init__(self, parent=None, object_panel=None) -> None:
             super().__init__(parent)
+            self.setObjectName("configInfoPanel")
             layout = QtWidgets.QVBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(8)
@@ -24,75 +25,81 @@ if QtWidgets is not None:
             self.config_path_edit = QtWidgets.QLineEdit()
             self.config_path_edit.setReadOnly(True)
             self.config_path_edit.setPlaceholderText("No PV library loaded")
-            self.load_button = QtWidgets.QPushButton("Load PVs")
-            self.edit_library_button = QtWidgets.QPushButton("Edit PVs")
-            self.load_setup_button = QtWidgets.QPushButton("Load Setup...")
-            self.save_setup_button = QtWidgets.QPushButton("Save Setup...")
+            self.load_button = QtWidgets.QPushButton("Load")
+            self.edit_library_button = QtWidgets.QPushButton("Edit")
+            self.load_setup_button = QtWidgets.QPushButton("Load")
+            self.save_setup_button = QtWidgets.QPushButton("Save")
 
             self.save_dir_edit = QtWidgets.QLineEdit("runs")
             self.save_dir_edit.setPlaceholderText("Directory used for new runs")
-            self.save_dir_browse_button = QtWidgets.QPushButton("Browse...")
-
+            self.save_dir_browse_button = QtWidgets.QPushButton("Browse")
             self.operator_edit = QtWidgets.QLineEdit()
             self.notes_edit = QtWidgets.QPlainTextEdit()
             self.notes_edit.setPlaceholderText("Run notes and operator comments")
-            self.notes_edit.setMinimumHeight(108)
-            self.notes_edit.setMaximumHeight(150)
+            self.notes_edit.setMinimumHeight(88)
+            self.notes_edit.setMaximumHeight(112)
 
-            for field in (
-                self.config_path_edit,
-                self.save_dir_edit,
-                self.operator_edit,
-            ):
-                self._configure_line_field(field)
-            self._configure_fixed_action_button(self.load_button)
-            self._configure_fixed_action_button(self.edit_library_button)
-            self._configure_fixed_action_button(
+            for field in (self.config_path_edit, self.save_dir_edit, self.operator_edit):
+                field.setProperty("runInfoControl", "true")
+                field.setFixedHeight(34)
+            for button in (
+                self.load_button,
+                self.edit_library_button,
+                self.load_setup_button,
+                self.save_setup_button,
                 self.save_dir_browse_button,
-                width=self.BROWSE_BUTTON_WIDTH,
-            )
-            self._configure_fixed_action_button(self.load_setup_button)
-            self._configure_fixed_action_button(self.save_setup_button)
+            ):
+                button.setProperty("compactControl", "true")
+                button.setMinimumHeight(30)
 
+            layout.addWidget(self._section_label("PV library"))
+            layout.addWidget(self.config_path_edit)
+            library_actions = QtWidgets.QHBoxLayout()
+            library_actions.setContentsMargins(0, 0, 0, 0)
+            library_actions.setSpacing(8)
+            library_actions.addWidget(self.load_button)
+            library_actions.addWidget(self.edit_library_button)
+            layout.addLayout(library_actions)
+
+            if object_panel is not None:
+                layout.addWidget(self._divider())
+                layout.addWidget(self._section_label("PV selection"))
+                layout.addWidget(object_panel)
+
+            layout.addWidget(self._divider())
+            layout.addWidget(self._section_label("Run setup"))
+            setup_actions = QtWidgets.QHBoxLayout()
+            setup_actions.setContentsMargins(0, 0, 0, 0)
+            setup_actions.setSpacing(8)
+            setup_actions.addWidget(self.load_setup_button)
+            setup_actions.addWidget(self.save_setup_button)
+            layout.addLayout(setup_actions)
+
+            layout.addWidget(self._divider())
+            layout.addWidget(self._section_label("Run details"))
+            layout.addWidget(self._detail_label("Save directory"))
             save_dir_layout = QtWidgets.QHBoxLayout()
             save_dir_layout.setContentsMargins(0, 0, 0, 0)
             save_dir_layout.setSpacing(8)
             save_dir_layout.addWidget(self.save_dir_edit, 1)
             save_dir_layout.addWidget(self.save_dir_browse_button)
+            layout.addLayout(save_dir_layout)
+            layout.addWidget(self._detail_label("Operator"))
+            layout.addWidget(self.operator_edit)
+            layout.addWidget(self._detail_label("Notes"))
+            layout.addWidget(self.notes_edit)
 
-            grid = QtWidgets.QGridLayout()
-            grid.setContentsMargins(0, 0, 0, 0)
-            grid.setHorizontalSpacing(8)
-            grid.setVerticalSpacing(8)
-            grid.setColumnMinimumWidth(0, self.LABEL_WIDTH)
-            grid.setColumnMinimumWidth(2, self.ACTION_BUTTON_WIDTH)
-            grid.setColumnStretch(0, 0)
-            grid.setColumnStretch(1, 1)
-            grid.setColumnStretch(2, 0)
+        @staticmethod
+        def _section_label(text: str):
+            label = QtWidgets.QLabel(text)
+            label.setProperty("role", "sidebarSectionTitle")
+            return label
 
-            grid.addWidget(self._field_label("PV Library"), 0, 0)
-            grid.addWidget(self.config_path_edit, 0, 1, 1, 2)
-            grid.addWidget(self.load_button, 1, 1)
-            grid.addWidget(self.edit_library_button, 1, 2)
-            grid.addWidget(self._divider(), 2, 0, 1, 3)
-            grid.addWidget(self._field_label("Run Setup"), 3, 0, QtCore.Qt.AlignVCenter)
-            grid.addWidget(
-                self.load_setup_button,
-                3,
-                1,
-                QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter,
-            )
-            grid.addWidget(self.save_setup_button, 3, 2, QtCore.Qt.AlignVCenter)
-            grid.addWidget(self._divider(), 4, 0, 1, 3)
-            grid.addWidget(self._field_label("Save Dir"), 5, 0, QtCore.Qt.AlignVCenter)
-            grid.addLayout(save_dir_layout, 5, 1, 1, 2)
-            grid.addWidget(self._field_label("Operator"), 6, 0)
-            grid.addWidget(self.operator_edit, 6, 1, 1, 2)
-            grid.addWidget(self._field_label("Notes", align_top=True), 7, 0)
-            grid.addWidget(self.notes_edit, 7, 1, 1, 2)
-
-            layout.addLayout(grid)
-            layout.addStretch(1)
+        @staticmethod
+        def _detail_label(text: str):
+            label = QtWidgets.QLabel(text)
+            label.setProperty("role", "field")
+            return label
 
         def _field_label(self, text: str, *, align_top: bool = False):
             label = QtWidgets.QLabel(text)

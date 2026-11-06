@@ -59,57 +59,57 @@ class ThemeSpec:
     splitter: str
 
 
-DEFAULT_THEME_ID = "night_shift"
+DEFAULT_THEME_ID = "control_room"
 
 
 THEMES: dict[str, ThemeSpec] = {
     "control_room": ThemeSpec(
         theme_id="control_room",
-        label="Control Room",
-        window_bg="#f2ede6",
-        panel_bg="#fffaf3",
-        section_bg="#fffdf9",
-        section_border="#ddd4c7",
-        section_title="#1f2937",
-        input_bg="#fffdf8",
-        border="#d8d0c3",
-        border_soft="#e7dfd3",
-        text_primary="#102033",
-        text_muted="#6f6253",
-        text_disabled="#94a3b8",
-        focus="#60a5fa",
-        button_bg="#f8f4ed",
-        button_hover="#f1eade",
-        subtle_bg="#fffdf8",
-        subtle_hover="#f6efe5",
-        subtle_text="#475569",
-        primary_bg="#dfe9f7",
-        primary_hover="#d2e1f3",
-        primary_text="#15324d",
-        primary_border="#a9bfd7",
-        danger_bg="#f9ebe6",
-        danger_hover="#f5dfd6",
-        danger_text="#8f3d28",
-        danger_border="#d9b0a1",
-        tab_bg="#ece5da",
-        tab_hover="#f5efe6",
-        tab_selected_bg="#fffdf9",
-        tab_text="#475569",
-        tab_selected_text="#102033",
-        tab_disabled_bg="#f7f2eb",
-        tab_disabled_text="#a8b0bb",
-        menu_selected_bg="#e0ecff",
-        menu_selected_text="#102033",
-        mode_toggle_bg="#f7f1e8",
-        mode_toggle_hover="#efe7db",
-        mode_toggle_checked_bg="#dbe8f6",
-        mode_toggle_checked_text="#173857",
-        mode_toggle_checked_border="#8eb1d2",
-        scroll_bg="#efe7db",
-        scroll_handle="#c8bba8",
-        tooltip_bg="#102033",
-        tooltip_fg="#f8fafc",
-        splitter="#e6ddd1",
+        label="Light",
+        window_bg="#f7f7f8",
+        panel_bg="#f3f4f6",
+        section_bg="#ffffff",
+        section_border="#e5e7eb",
+        section_title="#202123",
+        input_bg="#ffffff",
+        border="#d9dce1",
+        border_soft="#e9eaed",
+        text_primary="#202123",
+        text_muted="#6b7280",
+        text_disabled="#a1a1aa",
+        focus="#2563eb",
+        button_bg="#f7f7f8",
+        button_hover="#eeeeef",
+        subtle_bg="#ffffff",
+        subtle_hover="#f3f4f6",
+        subtle_text="#4b5563",
+        primary_bg="#2563eb",
+        primary_hover="#1d4ed8",
+        primary_text="#ffffff",
+        primary_border="#2563eb",
+        danger_bg="#ffffff",
+        danger_hover="#fff4f2",
+        danger_text="#b42318",
+        danger_border="#f1c0bc",
+        tab_bg="#f3f4f6",
+        tab_hover="#e9eaed",
+        tab_selected_bg="#ffffff",
+        tab_text="#6b7280",
+        tab_selected_text="#202123",
+        tab_disabled_bg="#f7f7f8",
+        tab_disabled_text="#a1a1aa",
+        menu_selected_bg="#e8f0ff",
+        menu_selected_text="#1e3a8a",
+        mode_toggle_bg="#f3f4f6",
+        mode_toggle_hover="#e9eaed",
+        mode_toggle_checked_bg="#ffffff",
+        mode_toggle_checked_text="#202123",
+        mode_toggle_checked_border="#cfd3da",
+        scroll_bg="#f1f2f4",
+        scroll_handle="#c5c8ce",
+        tooltip_bg="#202123",
+        tooltip_fg="#ffffff",
+        splitter="#e5e7eb",
     ),
     "mist_blue": ThemeSpec(
         theme_id="mist_blue",
@@ -257,51 +257,51 @@ THEMES: dict[str, ThemeSpec] = {
     ),
     "night_shift": ThemeSpec(
         theme_id="night_shift",
-        label="HALF Control Room",
-        window_bg="#0f1519",
-        panel_bg="#172027",
-        section_bg="#172027",
-        section_border="#24333d",
-        section_title="#7dd7c5",
-        input_bg="#10171c",
-        border="#31424d",
-        border_soft="#2a3943",
-        text_primary="#e6edf2",
-        text_muted="#99a9b5",
-        text_disabled="#6f7f89",
-        focus="#45d0bc",
-        button_bg="#22313a",
-        button_hover="#2b3f4b",
-        subtle_bg="#131c22",
-        subtle_hover="#18242c",
-        subtle_text="#c9d5dc",
-        primary_bg="#45d0bc",
-        primary_hover="#50decc",
-        primary_text="#0f1519",
-        primary_border="#45d0bc",
-        danger_bg="#22313a",
-        danger_hover="#2b3f4b",
-        danger_text="#e4b86f",
-        danger_border="#e4b86f",
-        tab_bg="#22313a",
-        tab_hover="#2b3f4b",
-        tab_selected_bg="#172027",
-        tab_text="#edf3f7",
-        tab_selected_text="#f3efe3",
-        tab_disabled_bg="#131c22",
-        tab_disabled_text="#6f7f89",
-        menu_selected_bg="#2b3f4b",
-        menu_selected_text="#edf3f7",
-        mode_toggle_bg="#22313a",
-        mode_toggle_hover="#2b3f4b",
-        mode_toggle_checked_bg="#45d0bc",
-        mode_toggle_checked_text="#0f1519",
-        mode_toggle_checked_border="#45d0bc",
-        scroll_bg="#10171c",
-        scroll_handle="#48606e",
-        tooltip_bg="#edf3f7",
-        tooltip_fg="#0f1519",
-        splitter="#24333d",
+        label="Dark",
+        window_bg="#202123",
+        panel_bg="#25262b",
+        section_bg="#2b2c32",
+        section_border="#3a3b42",
+        section_title="#f3f4f6",
+        input_bg="#303138",
+        border="#45464f",
+        border_soft="#36373e",
+        text_primary="#f3f4f6",
+        text_muted="#a1a1aa",
+        text_disabled="#71717a",
+        focus="#60a5fa",
+        button_bg="#303138",
+        button_hover="#3a3b42",
+        subtle_bg="#2b2c32",
+        subtle_hover="#34353c",
+        subtle_text="#d4d4d8",
+        primary_bg="#60a5fa",
+        primary_hover="#93c5fd",
+        primary_text="#111827",
+        primary_border="#60a5fa",
+        danger_bg="#2b2c32",
+        danger_hover="#3b2c2e",
+        danger_text="#fca5a5",
+        danger_border="#7f3b3b",
+        tab_bg="#25262b",
+        tab_hover="#34353c",
+        tab_selected_bg="#2b2c32",
+        tab_text="#a1a1aa",
+        tab_selected_text="#f3f4f6",
+        tab_disabled_bg="#202123",
+        tab_disabled_text="#71717a",
+        menu_selected_bg="#334155",
+        menu_selected_text="#f8fafc",
+        mode_toggle_bg="#25262b",
+        mode_toggle_hover="#34353c",
+        mode_toggle_checked_bg="#3a3b42",
+        mode_toggle_checked_text="#f3f4f6",
+        mode_toggle_checked_border="#52535d",
+        scroll_bg="#25262b",
+        scroll_handle="#52535d",
+        tooltip_bg="#f3f4f6",
+        tooltip_fg="#202123",
+        splitter="#3a3b42",
     ),
 }
 
@@ -337,17 +337,17 @@ def current_theme_id(app=None) -> str:
 def build_app_stylesheet(theme_id: str | ThemeSpec | None = None) -> str:
     spec = theme_id if isinstance(theme_id, ThemeSpec) else theme_spec(theme_id)
     is_dark = spec.theme_id == "night_shift"
-    font_family = '"IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif'
+    font_family = '"Segoe UI", "Microsoft YaHei UI", "Source Han Sans SC", sans-serif'
     mono_font_family = '"JetBrains Mono", "Cascadia Mono", "Consolas", monospace'
-    hero_bg = "#1b262d" if is_dark else spec.input_bg
-    hero_title = "#f3efe3" if is_dark else spec.text_primary
-    hero_text = "#99a9b5" if is_dark else spec.text_muted
-    info_color = "#78d5e3" if is_dark else spec.focus
-    success_color = "#45d0bc" if is_dark else "#2d7f6d"
-    warning_color = "#e4b86f" if is_dark else "#a97118"
-    danger_color = "#ff6b6b" if is_dark else spec.danger_text
-    status_bg = "#131c22" if is_dark else spec.mode_toggle_bg
-    status_border = "#2a3943" if is_dark else spec.border_soft
+    hero_bg = spec.section_bg
+    hero_title = spec.text_primary
+    hero_text = spec.text_muted
+    info_color = spec.focus
+    success_color = "#34d399" if is_dark else "#15803d"
+    warning_color = "#fbbf24" if is_dark else "#a16207"
+    danger_color = "#fca5a5" if is_dark else spec.danger_text
+    status_bg = spec.panel_bg
+    status_border = spec.border_soft
     status_idle_bar = "#4f6270" if is_dark else spec.border
     return f"""
 QWidget {{
@@ -355,11 +355,19 @@ QWidget {{
     color: {spec.text_primary};
     font-family: {font_family};
     font-size: 13px;
+    font-weight: 400;
     selection-background-color: {spec.focus};
     selection-color: {spec.primary_text};
 }}
 QMainWindow, QDialog {{
     background: {spec.window_bg};
+}}
+QDialogButtonBox {{
+    background: transparent;
+    border: none;
+}}
+QDialogButtonBox QPushButton {{
+    min-width: 88px;
 }}
 QLabel {{
     background: transparent;
@@ -370,8 +378,8 @@ QLabel[role="pageHint"] {{
 QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
     background: {spec.input_bg};
     border: 1px solid {spec.border};
-    border-radius: 12px;
-    padding: 5px 10px;
+    border-radius: 8px;
+    padding: 5px 9px;
     min-height: 16px;
     selection-background-color: {spec.focus};
     selection-color: {spec.primary_text};
@@ -385,8 +393,8 @@ QLineEdit[runInfoControl="true"], QPushButton[runInfoControl="true"] {{
     padding: 5px 10px;
 }}
 QPushButton[compactControl="true"], QToolButton[plotToolbarControl="true"] {{
-    min-height: 28px;
-    max-height: 28px;
+    min-height: 20px;
+    max-height: 20px;
     padding: 3px 10px;
 }}
 QComboBox::drop-down, QSpinBox::up-button, QSpinBox::down-button,
@@ -408,8 +416,8 @@ QToolButton#activeKnobDropdownButton {{
     border-left: none;
     border-top-left-radius: 0px;
     border-bottom-left-radius: 0px;
-    border-top-right-radius: 12px;
-    border-bottom-right-radius: 12px;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
     min-width: 36px;
     max-width: 36px;
     min-height: 32px;
@@ -438,11 +446,11 @@ QPushButton, QToolButton {{
     background: {spec.button_bg};
     color: {spec.text_primary};
     border: 1px solid {spec.border};
-    border-radius: 12px;
-    padding: 6px 12px;
-    min-height: 32px;
+    border-radius: 8px;
+    padding: 5px 11px;
+    min-height: 30px;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QPushButton:hover, QToolButton:hover {{
     background: {spec.button_hover};
@@ -508,7 +516,7 @@ QPushButton[role="statusAction"], QToolButton[role="statusAction"] {{
     max-height: 30px;
     padding: 2px 10px;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QPushButton[role="statusAction"]:hover, QToolButton[role="statusAction"]:hover {{
     background: transparent;
@@ -542,7 +550,7 @@ QToolButton#themeToggleButton, QToolButton#logToggleButton {{
     border-radius: 11px;
     padding: 0px;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QToolButton#themeToggleButton {{
     min-width: 32px;
@@ -572,7 +580,7 @@ QPushButton[role="primary"], QToolButton[role="primary"] {{
     background: {spec.primary_bg};
     color: {spec.primary_text};
     border: 1px solid {spec.primary_border};
-    font-weight: 700;
+    font-weight: 600;
 }}
 QPushButton[role="primary"]:hover, QToolButton[role="primary"]:hover {{
     background: {spec.primary_hover};
@@ -596,14 +604,14 @@ QPushButton[role="danger"]:disabled, QToolButton[role="danger"]:disabled {{
     border: 1px solid {spec.border_soft};
 }}
 QToolButton[themeRole="modeToggle"] {{
-    background: {spec.mode_toggle_bg};
+    background: transparent;
     color: {spec.text_primary};
     border: 1px solid {spec.border};
-    border-radius: 11px;
+    border-radius: 8px;
     padding: 6px 12px;
     min-height: 28px;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QToolButton[themeRole="modeToggle"]:hover {{
     background: {spec.mode_toggle_hover};
@@ -643,7 +651,7 @@ QHeaderView::section {{
     border-right: 1px solid {spec.section_border};
     border-bottom: 1px solid {spec.section_border};
     padding: 6px 8px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QCheckBox {{
     background: transparent;
@@ -667,16 +675,17 @@ QWidget#appShell {{
     background: {spec.window_bg};
 }}
 QFrame#globalStatusBar {{
-    background: {status_bg};
-    border: 1px solid {status_border};
-    border-radius: 8px;
+    background: {spec.window_bg};
+    border: none;
+    border-bottom: 1px solid {spec.border_soft};
+    border-radius: 0px;
 }}
 QLabel#appTitle {{
     color: {hero_title};
     background: transparent;
     border: none;
     font-size: 20px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel#appSubtitle {{
     color: {hero_text};
@@ -690,7 +699,7 @@ QLabel[role="statusPill"] {{
     color: {spec.text_primary};
     padding: 4px 12px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel[role="statusPill"][tone="info"] {{
     border-color: {info_color};
@@ -713,7 +722,7 @@ QWidget#statusStrip {{
     border: 1px solid {status_border};
     border-radius: 10px;
 }}
-QWidget#globalRunControls {{
+QWidget#globalRunControls, QStackedWidget#runActionStack {{
     background: transparent;
     border: none;
 }}
@@ -723,7 +732,7 @@ QLabel[role="globalStatus"] {{
     color: {spec.text_muted};
     padding: 0px 2px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel[role="globalStatus"][tone="info"] {{
     color: {info_color};
@@ -748,112 +757,159 @@ QFrame#globalStatusSeparator {{
 QFrame#statusItem {{
     background: transparent;
     border: none;
-    border-left: 4px solid {status_idle_bar};
-    border-radius: 0px;
-}}
-QFrame#statusItem[tone="info"] {{
-    border-left-color: {info_color};
-}}
-QFrame#statusItem[tone="success"] {{
-    border-left-color: {success_color};
-}}
-QFrame#statusItem[tone="warning"] {{
-    border-left-color: {warning_color};
-}}
-QFrame#statusItem[tone="danger"] {{
-    border-left-color: {danger_color};
-}}
-QFrame#statusSeparator {{
-    background: {spec.border};
-    min-width: 1px;
-    max-width: 1px;
-    border: none;
 }}
 QLabel[role="title"] {{
     color: {spec.text_muted};
     background: transparent;
     border: none;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel[role="field"] {{
     color: {spec.text_muted};
     background: transparent;
     border: none;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel[role="value"][tone="subtle"] {{
     color: {spec.text_primary};
     background: transparent;
     border: none;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel[role="value"][tone="info"] {{
     color: {info_color};
     background: transparent;
     border: none;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel[role="value"][tone="success"] {{
     color: {success_color};
     background: transparent;
     border: none;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel[role="value"][tone="warning"] {{
     color: {warning_color};
     background: transparent;
     border: none;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QLabel[role="value"][tone="danger"] {{
     color: {danger_color};
     background: transparent;
     border: none;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
+}}
+QScrollArea#configSidebar {{
+    background: {spec.panel_bg};
+    border: none;
+    border-right: 1px solid {spec.border_soft};
+}}
+QScrollArea#configSidebar > QWidget > QWidget, QWidget#configSidebarContent {{
+    background: {spec.panel_bg};
+}}
+QScrollArea#taskSetupScroll, QScrollArea#taskSetupScroll > QWidget > QWidget,
+QWidget#taskSetupSurface, QWidget#taskSetupContent {{
+    background: {spec.window_bg};
+    border: none;
+}}
+QLabel[role="pageTitle"] {{
+    color: {spec.text_primary};
+    font-size: 18px;
+    font-weight: 600;
+}}
+QLabel[role="sidebarTitle"] {{
+    color: {spec.text_primary};
+    font-size: 17px;
+    font-weight: 600;
+}}
+QLabel[role="sidebarSectionTitle"] {{
+    color: {spec.text_primary};
+    font-size: 12px;
+    font-weight: 600;
+}}
+QLabel[role="sidebarSummary"] {{
+    color: {spec.text_muted};
+    font-size: 12px;
+}}
+QLabel[role="sidebarDetail"] {{
+    color: {spec.text_muted};
+    font-size: 11px;
+}}
+QFrame#sidebarDivider {{
+    background: {spec.border_soft};
+    border: none;
+    min-height: 1px;
+    max-height: 1px;
+}}
+QPushButton[role="linkDanger"], QToolButton[role="linkDanger"] {{
+    background: transparent;
+    color: {danger_color};
+    border: none;
+    padding: 4px 6px;
+}}
+QPushButton[role="linkDanger"]:hover, QToolButton[role="linkDanger"]:hover {{
+    background: {spec.danger_hover};
+}}
+QWidget#modeSwitcher {{
+    background: {spec.panel_bg};
+    border: 1px solid {spec.border_soft};
+    border-radius: 10px;
+}}
+QWidget#monitorSetupForm {{
+    background: transparent;
+    border: none;
 }}
 QGroupBox[themeSection="main"] {{
-    font-size: 15px;
-    font-weight: 800;
     color: {spec.section_title};
-    border: 1px solid {spec.section_border};
-    border-radius: 14px;
-    background: {spec.section_bg};
+    border: none;
+    border-radius: 0px;
+    background: transparent;
     margin-top: 0px;
-    padding-top: 30px;
+    padding-top: 26px;
+    font-size: 14px;
+    font-weight: 600;
 }}
 QGroupBox[themeSection="main"]::title {{
     subcontrol-origin: padding;
     subcontrol-position: top left;
-    left: 16px;
-    top: 7px;
+    left: 0px;
+    top: 4px;
     padding: 0px;
     background: transparent;
     border: none;
 }}
 QGroupBox[themeSection="main"]::indicator {{
-    width: 8px;
-    height: 8px;
-    background-color: {danger_color};
-    border-radius: 4px;
+    width: 0px;
+    height: 0px;
+    border: none;
 }}
-QFrame#analysisSection {{
+QWidget#runWorkspace, QWidget#analysisWorkspace {{
+    background: {spec.window_bg};
+    border: none;
+}}
+QFrame#runPlotSurface {{
     background: {spec.section_bg};
-    border: 1px solid {spec.section_border};
-    border-radius: 14px;
+    border: 1px solid {spec.border_soft};
+    border-radius: 12px;
+}}
+QFrame#runPlotSurface QStackedWidget {{
+    background: {spec.section_bg};
+    border: none;
 }}
 QLabel#analysisSectionTitle {{
     color: {spec.section_title};
     background: transparent;
     border: none;
     font-size: 15px;
-    font-weight: 800;
+    font-weight: 600;
 }}
 QFrame#runInfoDivider {{
     background: {spec.section_border};
@@ -872,33 +928,35 @@ QWidget#analysisOutlierFilterPanel {{
     border: none;
 }}
 QFrame#modeStatusBanner {{
-    background: {status_bg};
-    border: 1px solid {status_border};
-    border-radius: 12px;
+    background: {spec.panel_bg};
+    border: none;
+    border-left: 3px solid {status_border};
+    border-radius: 8px;
     padding: 0;
 }}
 QFrame#modeStatusBanner[tone="info"] {{
-    border-color: {info_color};
+    border-left-color: {info_color};
 }}
 QFrame#modeStatusBanner[tone="success"] {{
-    border-color: {success_color};
+    border-left-color: {success_color};
 }}
 QFrame#modeStatusBanner[tone="warning"] {{
-    border-color: {warning_color};
+    border-left-color: {warning_color};
 }}
 QFrame#modeStatusBanner[tone="danger"] {{
-    border-color: {danger_color};
+    border-left-color: {danger_color};
 }}
 QFrame#runCompletionBanner {{
-    background: {status_bg};
-    border: 1px solid {success_color};
-    border-radius: 10px;
+    background: {spec.panel_bg};
+    border: none;
+    border-left: 3px solid {success_color};
+    border-radius: 8px;
 }}
 QFrame#runCompletionBanner[tone="warning"] {{
-    border-color: {warning_color};
+    border-left-color: {warning_color};
 }}
 QFrame#runCompletionBanner[tone="danger"] {{
-    border-color: {danger_color};
+    border-left-color: {danger_color};
 }}
 QFrame#runCompletionBanner QLabel {{
     background: transparent;
@@ -914,7 +972,7 @@ QLabel[role="formSectionTitle"] {{
     border: none;
     color: {spec.section_title};
     font-size: 14px;
-    font-weight: 800;
+    font-weight: 600;
 }}
 QFrame#singleFormSeparator {{
     background: {spec.border_soft};
@@ -927,11 +985,23 @@ QFrame#singlePreviewSummary, QFrame#randomPreviewSummary, QFrame#randomPointCont
     border: 1px solid {status_border};
     border-radius: 9px;
 }}
+QFrame#randomPointContext {{
+    border: none;
+    border-left: 3px solid {info_color};
+    border-radius: 8px;
+}}
 QFrame#singlePreviewSummary QLabel, QFrame#randomPreviewSummary QLabel,
 QFrame#randomPointContext QLabel {{
     background: transparent;
     border: none;
     color: {spec.text_primary};
+}}
+QFrame#modeStatusBanner QLabel[role="statusTitle"] {{
+    color: {spec.text_primary};
+    font-size: 12px;
+    font-weight: 600;
+    background: transparent;
+    border: none;
 }}
 QFrame#modeStatusBanner QLabel[role="message"] {{
     color: {spec.text_primary};
@@ -955,64 +1025,56 @@ QTabWidget#workspaceTabs::left-corner {{
     border: none;
 }}
 QTabBar#workspaceTabBar::tab {{
-    background: {spec.tab_bg};
+    background: transparent;
     color: {spec.tab_text};
-    border: 1px solid {spec.border};
-    border-bottom: none;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    padding: 10px 18px;
-    margin-right: 6px;
-    min-width: 96px;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 18px;
+    margin: 6px 2px;
+    min-width: 84px;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
+}}
+QTabBar#workspaceTabBar::tab:first {{
+    margin-left: 16px;
 }}
 QTabBar#workspaceTabBar::tab:selected {{
     background: {spec.tab_selected_bg};
     color: {spec.tab_selected_text};
-    border-color: {spec.section_border};
-    border-bottom-color: {spec.tab_selected_bg};
 }}
 QTabBar#workspaceTabBar::tab:hover:!selected {{
     background: {spec.tab_hover};
 }}
 QTabBar#workspaceTabBar::tab:disabled {{
-    background: {spec.tab_disabled_bg};
     color: {spec.tab_disabled_text};
-    border-color: {spec.border_soft};
 }}
 QTabWidget#analysisTabs::pane {{
-    border: 1px solid {spec.section_border};
-    border-radius: 14px;
+    border: 1px solid {spec.border_soft};
+    border-radius: 12px;
     background: {spec.section_bg};
     top: 0px;
 }}
 QTabBar#analysisTabBar::tab {{
-    background: {spec.tab_bg};
+    background: transparent;
     color: {spec.tab_text};
-    border: 1px solid {spec.border};
-    border-bottom: none;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
+    border: none;
+    border-bottom: 2px solid transparent;
     padding: 8px 12px;
     margin-right: 4px;
     min-width: 0px;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
 }}
 QTabBar#analysisTabBar::tab:selected {{
-    background: {spec.tab_selected_bg};
     color: {spec.tab_selected_text};
-    border-color: {spec.section_border};
-    border-bottom-color: {spec.tab_selected_bg};
+    border-bottom-color: {spec.focus};
 }}
 QTabBar#analysisTabBar::tab:hover:!selected {{
+    color: {spec.text_primary};
     background: {spec.tab_hover};
 }}
 QTabBar#analysisTabBar::tab:disabled {{
-    background: {spec.tab_disabled_bg};
     color: {spec.tab_disabled_text};
-    border-color: {spec.border_soft};
 }}
 QMenuBar {{
     background: {spec.panel_bg};
@@ -1043,25 +1105,25 @@ QMenu::item:selected {{
 }}
 QScrollBar:vertical {{
     background: {spec.scroll_bg};
-    width: 12px;
+    width: 8px;
     margin: 10px 0 10px 0;
-    border-radius: 6px;
+    border-radius: 4px;
 }}
 QScrollBar::handle:vertical {{
     background: {spec.scroll_handle};
     min-height: 28px;
-    border-radius: 6px;
+    border-radius: 4px;
 }}
 QScrollBar:horizontal {{
     background: {spec.scroll_bg};
-    height: 12px;
+    height: 8px;
     margin: 0 10px 0 10px;
-    border-radius: 6px;
+    border-radius: 4px;
 }}
 QScrollBar::handle:horizontal {{
     background: {spec.scroll_handle};
     min-width: 28px;
-    border-radius: 6px;
+    border-radius: 4px;
 }}
 QScrollBar::add-line, QScrollBar::sub-line,
 QScrollBar::add-page, QScrollBar::sub-page {{
@@ -1091,9 +1153,9 @@ def apply_app_theme(app, theme_id: str | None = None) -> str:
         app_font = QtGui.QFont()
         set_families = getattr(app_font, "setFamilies", None)
         if callable(set_families):
-            set_families(["IBM Plex Sans", "Source Han Sans SC", "Segoe UI"])
+            set_families(["Segoe UI", "Microsoft YaHei UI", "Source Han Sans SC"])
         else:
-            app_font.setFamily("IBM Plex Sans")
+            app_font.setFamily("Segoe UI")
         app_font.setPointSize(10)
         app.setFont(app_font)
     app.setProperty("gui_theme_id", spec.theme_id)

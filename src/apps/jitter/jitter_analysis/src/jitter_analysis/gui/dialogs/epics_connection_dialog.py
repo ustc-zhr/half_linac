@@ -33,6 +33,8 @@ if QtWidgets is not None:
             self.resize(900, 460)
 
             layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(20, 20, 20, 16)
+            layout.setSpacing(12)
 
             self.summary_label = QtWidgets.QLabel(
                 f"{connected}/{total} endpoint(s) connected. "
@@ -86,8 +88,8 @@ if QtWidgets is not None:
             self.close_button = button_box.addButton(QtWidgets.QDialogButtonBox.Close)
             self.copy_button.setProperty("role", "diagnostic")
             self.close_button.setProperty("role", "subtle")
-            self.copy_button.setMinimumHeight(40)
-            self.close_button.setMinimumHeight(40)
+            self.copy_button.setMinimumHeight(34)
+            self.close_button.setMinimumHeight(34)
             self.copy_button.clicked.connect(self._copy_failed_pvs)
             self.close_button.clicked.connect(self.accept)
             layout.addWidget(button_box)
