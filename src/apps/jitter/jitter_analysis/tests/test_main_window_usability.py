@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -308,3 +308,207 @@ def test_jitter_table_search_actions_and_numeric_sorting(window):
     window.jitter_table_filter_edit.clear()
     assert window.jitter_table_match_label.text() == "3 / 3 rows"
     assert not window.jitter_show_filtered_button.isEnabled()
+
+
+def test_waveform_controls_initialize_and_preserve_roi_intent(window):
+    plot = window.waveform_plot
+    plot.clear_data("test")
+    plot.set_waveform_options(
+        [("scope_a", "Scope A")],
+        shot_count=3,
+        max_roi_stop=100,
+    )
+
+    assert plot.selected_display_mode() == "selected_shot"
+    assert plot.selected_polarity() == "auto"
+    assert not plot.expose_selected_feature()
+    assert plot.roi_bounds() == (0, 100)
+    assert plot.baseline_roi_bounds() == (0, 10)
+    assert plot.reference_label.isHidden()
+    assert plot.secondary_combo.isHidden()
+    if plot.delay_plot is not None:
+        assert plot.delay_plot.isHidden()
+
+    plot.roi_start_spin.setValue(5)
+    plot.roi_stop_spin.setValue(70)
+    plot.baseline_start_spin.setValue(3)
+    plot.baseline_stop_spin.setValue(8)
+    plot.set_waveform_options(
+        [("scope_a", "Scope A")],
+        shot_count=4,
+        max_roi_stop=120,
+    )
+    assert plot.roi_bounds() == (5, 70)
+    assert plot.baseline_roi_bounds() == (3, 8)
+
+    plot._reset_roi()
+    assert plot.roi_bounds() == (0, 120)
+    assert plot.baseline_roi_bounds() == (3, 8)
+    plot.set_waveform_options(
+        [("scope_a", "Scope A")],
+        shot_count=5,
+        max_roi_stop=140,
+    )
+    assert plot.roi_bounds() == (0, 140)
+    assert plot.baseline_roi_bounds() == (3, 8)
+
+    plot.set_waveform_options(
+        [("scope_a", "Scope A"), ("scope_b", "Scope B")],
+        shot_count=5,
+        max_roi_stop=140,
+    )
+    assert not plot.reference_label.isHidden()
+    assert not plot.secondary_combo.isHidden()
+    if plot.delay_plot is not None:
+        assert not plot.delay_plot.isHidden()
+
+    if plot.preview_plot is not None:
+        waveform_payload = {
+            "label": "Scope A",
+            "x_values": list(range(140)),
+            "y_values": [0.0] * 140,
+        }
+        plot.set_preview_series(
+            primary=waveform_payload,
+            signal_roi_bounds=(0.0, 140.0),
+            baseline_roi_bounds=(3.0, 8.0),
+            region_scale=1.0,
+        )
+        plot._signal_region.setRegion((12.0, 60.0))
+        plot._region_changed(False)
+        plot._baseline_region.setRegion((2.0, 9.0))
+        plot._region_changed(True)
+        assert plot.roi_bounds() == (12, 60)
+        assert plot.baseline_roi_bounds() == (2, 9)
+
+        plot.roi_start_spin.setValue(20)
+        plot.roi_stop_spin.setValue(50)
+        plot.set_preview_series(
+            primary=waveform_payload,
+            signal_roi_bounds=(20.0, 50.0),
+            baseline_roi_bounds=(2.0, 9.0),
+            region_scale=1.0,
+        )
+        assert tuple(plot._signal_region.getRegion()) == pytest.approx((20.0, 50.0))
+
+    mean_index = plot.display_combo.findData("mean_std")
+    plot.display_combo.setCurrentIndex(mean_index)
+    assert plot.selected_display_mode() == "mean_std"
+    assert not plot.shot_spin.isEnabled()
+    plot.set_summary_rows([("Valid shots", "5 / 5"), ("Skipped", "0")])
+    assert plot.summary_table.rowCount() == 2
+    assert plot.summary_table.item(0, 0).text() == "Valid shots"
+    if plot.preview_plot is not None:
+        plot.set_preview_series(
+            primary={
+                "label": "Scope A mean",
+                "x_values": [0.0, 1.0, 2.0],
+                "y_values": [0.0, 1.0, 0.0],
+                "std_values": [0.1, 0.2, 0.1],
+            },
+            signal_roi_bounds=(0.0, 2.0),
+            baseline_roi_bounds=(0.0, 1.0),
+            region_scale=1.0,
+        )
+
+
+def test_waveform_derived_source_is_opt_in_batch_aligned_and_removable(window):
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "irfel_pvlist.json"
+    assert window._load_config_path(config_path)
+    waveform_obj = next(obj for obj in window.loaded_config.objects if obj.id == "fct_waveform")
+    scalar_obj = next(obj for obj in window.loaded_config.objects if obj.id != waveform_obj.id)
+    origin = datetime(2026, 1, 1)
+
+    window.current_series_values = {scalar_obj.id: [0.0, 1.0, 2.0, 3.0]}
+    window.current_series_metadata = {
+        scalar_obj.id: [
+            {
+                "sample_index": index,
+                "step_index": None,
+                "timestamp": origin + timedelta(seconds=10 * index),
+                "value": float(index),
+            }
+            for index in range(4)
+        ]
+    }
+    window.current_run_sample_timestamps = [
+        origin + timedelta(seconds=10 * index)
+        for index in range(4)
+    ]
+    window.waveform_plot.clear_data("test")
+    window.waveform_plot.set_waveform_options(
+        [(waveform_obj.id, waveform_obj.name)],
+        shot_count=2,
+        max_roi_stop=8,
+    )
+    window._waveform_analysis_signature = ("derived-test",)
+    window._waveform_analysis_result = {
+        "feature_rows": [
+            {
+                "pv_id": waveform_obj.id,
+                "label": waveform_obj.name,
+                "sample_indices": [1, 3],
+                "timestamps": [origin, origin + timedelta(seconds=0.25)],
+                "features": {
+                    "baseline_mean": [10.0, 30.0],
+                    "snr": [2.0, 6.0],
+                },
+                "feature_units": {},
+            }
+        ]
+    }
+    original_scalar_values = list(window.current_series_values[scalar_obj.id])
+
+    window._sync_waveform_derived_series()
+    assert window._waveform_derived_series == {}
+    assert window._analysis_series_ids() == [scalar_obj.id]
+
+    for tab_index in (
+        window.jitter_tab_index,
+        window.correlation_tab_index,
+        window.spectrum_tab_index,
+    ):
+        window._analysis_tab_loaded[tab_index] = True
+    window.waveform_plot.expose_checkbox.setChecked(True)
+    window._sync_waveform_derived_series()
+
+    source_id = f"waveform::{waveform_obj.id}::baseline_mean"
+    assert list(window._waveform_derived_series) == [source_id]
+    assert window._analysis_series_ids() == [scalar_obj.id, source_id]
+    assert window.current_series_values[scalar_obj.id] == original_scalar_values
+    assert [
+        row["sample_index"]
+        for row in window._waveform_derived_series[source_id]["metadata"]
+    ] == [1, 3]
+    for tab_index in (
+        window.jitter_tab_index,
+        window.correlation_tab_index,
+        window.spectrum_tab_index,
+    ):
+        assert window._analysis_tab_loaded[tab_index] is False
+
+    window._populate_correlation_view()
+    assert window.correlation_plot._valid_counts.shape == (2, 2)
+    assert window.correlation_plot._valid_counts[0, 1] == 2
+
+    window._populate_spectrum_view()
+    derived_spectrum = next(
+        source
+        for source in window.spectrum_plot._series_sources
+        if source["pv_id"] == source_id
+    )
+    assert derived_spectrum["sample_indices"] == [1, 3]
+    assert derived_spectrum["series_sample_interval_sec"] == pytest.approx(0.25)
+
+    snr_index = window.waveform_plot.feature_combo.findData("snr")
+    window.waveform_plot.feature_combo.setCurrentIndex(snr_index)
+    window._sync_waveform_derived_series()
+    assert list(window._waveform_derived_series) == [
+        f"waveform::{waveform_obj.id}::snr"
+    ]
+
+    window.waveform_plot.expose_checkbox.setChecked(False)
+    window._sync_waveform_derived_series()
+    assert window._waveform_derived_series == {}
+    assert window._analysis_series_ids() == [scalar_obj.id]
+    assert window.current_series_values[scalar_obj.id] == original_scalar_values

@@ -45,6 +45,29 @@ def test_raw_waveform_maps_to_existing_config_fields(qt_app):
     assert data["waveform_sample_interval_sec"] == pytest.approx(2.5e-9)
 
 
+def test_raw_waveform_replaces_analysis_checks_with_guidance_and_preserves_values(qt_app):
+    dialog = editor_module.PVObjectEditorDialog(group_labels={"user": "User PVs"})
+    dialog.analysis_checks["jitter"].setChecked(False)
+
+    dialog.kind_box.setCurrentIndex(dialog.kind_box.findData("waveform"))
+    dialog.waveform_handling_box.setCurrentIndex(dialog.waveform_handling_box.findData("raw"))
+
+    assert all(check.isHidden() for check in dialog.analysis_checks.values())
+    assert not dialog.raw_waveform_analysis_hint.isHidden()
+    assert "Waveform page" in dialog.raw_waveform_analysis_hint.text()
+    assert dialog.object_data()["analysis"] == {
+        "jitter": False,
+        "correlation": True,
+        "spectrum": True,
+    }
+
+    dialog.waveform_handling_box.setCurrentIndex(dialog.waveform_handling_box.findData("mean"))
+
+    assert all(not check.isHidden() for check in dialog.analysis_checks.values())
+    assert dialog.raw_waveform_analysis_hint.isHidden()
+    assert dialog.analysis_checks["jitter"].isChecked() is False
+
+
 def test_raw_waveform_allows_inherited_library_interval(qt_app):
     dialog = editor_module.PVObjectEditorDialog(group_labels={"user": "User PVs"})
     dialog.id_edit.setText("scope")

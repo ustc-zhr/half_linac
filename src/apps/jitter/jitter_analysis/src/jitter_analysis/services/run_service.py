@@ -82,6 +82,9 @@ class RunService:
     def load_waveform(self, path: str, entry: WaveformIndexEntry) -> WaveformRecord:
         return self.store.load_waveform(path, entry)
 
+    def iter_waveforms(self, path: str, entries):
+        return self.store.iter_waveforms(path, entries)
+
     def list_runs(self, root: str | None = None):
         return self.store.list_runs(root)
 

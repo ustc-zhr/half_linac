@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from datetime import datetime
 import sys
 import math
@@ -291,6 +292,8 @@ class MainWindow(_MainWindowBase):
         self._waveform_analysis_signature = None
         self._waveform_analysis_inflight_signature = None
         self._waveform_analysis_result = {}
+        self._waveform_derived_series = {}
+        self._waveform_derived_signature = None
         self._pending_waveform_analysis_signature = None
         self._last_connection_summary_text = "Not checked"
         self._last_saved_run_path: Path | None = None
@@ -1145,7 +1148,9 @@ class MainWindow(_MainWindowBase):
 
     def _on_jitter_filter_changed(self, *_args) -> None:
         self._update_jitter_filter_status()
-        if self.loaded_config is None or not self._has_current_run_data():
+        if self.loaded_config is None or not (
+            self._has_current_run_data() or self._waveform_derived_series
+        ):
             return
         self._invalidate_shared_analysis_tabs()
 
@@ -1157,7 +1162,9 @@ class MainWindow(_MainWindowBase):
         if normalized_range == self._analysis_sample_range:
             return
         self._analysis_sample_range = normalized_range
-        if self.loaded_config is not None and self._has_current_run_data():
+        if self.loaded_config is not None and (
+            self._has_current_run_data() or self._waveform_derived_series
+        ):
             self._invalidate_shared_analysis_tabs()
 
     def _clear_analysis_sample_range(self) -> None:
@@ -2465,6 +2472,8 @@ class MainWindow(_MainWindowBase):
         self._waveform_analysis_signature = None
         self._waveform_analysis_inflight_signature = None
         self._waveform_analysis_result = {}
+        self._waveform_derived_series = {}
+        self._waveform_derived_signature = None
         self._pending_waveform_analysis_signature = None
         self._set_waveform_available(False)
         if clear_widget and getattr(self, "waveform_plot", None) is not None:
@@ -2524,6 +2533,8 @@ class MainWindow(_MainWindowBase):
             self.current_run_details.setdefault("waveform_object_ids", waveform_ids)
         self._waveform_analysis_signature = None
         self._waveform_analysis_result = {}
+        self._waveform_derived_series = {}
+        self._waveform_derived_signature = None
         self._pending_waveform_analysis_signature = None
         self._set_waveform_available(bool(grouped) and self.current_run_mode == RunMode.TIMED_ACQUISITION)
 
@@ -2550,11 +2561,15 @@ class MainWindow(_MainWindowBase):
         primary = self.waveform_plot.selected_primary_pv_id()
         secondary = self.waveform_plot.selected_secondary_pv_id()
         roi_start, roi_stop = self.waveform_plot.roi_bounds()
+        baseline_start, baseline_stop = self.waveform_plot.baseline_roi_bounds()
         return (
             tuple(waveform_ids),
             tuple(counts_signature),
+            baseline_start,
+            baseline_stop,
             roi_start,
             roi_stop,
+            self.waveform_plot.selected_polarity(),
             primary,
             secondary,
             str(self.current_waveform_run_path or ""),
@@ -2582,27 +2597,39 @@ class MainWindow(_MainWindowBase):
             return
         labels_by_pv = self._current_waveform_labels()
         roi_start, roi_stop = self.waveform_plot.roi_bounds()
+        baseline_start, baseline_stop = self.waveform_plot.baseline_roi_bounds()
         primary = self.waveform_plot.selected_primary_pv_id()
-        secondary = self.waveform_plot.selected_secondary_pv_id() if len(waveform_ids) >= 2 else ""
+        secondary = (
+            self.waveform_plot.selected_secondary_pv_id()
+            if len(waveform_ids) >= 2
+            else ""
+        )
         self._pending_waveform_analysis_signature = None
         self._waveform_analysis_inflight_signature = signature
-        self.waveform_plot.info_label.setText("Computing waveform features and time delay in the background...")
+        self.waveform_plot.info_label.setText(
+            "Computing waveform features, statistics, and delay in the background..."
+        )
 
         worker_kwargs = {
             "waveform_ids": waveform_ids,
             "labels_by_pv": labels_by_pv,
             "request_signature": signature,
+            "baseline_start_index": baseline_start,
+            "baseline_stop_index": baseline_stop,
             "roi_start_index": roi_start,
             "roi_stop_index": roi_stop,
+            "polarity": self.waveform_plot.selected_polarity(),
             "primary_pv_id": primary,
             "secondary_pv_id": secondary,
         }
         if self.current_waveform_run_path is not None:
             waveform_run_path = str(self.current_waveform_run_path)
             worker_kwargs["waveform_entries_by_pv"] = self.current_waveform_index
-            worker_kwargs["waveform_loader"] = lambda entry, run_path=waveform_run_path: self.run_service.load_waveform(
-                run_path,
-                entry,
+            worker_kwargs["waveform_iterator"] = (
+                lambda entries, run_path=waveform_run_path: self.run_service.iter_waveforms(
+                    run_path,
+                    entries,
+                )
             )
         else:
             worker_kwargs["in_memory_records_by_pv"] = self.current_waveform_records
@@ -2647,6 +2674,72 @@ class MainWindow(_MainWindowBase):
         self.append_log(f"Waveform analysis failed: {message}")
         self.waveform_plot.info_label.setText(f"Waveform analysis failed: {message}")
 
+    def _waveform_analysis_row(self, pv_id: str):
+        for row in self._waveform_analysis_result.get("feature_rows", []):
+            if str(row.get("pv_id", "")) == str(pv_id):
+                return row
+        return None
+
+    def _waveform_base_object(self, pv_id: str):
+        if self.loaded_config is None:
+            return None
+        return next(
+            (obj for obj in self.loaded_config.objects if obj.id == pv_id),
+            None,
+        )
+
+    def _waveform_feature_unit(self, row, feature_key: str, amplitude_unit: str) -> str:
+        if feature_key in {
+            "baseline_mean",
+            "peak_value",
+            "rms",
+            "peak_to_peak",
+            "baseline_noise_rms",
+            "peak_amplitude",
+        }:
+            return amplitude_unit
+        if feature_key == "peak_time_sec":
+            return "s"
+        if feature_key == "integral":
+            return f"{amplitude_unit}·s" if amplitude_unit else "amplitude·s"
+        if feature_key in {"peak_position", "pulse_area", "fwhm"}:
+            token = str(row.get("feature_units", {}).get(feature_key, ""))
+            return token.replace("amplitude", amplitude_unit or "amplitude")
+        return ""
+
+    def _feature_display_label(self, row, feature_key: str) -> str:
+        base_label = next(
+            (label for key, label in self.waveform_plot.FEATURE_OPTIONS if key == feature_key),
+            feature_key,
+        )
+        obj = self._waveform_base_object(str(row.get("pv_id", ""))) if row else None
+        unit = self._waveform_feature_unit(row or {}, feature_key, obj.unit if obj else "")
+        return f"{base_label} [{unit}]" if unit else base_label
+
+    def _aggregate_preview_payload(self, pv_id: str):
+        row = self._waveform_analysis_row(pv_id)
+        if not row:
+            return None
+        aggregate = dict(row.get("aggregate", {}))
+        mean_values = list(aggregate.get("mean_values", []))
+        std_values = list(aggregate.get("std_values", []))
+        if not mean_values:
+            return None
+        scale = (
+            float(aggregate.get("sample_interval_sec", 0.0))
+            if aggregate.get("uses_time_axis", False)
+            else 1.0
+        )
+        return {
+            "label": f"{self._waveform_label_for_id(pv_id)} mean",
+            "x_values": [float(index * scale) for index in range(len(mean_values))],
+            "y_values": mean_values,
+            "std_values": std_values,
+            "valid_counts": list(aggregate.get("valid_counts", [])),
+            "scale": scale,
+            "uses_time_axis": bool(aggregate.get("uses_time_axis", False)),
+        }
+
     def _refresh_waveform_preview(self) -> None:
         if not self._has_current_waveform_data():
             return
@@ -2654,98 +2747,326 @@ class MainWindow(_MainWindowBase):
         secondary_id = self.waveform_plot.selected_secondary_pv_id()
         shot_index = self.waveform_plot.selected_shot_index()
         roi_start, roi_stop = self.waveform_plot.roi_bounds()
-        primary_record = self._load_waveform_for_display(primary_id, shot_index) if primary_id else None
-        secondary_record = (
-            self._load_waveform_for_display(secondary_id, shot_index)
-            if secondary_id and secondary_id != primary_id
-            else None
-        )
+        baseline_start, baseline_stop = self.waveform_plot.baseline_roi_bounds()
+        display_mode = self.waveform_plot.selected_display_mode()
 
-        displayed_records = [
-            record for record in (primary_record, secondary_record) if record is not None
-        ]
-        use_time_axis = bool(displayed_records) and all(
-            float(record.waveform_sample_interval_sec) > 0.0
-            for record in displayed_records
-        )
-        x_axis_label = "Time [s]" if use_time_axis else "Sample Index"
-
-        def _payload(record: WaveformRecord | None, label: str):
-            if record is None:
-                return None
-            scale = float(record.waveform_sample_interval_sec) if use_time_axis else 1.0
-            x_values = [float(index * scale) for index in range(len(record.values))]
-            return {
-                "label": label,
-                "x_values": x_values,
-                "y_values": list(record.values),
-            }
-
+        primary_payload = None
+        secondary_payload = None
+        use_time_axis = False
+        region_scale = 1.0
         info_parts = []
-        roi_bounds_display = None
-        if primary_record is not None:
-            max_stop = min(roi_stop, len(primary_record.values))
-            primary_scale = (
-                float(primary_record.waveform_sample_interval_sec)
-                if use_time_axis
+
+        if display_mode == "mean_std":
+            primary_payload = self._aggregate_preview_payload(primary_id)
+            secondary_payload = (
+                self._aggregate_preview_payload(secondary_id)
+                if secondary_id and secondary_id != primary_id
+                else None
+            )
+            displayed = [
+                payload
+                for payload in (primary_payload, secondary_payload)
+                if payload is not None
+            ]
+            use_time_axis = bool(displayed) and all(
+                payload.get("uses_time_axis", False) for payload in displayed
+            )
+            region_scale = (
+                float(primary_payload.get("scale", 1.0))
+                if primary_payload is not None and use_time_axis
                 else 1.0
             )
-            roi_bounds_display = (
-                float(roi_start * primary_scale),
-                float(max_stop * primary_scale),
-            )
-            primary_summary = (
-                f"{len(primary_record.values)} samples @ "
-                f"{primary_record.waveform_sample_interval_sec:.6g} s"
-                if use_time_axis
-                else f"{len(primary_record.values)} samples; sample interval unavailable"
-            )
+            for payload in displayed:
+                payload.pop("scale", None)
+                payload.pop("uses_time_axis", None)
             info_parts.append(
-                f"{self._waveform_label_for_id(primary_id)} shot {shot_index + 1}: "
-                f"{primary_summary}"
+                f"Mean ± Std across analyzed shots for {self._waveform_label_for_id(primary_id)}."
             )
-        if secondary_record is not None and secondary_id != primary_id:
-            secondary_summary = (
-                f"{len(secondary_record.values)} samples @ "
-                f"{secondary_record.waveform_sample_interval_sec:.6g} s"
-                if use_time_axis
-                else f"{len(secondary_record.values)} samples; sample interval unavailable"
+            valid_counts = (
+                list(primary_payload.get("valid_counts", []))
+                if primary_payload is not None
+                else []
             )
-            info_parts.append(
-                f"{self._waveform_label_for_id(secondary_id)} shot {shot_index + 1}: "
-                f"{secondary_summary}"
+            if valid_counts and min(valid_counts) != max(valid_counts):
+                info_parts.append(
+                    f"Per-sample valid count varies from {min(valid_counts)} to "
+                    f"{max(valid_counts)} because waveform lengths differ."
+                )
+        else:
+            primary_record = (
+                self._load_waveform_for_display(primary_id, shot_index)
+                if primary_id
+                else None
             )
-        if not info_parts:
-            info_parts.append("Select a waveform object and shot with available waveform data.")
-        delay_summary = str(self._waveform_analysis_result.get("delay_summary", "")).strip()
-        if delay_summary:
-            info_parts.append(delay_summary)
+            secondary_record = (
+                self._load_waveform_for_display(secondary_id, shot_index)
+                if secondary_id and secondary_id != primary_id
+                else None
+            )
+            displayed_records = [
+                record
+                for record in (primary_record, secondary_record)
+                if record is not None
+            ]
+            use_time_axis = bool(displayed_records) and all(
+                float(record.waveform_sample_interval_sec) > 0.0
+                for record in displayed_records
+            )
+            region_scale = (
+                float(primary_record.waveform_sample_interval_sec)
+                if primary_record is not None and use_time_axis
+                else 1.0
+            )
+
+            def _payload(record: WaveformRecord | None, label: str):
+                if record is None:
+                    return None
+                scale = (
+                    float(record.waveform_sample_interval_sec)
+                    if use_time_axis
+                    else 1.0
+                )
+                return {
+                    "label": label,
+                    "x_values": [
+                        float(index * scale) for index in range(len(record.values))
+                    ],
+                    "y_values": list(record.values),
+                }
+
+            primary_payload = _payload(
+                primary_record,
+                self._waveform_label_for_id(primary_id),
+            )
+            secondary_payload = _payload(
+                secondary_record,
+                self._waveform_label_for_id(secondary_id),
+            )
+            if primary_record is not None:
+                summary = (
+                    f"{len(primary_record.values)} samples @ "
+                    f"{primary_record.waveform_sample_interval_sec:.6g} s"
+                    if use_time_axis
+                    else f"{len(primary_record.values)} samples; sample interval unavailable"
+                )
+                info_parts.append(
+                    f"{self._waveform_label_for_id(primary_id)} shot {shot_index + 1}: {summary}"
+                )
+            if secondary_record is not None:
+                info_parts.append(
+                    f"{self._waveform_label_for_id(secondary_id)} shot {shot_index + 1}"
+                )
+
+        if self.current_waveform_run_path is None:
+            info_parts.append("Live analysis uses the most recent 200 shots.")
+        else:
+            info_parts.append("Saved-run analysis uses all waveform records.")
+        if not primary_payload:
+            info_parts.append("Waveform statistics are still being computed.")
+        if self._waveform_analysis_result.get("delay_summary") and secondary_id != primary_id:
+            info_parts.append(str(self._waveform_analysis_result["delay_summary"]))
+
+        max_stop = self._current_waveform_max_length_hint()
+        signal_bounds = (
+            float(roi_start * region_scale),
+            float(min(roi_stop, max_stop) * region_scale),
+        )
+        baseline_bounds = (
+            float(baseline_start * region_scale),
+            float(min(baseline_stop, max_stop) * region_scale),
+        )
         self.waveform_plot.set_preview_series(
-            primary=_payload(primary_record, self._waveform_label_for_id(primary_id)),
-            secondary=_payload(secondary_record, self._waveform_label_for_id(secondary_id)),
-            roi_bounds=roi_bounds_display,
-            x_axis_label=x_axis_label,
+            primary=primary_payload,
+            secondary=secondary_payload,
+            signal_roi_bounds=signal_bounds,
+            baseline_roi_bounds=baseline_bounds,
+            x_axis_label="Time [s]" if use_time_axis else "Sample Index",
+            region_scale=region_scale,
             info_text=" | ".join(info_parts),
+        )
+
+
+    @staticmethod
+    def _format_waveform_value(value, unit: str = "") -> str:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return "--"
+        if not math.isfinite(numeric):
+            return "--"
+        suffix = f" {unit}" if unit else ""
+        return f"{numeric:.6g}{suffix}"
+
+    def _waveform_summary_rows(self):
+        primary_id = self.waveform_plot.selected_primary_pv_id()
+        row = self._waveform_analysis_row(primary_id)
+        if not row:
+            return []
+        obj = self._waveform_base_object(primary_id)
+        amplitude_unit = obj.unit if obj else ""
+        if self.waveform_plot.selected_display_mode() == "mean_std":
+            feature_key = self.waveform_plot.selected_feature_key()
+            values = [
+                float(value)
+                for value in row.get("features", {}).get(feature_key, [])
+                if math.isfinite(float(value))
+            ]
+            feature_unit = self._waveform_feature_unit(row, feature_key, amplitude_unit)
+            mean_value = sum(values) / len(values) if values else math.nan
+            std_value = (
+                math.sqrt(sum((value - mean_value) ** 2 for value in values) / len(values))
+                if values
+                else math.nan
+            )
+            quality = dict(row.get("quality", {}))
+            return [
+                ("Valid shots", "{} / {}".format(row.get("valid_count", 0), row.get("record_count", 0))),
+                ("Selected feature mean", self._format_waveform_value(mean_value, feature_unit)),
+                ("Selected feature std", self._format_waveform_value(std_value, feature_unit)),
+                ("Skipped", str(quality.get("skipped", 0))),
+                ("Disconnected", str(quality.get("disconnected", 0))),
+                ("Empty", str(quality.get("empty", 0))),
+                ("No finite values", str(quality.get("no_finite", 0))),
+                ("Too short", str(quality.get("too_short", 0))),
+                ("FWHM unavailable", str(quality.get("fwhm_unavailable", 0))),
+                (
+                    "Sample interval changed",
+                    "yes" if quality.get("sample_interval_variation", 0) else "no",
+                ),
+            ]
+
+        index = self.waveform_plot.selected_shot_index()
+        features = row.get("features", {})
+        polarities = list(row.get("polarities", []))
+
+        def _value(key):
+            values = list(features.get(key, []))
+            return values[index] if 0 <= index < len(values) else math.nan
+
+        adaptive_units = dict(row.get("feature_units", {}))
+        return [
+            ("Baseline", self._format_waveform_value(_value("baseline_mean"), amplitude_unit)),
+            ("Noise RMS", self._format_waveform_value(_value("baseline_noise_rms"), amplitude_unit)),
+            ("Pulse amplitude", self._format_waveform_value(_value("peak_amplitude"), amplitude_unit)),
+            (
+                "Pulse peak position",
+                self._format_waveform_value(
+                    _value("peak_position"),
+                    adaptive_units.get("peak_position", ""),
+                ),
+            ),
+            (
+                "Pulse area",
+                self._format_waveform_value(
+                    _value("pulse_area"),
+                    adaptive_units.get("pulse_area", "").replace(
+                        "amplitude",
+                        amplitude_unit or "amplitude",
+                    ),
+                ),
+            ),
+            ("RMS", self._format_waveform_value(_value("rms"), amplitude_unit)),
+            ("Peak-to-peak", self._format_waveform_value(_value("peak_to_peak"), amplitude_unit)),
+            (
+                "FWHM",
+                self._format_waveform_value(
+                    _value("fwhm"),
+                    adaptive_units.get("fwhm", ""),
+                ),
+            ),
+            ("SNR", self._format_waveform_value(_value("snr"))),
+            (
+                "Polarity",
+                polarities[index] if 0 <= index < len(polarities) and polarities[index] else "--",
+            ),
+        ]
+
+    def _sync_waveform_derived_series(self) -> None:
+        feature_key = self.waveform_plot.selected_feature_key()
+        expose = self.waveform_plot.expose_selected_feature()
+        source_signature = (
+            self._waveform_analysis_signature,
+            feature_key,
+            expose,
+        )
+        if source_signature == self._waveform_derived_signature:
+            return
+        self._waveform_derived_signature = source_signature
+        self._waveform_derived_series = {}
+        if expose:
+            for row in self._waveform_analysis_result.get("feature_rows", []):
+                pv_id = str(row.get("pv_id", ""))
+                values = list(row.get("features", {}).get(feature_key, []))
+                sample_indices = list(row.get("sample_indices", []))
+                timestamps = list(row.get("timestamps", []))
+                if not pv_id or not values:
+                    continue
+                obj = self._waveform_base_object(pv_id)
+                unit = self._waveform_feature_unit(
+                    row,
+                    feature_key,
+                    obj.unit if obj else "",
+                )
+                feature_name = next(
+                    (
+                        label
+                        for key, label in self.waveform_plot.FEATURE_OPTIONS
+                        if key == feature_key
+                    ),
+                    feature_key,
+                )
+                source_id = f"waveform::{pv_id}::{feature_key}"
+                metadata = [
+                    {
+                        "sample_index": int(sample_index),
+                        "step_index": None,
+                        "timestamp": timestamps[index] if index < len(timestamps) else None,
+                        "value": values[index],
+                    }
+                    for index, sample_index in enumerate(sample_indices)
+                    if index < len(values)
+                ]
+                self._waveform_derived_series[source_id] = {
+                    "values": values[: len(metadata)],
+                    "metadata": metadata,
+                    "object": SimpleNamespace(
+                        id=source_id,
+                        name=f"{row.get('label', pv_id)} · {feature_name}",
+                        unit=unit,
+                        group=getattr(obj, "group", "") if obj else "",
+                        read_pv=getattr(obj, "read_pv", "") if obj else "",
+                        tags=list(getattr(obj, "tags", [])) + ["waveform", "derived"],
+                    ),
+                }
+
+        for tab_index in (
+            self.jitter_tab_index,
+            self.correlation_tab_index,
+            self.spectrum_tab_index,
+        ):
+            self._analysis_tab_loaded[tab_index] = False
+        self._set_analysis_available(
+            self._has_current_run_data() or bool(self._waveform_derived_series)
         )
 
     def _apply_waveform_analysis_result(self) -> None:
         if not self._waveform_analysis_result:
             return
         feature_key = self.waveform_plot.selected_feature_key()
-        feature_label = next(
-            (label for key, label in self.waveform_plot.FEATURE_OPTIONS if key == feature_key),
+        source_rows = list(self._waveform_analysis_result.get("feature_rows", []))
+        feature_label = self._feature_display_label(
+            source_rows[0] if source_rows else {},
             feature_key,
         )
-        feature_rows = []
-        for row in self._waveform_analysis_result.get("feature_rows", []):
-            feature_rows.append(
-                {
-                    "pv_id": row["pv_id"],
-                    "label": row["label"],
-                    "sample_indices": list(row.get("sample_indices", [])),
-                    "values": list(row.get("features", {}).get(feature_key, [])),
-                }
-            )
+        feature_rows = [
+            {
+                "pv_id": row["pv_id"],
+                "label": row["label"],
+                "sample_indices": list(row.get("sample_indices", [])),
+                "values": list(row.get("features", {}).get(feature_key, [])),
+            }
+            for row in source_rows
+        ]
         summary_text = str(self._waveform_analysis_result.get("delay_summary", "")).strip()
         self.waveform_plot.set_feature_rows(
             feature_rows,
@@ -2756,12 +3077,18 @@ class MainWindow(_MainWindowBase):
         self.waveform_plot.set_delay_series(
             list(self._waveform_analysis_result.get("delay_sample_indices", [])),
             list(self._waveform_analysis_result.get("delay_series", [])),
+            unit=str(self._waveform_analysis_result.get("delay_unit", "s")),
             summary_text=summary_text,
         )
+        self.waveform_plot.set_summary_rows(self._waveform_summary_rows())
+        self._sync_waveform_derived_series()
         self._refresh_waveform_preview()
 
     def _populate_waveform_view(self) -> None:
-        if self.current_run_mode != RunMode.TIMED_ACQUISITION or not self._has_current_waveform_data():
+        if (
+            self.current_run_mode != RunMode.TIMED_ACQUISITION
+            or not self._has_current_waveform_data()
+        ):
             self.waveform_plot.clear_data(
                 "Waveform analysis is available for Monitor runs that include waveform objects."
             )
@@ -2798,18 +3125,45 @@ class MainWindow(_MainWindowBase):
         if self.current_run_sample_timestamps[sample_index] is None:
             self.current_run_sample_timestamps[sample_index] = timestamp
 
+    def _analysis_series_ids(self) -> list[str]:
+        return list(self.current_series_values) + list(self._waveform_derived_series)
+
+    def _analysis_series_values_for(self, pv_id: str):
+        if pv_id in self._waveform_derived_series:
+            return self._waveform_derived_series[pv_id].get("values", [])
+        return self.current_series_values.get(pv_id, [])
+
+    def _analysis_series_metadata_for(self, pv_id: str):
+        if pv_id in self._waveform_derived_series:
+            return self._waveform_derived_series[pv_id].get("metadata", [])
+        return self.current_series_metadata.get(pv_id, [])
+
+    def _analysis_objects_by_id(self):
+        objects = (
+            {obj.id: obj for obj in self.loaded_config.objects}
+            if self.loaded_config is not None
+            else {}
+        )
+        objects.update(
+            {
+                source_id: source["object"]
+                for source_id, source in self._waveform_derived_series.items()
+            }
+        )
+        return objects
+
     def _series_sample_indices(self, pv_id: str, expected_length: int | None = None) -> list[int]:
-        metadata = self.current_series_metadata.get(pv_id, [])
-        values = self.current_series_values.get(pv_id, [])
+        metadata = self._analysis_series_metadata_for(pv_id)
+        values = self._analysis_series_values_for(pv_id)
         return series_sample_indices(metadata, values, expected_length=expected_length)
 
     def _series_step_indices(self, pv_id: str, expected_length: int | None = None) -> list[int | None]:
-        metadata = self.current_series_metadata.get(pv_id, [])
-        values = self.current_series_values.get(pv_id, [])
+        metadata = self._analysis_series_metadata_for(pv_id)
+        values = self._analysis_series_values_for(pv_id)
         return series_step_indices(metadata, values, expected_length=expected_length)
 
     def _filtered_series_payload(self, pv_id: str) -> dict[str, object]:
-        values = list(self.current_series_values.get(pv_id, []))
+        values = list(self._analysis_series_values_for(pv_id))
         sample_indices = self._series_sample_indices(pv_id, expected_length=len(values))
         step_indices = self._series_step_indices(pv_id, expected_length=len(values))
         return filtered_series_payload(
@@ -3046,6 +3400,8 @@ class MainWindow(_MainWindowBase):
         self._analysis_tab_loading = None
         self._waveform_analysis_signature = None
         self._waveform_analysis_result = {}
+        self._waveform_derived_series = {}
+        self._waveform_derived_signature = None
         self._pending_waveform_analysis_signature = None
         self.waveform_plot.clear_data("Open Waveform to inspect preview, feature trends, and waveform delay.")
         self._clear_jitter_table()
@@ -3351,6 +3707,8 @@ class MainWindow(_MainWindowBase):
         self._waveform_analysis_signature = None
         self._waveform_analysis_inflight_signature = None
         self._waveform_analysis_result = {}
+        self._waveform_derived_series = {}
+        self._waveform_derived_signature = None
         self._pending_waveform_analysis_signature = None
         self.current_run_details = {
             "shot_interval_sec": shot_interval_sec,
@@ -4028,7 +4386,7 @@ class MainWindow(_MainWindowBase):
                 self._last_saved_run_path = saved_path.parent
                 self.append_log(f"Saved run summary to {path} and raw samples to {path.parent / 'raw.h5'}.")
 
-        if self._has_current_run_data():
+        if self._has_current_run_data() or self._has_current_waveform_data():
             self._prepare_analysis_views_for_current_data()
             self._ensure_visible_analysis_tab_loaded()
         if warning:
@@ -4048,7 +4406,10 @@ class MainWindow(_MainWindowBase):
         detail: str | None,
     ) -> None:
         tone = self._run_status_tone(status)
-        sample_count = self._current_record_count()
+        sample_count = max(
+            self._current_record_count(),
+            self._current_waveform_shot_count(),
+        )
         elapsed = self.status_panel.elapsed_value.text()
         status_label = status.value.replace("_", " ").title()
         parts = [status_label, f"{sample_count:,} samples", elapsed]
@@ -4066,7 +4427,9 @@ class MainWindow(_MainWindowBase):
         self.run_completion_analysis_button.setText(
             "Open Partial Data" if status == RunStatus.FAILED else "Open Analysis"
         )
-        self.run_completion_analysis_button.setEnabled(self._has_current_run_data())
+        self.run_completion_analysis_button.setEnabled(
+            self._has_current_run_data() or self._has_current_waveform_data()
+        )
         self.run_completion_copy_button.setEnabled(self._last_saved_run_path is not None)
         self.run_completion_banner.setVisible(True)
         self.main_tabs.setCurrentIndex(self.run_tab_index)
@@ -4337,13 +4700,13 @@ class MainWindow(_MainWindowBase):
             self._clear_jitter_table()
             return
 
-        objects_by_id = {obj.id: obj for obj in self.loaded_config.objects}
+        objects_by_id = self._analysis_objects_by_id()
         group_labels = {group.id: group.label for group in self.loaded_config.groups}
         rows = []
         plot_rows = []
         total_removed = 0
         affected_variables = 0
-        for pv_id in self.current_series_values:
+        for pv_id in self._analysis_series_ids():
             filtered = self._filtered_series_payload(pv_id)
             filtered_values = list(filtered["filtered_values"])
             if not filtered_values:
@@ -4546,7 +4909,9 @@ class MainWindow(_MainWindowBase):
             finally:
                 del blockers
             self._update_jitter_table_actions()
-        self._set_analysis_available(self._has_current_run_data())
+        self._set_analysis_available(
+            self._has_current_run_data() or bool(self._waveform_derived_series)
+        )
 
     def _populate_sensitivity_view(self) -> None:
         if self.loaded_config is None:
@@ -4764,12 +5129,13 @@ class MainWindow(_MainWindowBase):
             self.correlation_plot.clear_data("Load a PV library to compute correlation.")
             return
 
-        objects_by_id = {obj.id: obj for obj in self.loaded_config.objects}
+        objects_by_id = self._analysis_objects_by_id()
         series_by_name = {}
+        raw_series_by_name = {}
         series_metadata_by_name = {}
         total_removed = 0
         affected_variables = 0
-        for pv_id in self.current_series_values:
+        for pv_id in self._analysis_series_ids():
             if pv_id not in objects_by_id:
                 continue
             filtered = self._filtered_series_payload(pv_id)
@@ -4782,10 +5148,9 @@ class MainWindow(_MainWindowBase):
                 continue
             base_name = objects_by_id[pv_id].name
             display_name = base_name
-            if display_name in series_by_name:
+            if display_name in raw_series_by_name:
                 display_name = f"{base_name} ({pv_id})"
-            series_by_name[display_name] = aligned_values
-            series_metadata_by_name[display_name] = {
+            raw_series_by_name[display_name] = {
                 "values": aligned_values,
                 "sample_indices": list(filtered["aligned_sample_indices"]),
                 "step_indices": list(filtered["aligned_step_indices"]),
@@ -4794,6 +5159,39 @@ class MainWindow(_MainWindowBase):
                 "range_count": int(filtered["range_count"]),
                 "raw_count": int(filtered["raw_count"]),
                 "removed_count": removed_count,
+            }
+
+        aligned_batch_indices = sorted(
+            {
+                int(sample_index)
+                for payload in raw_series_by_name.values()
+                for sample_index in payload["sample_indices"]
+            }
+        )
+        for display_name, payload in raw_series_by_name.items():
+            value_by_batch = {
+                int(sample_index): payload["values"][index]
+                for index, sample_index in enumerate(payload["sample_indices"])
+                if index < len(payload["values"])
+            }
+            step_by_batch = {
+                int(sample_index): payload["step_indices"][index]
+                for index, sample_index in enumerate(payload["sample_indices"])
+                if index < len(payload["step_indices"])
+            }
+            aligned_values = [
+                value_by_batch.get(sample_index, float("nan"))
+                for sample_index in aligned_batch_indices
+            ]
+            series_by_name[display_name] = aligned_values
+            series_metadata_by_name[display_name] = {
+                **payload,
+                "values": aligned_values,
+                "sample_indices": aligned_batch_indices,
+                "step_indices": [
+                    step_by_batch.get(sample_index)
+                    for sample_index in aligned_batch_indices
+                ],
             }
 
         if len(series_by_name) < 2:
@@ -4837,14 +5235,15 @@ class MainWindow(_MainWindowBase):
             )
             return
 
-        objects_by_id = {obj.id: obj for obj in self.loaded_config.objects}
+        objects_by_id = self._analysis_objects_by_id()
         group_labels = {group.id: group.label for group in self.loaded_config.groups}
         series_sources = []
         total_removed = 0
         affected_variables = 0
-        for pv_id, values in self.current_series_values.items():
+        for pv_id in self._analysis_series_ids():
             if pv_id not in objects_by_id:
                 continue
+            values = self._analysis_series_values_for(pv_id)
             filtered = self._filtered_series_payload(pv_id)
             finite_values = list(filtered["filtered_values"])
             finite_sample_indices = list(filtered["filtered_sample_indices"])
@@ -4855,11 +5254,12 @@ class MainWindow(_MainWindowBase):
             if len(finite_values) < 2:
                 continue
 
-            metadata = self.current_series_metadata.get(pv_id, [])
+            metadata = self._analysis_series_metadata_for(pv_id)
             try:
                 timestamps = self._filtered_spectrum_timestamps(
                     filtered,
                     metadata,
+                    prefer_metadata=pv_id in self._waveform_derived_series,
                 )
                 sample_interval_sec = self._estimate_series_sample_interval(
                     timestamps
@@ -4927,13 +5327,41 @@ class MainWindow(_MainWindowBase):
         self.spectrum_plot.set_context_summary(" | ".join(context_parts))
         self.spectrum_plot.set_series_sources(series_sources)
 
-    def _filtered_spectrum_timestamps(self, filtered, metadata):
+    def _filtered_spectrum_timestamps(
+        self,
+        filtered,
+        metadata,
+        *,
+        prefer_metadata: bool = False,
+    ):
         filtered_values = list(filtered["filtered_values"])
         sample_indices = [
             int(item) for item in filtered["filtered_sample_indices"]
         ]
+        raw_indices = [
+            int(item) for item in filtered["filtered_raw_indices"]
+        ]
         timestamps = []
-        if sample_indices and all(
+        metadata_timestamps = []
+        if isinstance(metadata, dict):
+            source_timestamps = list(metadata.get("timestamps", []))
+            metadata_timestamps = [
+                source_timestamps[index]
+                for index in raw_indices
+                if index < len(source_timestamps)
+                and source_timestamps[index] is not None
+            ]
+        else:
+            metadata_timestamps = [
+                metadata[index].get("timestamp")
+                for index in raw_indices
+                if index < len(metadata)
+                and metadata[index].get("timestamp") is not None
+            ]
+
+        if prefer_metadata and len(metadata_timestamps) == len(filtered_values):
+            timestamps = metadata_timestamps
+        elif sample_indices and all(
             0 <= index < len(self.current_run_sample_timestamps)
             and self.current_run_sample_timestamps[index] is not None
             for index in sample_indices
@@ -4943,24 +5371,7 @@ class MainWindow(_MainWindowBase):
                 for index in sample_indices
             ]
         else:
-            raw_indices = [
-                int(item) for item in filtered["filtered_raw_indices"]
-            ]
-            if isinstance(metadata, dict):
-                metadata_timestamps = list(metadata.get("timestamps", []))
-                timestamps = [
-                    metadata_timestamps[index]
-                    for index in raw_indices
-                    if index < len(metadata_timestamps)
-                    and metadata_timestamps[index] is not None
-                ]
-            else:
-                timestamps = [
-                    metadata[index].get("timestamp")
-                    for index in raw_indices
-                    if index < len(metadata)
-                    and metadata[index].get("timestamp") is not None
-                ]
+            timestamps = metadata_timestamps
 
         if len(timestamps) != len(filtered_values) or any(
             timestamp is None for timestamp in timestamps

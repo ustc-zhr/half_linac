@@ -659,6 +659,60 @@ def test_run_store_persists_and_loads_waveform_index_and_values(tmp_path: Path):
     assert loaded_waveform.batch_index == 0
 
 
+def test_iter_waveforms_opens_raw_hdf5_once(tmp_path: Path, monkeypatch):
+    import h5py
+
+    store = RunStore(tmp_path)
+    metadata = RunMetadata(
+        run_id="wave_stream_run",
+        mode=RunMode.TIMED_ACQUISITION,
+        created_at=datetime.fromisoformat("2026-05-21T10:30:00"),
+    )
+    store.start_run(metadata)
+    store.append_waveforms(
+        [
+            WaveformRecord(
+                pv_id="scope_a",
+                values=[0.0, 1.0, 0.0],
+                timestamp=datetime.fromisoformat("2026-05-21T10:30:00"),
+                waveform_sample_interval_sec=1.0e-9,
+                batch_index=0,
+            ),
+            WaveformRecord(
+                pv_id="scope_a",
+                values=[0.0, 2.0, 0.0, -1.0],
+                timestamp=datetime.fromisoformat("2026-05-21T10:30:01"),
+                waveform_sample_interval_sec=1.0e-9,
+                batch_index=1,
+            ),
+        ]
+    )
+    store.save_result(
+        RunResult(
+            metadata=metadata,
+            status=RunStatus.COMPLETED,
+            details={"waveform_object_ids": ["scope_a"]},
+        )
+    )
+    run_dir = tmp_path / "wave_stream_run"
+    entries = store.load_waveform_index(run_dir)
+
+    original_file = h5py.File
+    open_count = 0
+
+    def tracking_file(*args, **kwargs):
+        nonlocal open_count
+        open_count += 1
+        return original_file(*args, **kwargs)
+
+    monkeypatch.setattr(h5py, "File", tracking_file)
+    records = list(store.iter_waveforms(run_dir, entries))
+
+    assert open_count == 1
+    assert [record.batch_index for record in records] == [0, 1]
+    assert records[1].values == [0.0, 2.0, 0.0, -1.0]
+
+
 def test_load_result_exposes_waveform_metadata_without_loading_all_waveforms(tmp_path: Path):
     store = RunStore(tmp_path)
     metadata = RunMetadata(

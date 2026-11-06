@@ -301,6 +301,25 @@ class RunStore:
         with h5py.File(raw_path, "r") as handle:
             return self._load_waveform_from_handle(handle, entry)
 
+    def iter_waveforms(
+        self,
+        path: str | Path,
+        entries,
+    ):
+        run_dir = self._resolve_run_dir(path)
+        raw_path = run_dir / "raw.h5"
+        if not raw_path.exists():
+            raise FileNotFoundError(f"Missing raw.h5 in {run_dir}")
+
+        try:
+            import h5py
+        except ImportError as exc:  # pragma: no cover - runtime dependency
+            raise RuntimeError("h5py is required to load saved runs from HDF5.") from exc
+
+        with h5py.File(raw_path, "r") as handle:
+            for entry in entries:
+                yield self._load_waveform_from_handle(handle, entry)
+
     @staticmethod
     def _resolve_run_dir(path: str | Path) -> Path:
         target = Path(path)

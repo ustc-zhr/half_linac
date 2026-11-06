@@ -224,8 +224,8 @@ if QtWidgets is not None:
             self.waveform_interval_label = form.labelForField(self.waveform_interval_edit)
             layout.addLayout(form)
 
-            analysis_box = QtWidgets.QGroupBox("Analysis")
-            analysis_layout = QtWidgets.QHBoxLayout(analysis_box)
+            self.analysis_box = QtWidgets.QGroupBox("Analysis")
+            analysis_layout = QtWidgets.QHBoxLayout(self.analysis_box)
             self.analysis_checks = {}
             analysis = self._object_data.get("analysis", {})
             for key in ("jitter", "correlation", "spectrum"):
@@ -233,7 +233,14 @@ if QtWidgets is not None:
                 check.setChecked(bool(analysis.get(key, True)))
                 self.analysis_checks[key] = check
                 analysis_layout.addWidget(check)
-            layout.addWidget(analysis_box)
+            self.raw_waveform_analysis_hint = QtWidgets.QLabel(
+                "Raw waveform analysis is configured on the Waveform page. "
+                "Select a feature there and enable \"Expose selected feature...\"."
+            )
+            self.raw_waveform_analysis_hint.setWordWrap(True)
+            self.raw_waveform_analysis_hint.setProperty("role", "hint")
+            analysis_layout.addWidget(self.raw_waveform_analysis_hint, 1)
+            layout.addWidget(self.analysis_box)
 
             buttons = QtWidgets.QDialogButtonBox(
                 QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self
@@ -269,6 +276,9 @@ if QtWidgets is not None:
             self.waveform_handling_box.setVisible(waveform)
             self.waveform_interval_label.setVisible(raw_waveform)
             self.waveform_interval_edit.setVisible(raw_waveform)
+            for check in self.analysis_checks.values():
+                check.setVisible(not raw_waveform)
+            self.raw_waveform_analysis_hint.setVisible(raw_waveform)
 
         def accept(self) -> None:
             if not self.id_edit.text().strip() or not self.read_pv_edit.text().strip():
