@@ -439,7 +439,7 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertEqual(
             calibration["version"], "irfel-fir-commissioning-20261105-v1"
         )
-        self.assertAlmostEqual(calibration["response_q_mm_per_kv"], -1.0)
+        self.assertAlmostEqual(calibration["response_q_mm_per_kv"], 15.0)
         self.assertAlmostEqual(calibration["fct_min"], 1000.0)
         self.assertAlmostEqual(calibration["q_action_range_mm"], 3.0)
         self.assertEqual(

@@ -27,7 +27,7 @@
       "version": "irfel-fir-commissioning-20261105-v1",
       "a": 0.0,
       "b": 0.0,
-      "response_q_mm_per_kv": -1,
+      "response_q_mm_per_kv": 15,
       "fct_min": 1000,
       "q_action_range_mm": 3.0
     }
