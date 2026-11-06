@@ -18,6 +18,9 @@ from .models import (
 )
 
 
+_QUANTIZED_NOOP_REASON = "feedback command unchanged after rounding"
+
+
 def apply_feedback_decision(
     client: WritablePVClient,
     group: ShadowControlGroup,
@@ -61,6 +64,16 @@ def apply_feedback_decision(
             delta = proposed - float(command.current)
         rounded_commands.append(replace(command, proposed=proposed, delta=delta))
     rounded = tuple(rounded_commands)
+    if all(command.delta == 0.0 for command in rounded):
+        return replace(
+            decision,
+            state="SHADOW",
+            reason=_QUANTIZED_NOOP_REASON,
+            commands=rounded,
+            write_verified=False,
+            rollback_applied=False,
+            write_detail="no write attempted",
+        )
     ok, detail, rollback_applied = _write_commands(
         client,
         actuators,
@@ -182,6 +195,11 @@ def apply_manual_targets(
     )
     if result.write_verified:
         return replace(result, reason="manual control-knob write applied")
+    if result.reason == _QUANTIZED_NOOP_REASON:
+        return replace(
+            result,
+            reason="manual control-knob target unchanged after rounding",
+        )
     return replace(result, reason="manual control-knob write failed")
 
 
@@ -198,6 +216,9 @@ def _write_commands(
     details: list[str] = []
     for command in commands:
         actuator = actuators[command.actuator_id]
+        if command.delta == 0.0:
+            details.append(f"{actuator.id} unchanged after rounding")
+            continue
         if not actuator.setpoint_key or not actuator.readback_key:
             details.append(f"{actuator.id} write keys are not configured")
             return _failed_with_rollback(
@@ -210,6 +231,7 @@ def _write_commands(
                 sleep=sleep,
                 monotonic=monotonic,
             )
+        baseline = client.read_many((actuator.readback_key,))[actuator.readback_key]
         try:
             put_ok = client.write(
                 actuator.setpoint_key,
@@ -233,20 +255,28 @@ def _write_commands(
                 sleep=sleep,
                 monotonic=monotonic,
             )
-        verified, readback = _wait_for_readback(
+        verified, readback, fresh_seen = _wait_for_readback(
             client,
             actuator,
             command.proposed,
+            baseline=baseline,
             timeout_s=timeout_s,
             poll_interval_s=poll_interval_s,
             sleep=sleep,
             monotonic=monotonic,
         )
         if not verified:
-            details.append(
-                f"{actuator.id} verify mismatch cmd={command.proposed:.3f}, "
-                f"rb={_format_readback(readback)}"
-            )
+            if fresh_seen:
+                details.append(
+                    f"{actuator.id} verify mismatch cmd={command.proposed:.3f}, "
+                    f"rb={_format_readback(readback)}"
+                )
+            else:
+                details.append(
+                    f"{actuator.id} verify timeout waiting for fresh readback "
+                    f"after cmd={command.proposed:.3f}, "
+                    f"last rb={_format_readback(readback)}"
+                )
             return _failed_with_rollback(
                 client,
                 actuators,
@@ -288,6 +318,9 @@ def _rollback(
     ok = True
     for command in commands:
         actuator = actuators[command.actuator_id]
+        if command.delta == 0.0:
+            continue
+        baseline = client.read_many((actuator.readback_key,))[actuator.readback_key]
         try:
             put_ok = client.write(
                 actuator.setpoint_key,
@@ -299,10 +332,11 @@ def _rollback(
             put_ok = False
         verified = False
         if put_ok:
-            verified, _ = _wait_for_readback(
+            verified, _, _ = _wait_for_readback(
                 client,
                 actuator,
                 command.current,
+                baseline=baseline,
                 timeout_s=timeout_s,
                 poll_interval_s=poll_interval_s,
                 sleep=sleep,
@@ -317,17 +351,21 @@ def _wait_for_readback(
     actuator: ShadowActuator,
     target: float,
     *,
+    baseline: PVReading,
     timeout_s: float,
     poll_interval_s: float,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
-) -> tuple[bool, float | None]:
+) -> tuple[bool, float | None, bool]:
     deadline = monotonic() + timeout_s
     last_value = None
+    fresh_seen = False
     while True:
         reading = client.read_many((actuator.readback_key,))[actuator.readback_key]
         if reading.connected and reading.value is not None and math.isfinite(reading.value):
             last_value = float(reading.value)
+            reading_is_fresh = _is_fresh_readback(reading, baseline)
+            fresh_seen = fresh_seen or reading_is_fresh
             error = (
                 cyclic_delta(
                     last_value,
@@ -337,11 +375,24 @@ def _wait_for_readback(
                 if actuator.cyclic_period is not None
                 else last_value - target
             )
-            if abs(error) <= actuator.verify_tolerance:
-                return True, last_value
+            if reading_is_fresh and abs(error) <= actuator.verify_tolerance:
+                return True, last_value, True
         if monotonic() >= deadline:
-            return False, last_value
+            return False, last_value, fresh_seen
         sleep(min(poll_interval_s, max(0.0, deadline - monotonic())))
+
+
+def _is_fresh_readback(reading: PVReading, baseline: PVReading) -> bool:
+    return _timestamp_advanced(
+        reading.monitor_received_at,
+        baseline.monitor_received_at,
+    ) or _timestamp_advanced(reading.source_timestamp, baseline.source_timestamp)
+
+
+def _timestamp_advanced(current: float | None, previous: float | None) -> bool:
+    if current is None:
+        return False
+    return previous is None or current > previous
 
 
 def _format_readback(value: float | None) -> str:

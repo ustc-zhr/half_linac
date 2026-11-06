@@ -87,7 +87,7 @@ class FakeWritableClient(FakeClient):
         self.readings[readback_key] = reading(
             readback_key,
             float(value),
-            timestamp=previous.source_timestamp,
+            timestamp=(previous.source_timestamp or 0.0) + 1.0,
         )
         return True
 
@@ -444,6 +444,98 @@ class FeedbackWriterTests(unittest.TestCase):
         self.assertEqual(result.state, "APPLIED")
         self.assertTrue(result.write_verified)
         self.assertEqual([item[0] for item in self.client.writes], ["a.set", "b.set"])
+
+    def test_delayed_fresh_readback_is_accepted_within_timeout(self):
+        proposal = FeedbackDecision(
+            "SHADOW",
+            "valid feedback suggestion",
+            1.0,
+            commands=(ActuatorCommand("a", 10.0, 1.0, 11.0, "deg"),),
+        )
+        selected_group = replace(self.group, actuators=(self.group.actuators[0],))
+
+        class DelayedClient(FakeClient):
+            def __init__(self, readings):
+                super().__init__(readings)
+                self.pending = None
+                self.polls = 0
+
+            def write(self, key, value, *, wait=True, timeout_s=1.0):
+                self.pending = float(value)
+                return True
+
+            def read_many(self, keys):
+                if self.pending is not None:
+                    self.polls += 1
+                    if self.polls == 3:
+                        self.readings["a.read"] = reading(
+                            "a.read", self.pending, timestamp=101.0
+                        )
+                return super().read_many(keys)
+
+        client = DelayedClient({"a.read": reading("a.read", 10.0)})
+        result = apply_feedback_decision(
+            client,
+            selected_group,
+            proposal,
+            timeout_s=0.1,
+            poll_interval_s=0.001,
+        )
+        self.assertEqual(result.state, "APPLIED")
+        self.assertTrue(result.write_verified)
+        self.assertGreaterEqual(client.polls, 3)
+
+    def test_stale_in_tolerance_readback_does_not_verify_a_write(self):
+        proposal = FeedbackDecision(
+            "SHADOW",
+            "valid feedback suggestion",
+            0.005,
+            commands=(ActuatorCommand("a", 10.0, 0.005, 10.005, "deg"),),
+        )
+        selected_group = replace(self.group, actuators=(self.group.actuators[0],))
+
+        class StaleClient(FakeClient):
+            def __init__(self, readings):
+                super().__init__(readings)
+                self.writes = []
+
+            def write(self, key, value, *, wait=True, timeout_s=1.0):
+                self.writes.append((key, float(value)))
+                return True
+
+        client = StaleClient({"a.read": reading("a.read", 10.0)})
+        result = apply_feedback_decision(
+            client,
+            selected_group,
+            proposal,
+            timeout_s=0.0,
+            poll_interval_s=0.01,
+        )
+        self.assertEqual(result.state, "HOLD")
+        self.assertFalse(result.write_verified)
+        self.assertFalse(result.rollback_applied)
+        self.assertIn("waiting for fresh readback", result.write_detail)
+
+    def test_quantized_noop_stays_shadow_and_does_not_write(self):
+        proposal = FeedbackDecision(
+            "SHADOW",
+            "valid feedback suggestion",
+            0.0004,
+            commands=(ActuatorCommand("a", 10.0, 0.0004, 10.0004, "deg"),),
+        )
+        selected_group = replace(self.group, actuators=(self.group.actuators[0],))
+        result = apply_feedback_decision(
+            self.client,
+            selected_group,
+            proposal,
+            timeout_s=0.1,
+            poll_interval_s=0.01,
+        )
+        self.assertEqual(result.state, "SHADOW")
+        self.assertEqual(result.reason, "feedback command unchanged after rounding")
+        self.assertFalse(result.write_verified)
+        self.assertEqual(result.write_detail, "no write attempted")
+        self.assertEqual(self.client.writes, [])
 
     def test_second_write_failure_rolls_back_both_actuators(self):
         self.client.fail_once.add("b.set")

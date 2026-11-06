@@ -760,7 +760,11 @@ class AcquisitionThread(QThread):
                             )
                             if decision.write_verified and fir is not None and proposal is not None:
                                 fir.commit(proposal)
-                            if decision.write_detail and not decision.write_verified:
+                            if (
+                                decision.state == "HOLD"
+                                and decision.write_detail
+                                and not decision.write_verified
+                            ):
                                 disarm(
                                     "Feedback stopped after write/verification failure: "
                                     + decision.write_detail
@@ -2011,6 +2015,9 @@ class EnergyFeedbackWindow(QMainWindow):
         if decision.write_verified:
             self.event_value.setText(f"{decision.reason} · {decision.write_detail}")
             self._set_status_item("action", "Manual write verified", "success")
+        elif decision.state == "SHADOW":
+            self.event_value.setText(f"{decision.reason} · {decision.write_detail}")
+            self._set_status_item("action", "Manual target unchanged", "subtle")
         else:
             self.event_value.setText(f"{decision.reason} · {decision.write_detail}")
             self._set_status_item("action", "Manual write HOLD", "danger")

@@ -103,7 +103,7 @@
     }
   },
   "write_verification": {
-    "timeout_s": 2.0,
+    "timeout_s": 5.0,
     "poll_interval_s": 0.05,
     "command_precision": 3
   },

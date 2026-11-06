@@ -87,16 +87,18 @@ class FakeHvClient:
         self.readback_key = readback_key
         self.value = 39.0
         self.verify_write = verify_write
+        self.timestamp = 100.0
         self.writes: list[tuple[str, float]] = []
 
     def read_many(self, keys):
-        return {key: reading(key, self.value) for key in keys}
+        return {key: reading(key, self.value, self.timestamp) for key in keys}
 
     def write(self, key, value, *, wait=True, timeout_s=1.0):
         value = float(value)
         self.writes.append((key, value))
         if value == 39.0 or self.verify_write:
             self.value = value
+            self.timestamp += 1.0
         return True
 
 
