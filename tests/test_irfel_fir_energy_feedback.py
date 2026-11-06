@@ -224,6 +224,15 @@ class BpmDispersionProviderTests(unittest.TestCase):
         self.assertIn("fct", issue)
         self.assertIn("disconnected", issue)
 
+    def test_closed_loop_inputs_fail_closed_when_client_raises(self):
+        source = {"closed_loop_keys": ("fct",)}
+
+        resolved, issue = read_closed_loop_inputs(FakeClient({}), source, 100.0)
+
+        self.assertEqual(resolved, {})
+        self.assertIn("closed-loop input read failure", issue)
+        self.assertIn("fct", issue)
+
     def test_monitor_receive_policy_accepts_legacy_bpm_source_timestamps(self):
         source = provider_source()
         source["bpm_timestamp_policy"] = "monitor_receive"

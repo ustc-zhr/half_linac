@@ -295,6 +295,7 @@ class AcquisitionThread(QThread):
                 self.config["measurement_source_id"]
             ]
             active_keys = set(source["signal_keys"])
+            active_keys.update(source.get("closed_loop_keys", ()))
             for group in self.config["control_groups"]:
                 for actuator in group.actuators:
                     active_keys.add(actuator.readback_key)
@@ -1601,6 +1602,20 @@ class EnergyFeedbackWindow(QMainWindow):
         }}
         QPushButton:disabled, QComboBox:disabled, QDoubleSpinBox:disabled {{
             color: {theme['muted']}; background: {theme['window']};
+        }}
+        QMessageBox {{
+            background-color: {theme['panel']}; color: {theme['text']};
+        }}
+        QMessageBox QLabel {{
+            background: transparent; border: none; color: {theme['text']};
+            padding: 3px;
+        }}
+        QMessageBox QPushButton {{
+            min-width: 78px; min-height: 28px; padding: 3px 12px;
+        }}
+        QMessageBox QPushButton:default {{
+            background: {theme['warning']}; border-color: {theme['warning']};
+            color: {theme['window']};
         }}
         """
 

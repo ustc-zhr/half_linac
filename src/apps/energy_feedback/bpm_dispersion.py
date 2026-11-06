@@ -457,7 +457,10 @@ def read_closed_loop_inputs(
     sampled_at: float,
 ) -> tuple[dict[str, float], str]:
     keys = tuple(source["closed_loop_keys"])
-    readings = client.read_many(keys)
+    try:
+        readings = client.read_many(keys)
+    except Exception as exc:  # noqa: BLE001 - guard failures must block writes
+        return {}, f"closed-loop input read failure: {exc}"
     values: dict[str, float] = {}
     exempt_keys = frozenset(source.get("source_timestamp_exempt_keys", ()))
     check_timestamps = str(

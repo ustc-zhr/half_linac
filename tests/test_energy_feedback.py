@@ -1159,6 +1159,19 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
         finally:
             window.close()
 
+    def test_confirmation_dialog_uses_readable_colors_in_both_themes(self):
+        for theme in (DARK_THEME, LIGHT_THEME):
+            stylesheet = EnergyFeedbackWindow._build_theme_stylesheet(theme)
+            self.assertIn("QMessageBox {", stylesheet)
+            self.assertIn(
+                f"background-color: {theme['panel']}; color: {theme['text']};",
+                stylesheet,
+            )
+            self.assertIn(
+                f"background: {theme['warning']}; border-color: {theme['warning']};",
+                stylesheet,
+            )
+
     def test_provider_diagnostics_do_not_change_feedback_gui(self):
         profile = synthetic_profile()
         workflow = deepcopy(profile.workflows["energy_feedback"])
