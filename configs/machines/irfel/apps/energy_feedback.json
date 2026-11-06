@@ -27,7 +27,7 @@
       "version": "irfel-fir-commissioning-20261105-v1",
       "a": 0.0,
       "b": 0.0,
-      "response_q_mm_per_kv": 0.01,
+      "response_q_mm_per_kv": -1,
       "fct_min": 1000,
       "q_action_range_mm": 3.0
     }
@@ -91,9 +91,9 @@
       "decimals": 6,
       "hidden": true
     },
-    "max_knob_step": {"label": "Step limit", "minimum": 0.001, "maximum": 0.02, "decimals": 3},
+    "max_knob_step": {"label": "Step limit", "minimum": 0.001, "maximum": 0.5, "decimals": 3},
     "action_window": {"label": "q action range", "minimum": 0.001, "maximum": 1000.0, "decimals": 3},
-    "max_session_delta": {"label": "Session limit", "minimum": 0.01, "maximum": 0.2, "decimals": 3}
+    "max_session_delta": {"label": "Session limit", "minimum": 0.01, "maximum": 3, "decimals": 3}
   },
   "runtime": {
     "sample_period_s": 0.2,
