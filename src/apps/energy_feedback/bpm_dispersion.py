@@ -421,11 +421,41 @@ class FirFeedbackCoordinator:
             self.controller.reset()
 
 
-def build_rf_hv_safety_checker(source: Mapping[str, Any]) -> SafetyChecker:
+def build_rf_hv_safety_checker(
+    source: Mapping[str, Any], aggregate: Mapping[str, float]
+) -> SafetyChecker:
     raw = source["rf_safety"]
     safety = raw["safety"]
-    reference = raw["reference"]
-    channels = reference["channels"]
+    channel_ids = tuple(str(channel["id"]) for channel in raw["rf_channels"])
+    required = ("hv_setpoint", "hv_readback") + tuple(
+        key
+        for channel_id in channel_ids
+        for key in (
+            f"rf.{channel_id}.amplitude",
+            f"rf.{channel_id}.phase",
+        )
+    )
+    missing = [key for key in required if key not in aggregate]
+    if missing:
+        raise ValueError(
+            f"cannot capture RF/HV safety reference; missing fields: {missing}"
+        )
+    values = {key: float(aggregate[key]) for key in required}
+    invalid = [key for key, value in values.items() if not math.isfinite(value)]
+    if invalid:
+        raise ValueError(
+            f"cannot capture RF/HV safety reference; invalid fields: {invalid}"
+        )
+    nonpositive_amplitudes = [
+        channel_id
+        for channel_id in channel_ids
+        if values[f"rf.{channel_id}.amplitude"] <= 0
+    ]
+    if nonpositive_amplitudes:
+        raise ValueError(
+            "cannot capture RF/HV safety reference; non-positive amplitudes: "
+            f"{nonpositive_amplitudes}"
+        )
     cfg = SafetyConfig(
         hv_min_kv=float(safety["hv_min_kv"]),
         hv_max_kv=float(safety["hv_max_kv"]),
@@ -440,12 +470,14 @@ def build_rf_hv_safety_checker(source: Mapping[str, Any]) -> SafetyChecker:
         hold_on_fault=bool(safety.get("hold_on_fault", True)),
     )
     ref = SafetyReference(
-        hv_kv=float(reference["hv_kv"]),
+        hv_kv=values["hv_readback"],
         channel_amplitudes={
-            str(key): float(value["amplitude"]) for key, value in channels.items()
+            channel_id: values[f"rf.{channel_id}.amplitude"]
+            for channel_id in channel_ids
         },
         channel_phases={
-            str(key): float(value["phase_deg"]) for key, value in channels.items()
+            channel_id: values[f"rf.{channel_id}.phase"]
+            for channel_id in channel_ids
         },
     )
     return SafetyChecker(cfg, ref, str(raw["default_feedback_channel"]))

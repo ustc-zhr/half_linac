@@ -265,6 +265,151 @@ def _validate_bpm_transport_source(
     return source_id
 
 
+def _validate_bpm_dispersion_safety(
+    profile: MachineProfile,
+    raw: Any,
+    backends: Sequence[str],
+) -> tuple[tuple[str, str], tuple[str, str]]:
+    safety = _mapping(profile, raw, "safety")
+    _text(profile, safety.get("id"), "safety.id")
+
+    hv = _mapping(profile, safety.get("hv"), "safety.hv")
+    hv_setpoint = _signal(
+        profile,
+        hv.get("setpoint"),
+        "safety.hv.setpoint",
+        backends,
+        expected_unit="kV",
+    )
+    hv_readback = _signal(
+        profile,
+        hv.get("readback"),
+        "safety.hv.readback",
+        backends,
+        expected_unit="kV",
+    )
+
+    channels = _sequence(profile, safety.get("rf_channels"), "safety.rf_channels")
+    if not channels:
+        _fail(profile, "safety.rf_channels must not be empty")
+    channel_ids: list[str] = []
+    for index, raw_channel in enumerate(channels):
+        name = f"safety.rf_channels[{index}]"
+        channel = _mapping(profile, raw_channel, name)
+        channel_id = _text(profile, channel.get("id"), f"{name}.id")
+        channel_ids.append(channel_id)
+        _text(profile, channel.get("label"), f"{name}.label")
+        _signal(
+            profile,
+            channel.get("amplitude"),
+            f"{name}.amplitude",
+            backends,
+            expected_unit="a.u.",
+        )
+        _signal(
+            profile,
+            channel.get("phase"),
+            f"{name}.phase",
+            backends,
+            expected_unit="deg",
+        )
+    if len(channel_ids) != len(set(channel_ids)):
+        _fail(profile, "safety.rf_channels ids must be unique")
+
+    feedback_channel = _text(
+        profile,
+        safety.get("default_feedback_channel"),
+        "safety.default_feedback_channel",
+    )
+    if feedback_channel not in channel_ids:
+        _fail(profile, "safety.default_feedback_channel is not an RF channel")
+
+    reference_capture = _mapping(
+        profile,
+        safety.get("reference_capture"),
+        "safety.reference_capture",
+    )
+    if reference_capture.get("mode") != "set_current_as_target":
+        _fail(
+            profile,
+            "safety.reference_capture.mode must be 'set_current_as_target'",
+        )
+
+    limits = _mapping(profile, safety.get("limits"), "safety.limits")
+    hv_range = _mapping(
+        profile,
+        limits.get("hv_range_kv"),
+        "safety.limits.hv_range_kv",
+    )
+    hv_low = _number(
+        profile,
+        hv_range.get("low"),
+        "safety.limits.hv_range_kv.low",
+    )
+    hv_high = _number(
+        profile,
+        hv_range.get("high"),
+        "safety.limits.hv_range_kv.high",
+    )
+    if hv_low >= hv_high:
+        _fail(profile, "safety.limits.hv_range_kv low must be less than high")
+    _number(
+        profile,
+        limits.get("hv_readback_tolerance_kv"),
+        "safety.limits.hv_readback_tolerance_kv",
+        positive=True,
+    )
+
+    phase_limits = _mapping(
+        profile,
+        limits.get("phase_limit_deg"),
+        "safety.limits.phase_limit_deg",
+    )
+    if set(phase_limits) != set(channel_ids):
+        _fail(profile, "safety.limits.phase_limit_deg must match rf_channels")
+    for channel_id in channel_ids:
+        _number(
+            profile,
+            phase_limits[channel_id],
+            f"safety.limits.phase_limit_deg.{channel_id}",
+            positive=True,
+        )
+    _number(
+        profile,
+        limits.get("amplitude_ratio_limit_rel"),
+        "safety.limits.amplitude_ratio_limit_rel",
+        positive=True,
+    )
+
+    amplitude_range = _mapping(
+        profile,
+        limits.get("feedback_amplitude_range_rel"),
+        "safety.limits.feedback_amplitude_range_rel",
+    )
+    amplitude_low = _number(
+        profile,
+        amplitude_range.get("low"),
+        "safety.limits.feedback_amplitude_range_rel.low",
+        positive=True,
+    )
+    amplitude_high = _number(
+        profile,
+        amplitude_range.get("high"),
+        "safety.limits.feedback_amplitude_range_rel.high",
+        positive=True,
+    )
+    if not amplitude_low <= 1.0 <= amplitude_high or amplitude_low >= amplitude_high:
+        _fail(
+            profile,
+            "safety.limits.feedback_amplitude_range_rel must contain 1.0",
+        )
+    for key in ("require_valid_pv", "hold_on_fault"):
+        if not isinstance(limits.get(key, True), bool):
+            _fail(profile, f"safety.limits.{key} must be boolean")
+
+    return hv_setpoint, hv_readback
+
+
 def _validate_bpm_dispersion_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
@@ -352,6 +497,12 @@ def _validate_bpm_dispersion_workflow(
     if ready:
         _text(profile, calibration.get("version"), "measurement.calibration.version")
 
+    safety_hv_setpoint, safety_hv_readback = _validate_bpm_dispersion_safety(
+        profile,
+        workflow.get("safety"),
+        backends,
+    )
+
     groups = _sequence(profile, workflow.get("control_groups"), "control_groups")
     if len(groups) != 1:
         _fail(profile, "bpm_dispersion requires exactly one control group")
@@ -374,6 +525,10 @@ def _validate_bpm_dispersion_workflow(
     readback = _text(profile, actuator.get("readback"), "control actuator readback")
     _signal(profile, {"element": element_id, "channel": setpoint, "unit": unit}, "control actuator setpoint", backends, expected_unit=unit)
     _signal(profile, {"element": element_id, "channel": readback}, "control actuator readback", backends)
+    if safety_hv_setpoint != (element_id, setpoint):
+        _fail(profile, "safety HV setpoint must match the control actuator setpoint")
+    if safety_hv_readback != (element_id, readback):
+        _fail(profile, "safety HV readback must match the control actuator readback")
     operating_range = _range(profile, actuator.get("operating_range"), "control actuator operating_range")
     machine_limit = _element_limit(profile, element_id, setpoint)
     if machine_limit is None or operating_range[0] < machine_limit[0] or operating_range[1] > machine_limit[1]:

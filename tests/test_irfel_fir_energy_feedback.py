@@ -437,7 +437,7 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertEqual(
             calibration["version"], "irfel-fir-commissioning-20261105-v1"
         )
-        self.assertAlmostEqual(calibration["response_q_mm_per_kv"], 0.01)
+        self.assertAlmostEqual(calibration["response_q_mm_per_kv"], -1.0)
         self.assertAlmostEqual(calibration["fct_min"], 1000.0)
         self.assertAlmostEqual(calibration["q_action_range_mm"], 3.0)
         self.assertEqual(
@@ -469,26 +469,47 @@ class IrfelProfileTests(unittest.TestCase):
         )
         self.assertTrue(workflow_writes_allowed(context, "energy_feedback"))
 
-    def test_resolved_hv_safety_config_builds_and_accepts_reference(self):
+    def test_resolved_safety_config_captures_and_accepts_field_reference(self):
         context = load_app_context(
             "energy_feedback", machine_id="irfel", control_backend="real"
         )
         config = load_runtime_config(context)
         source = config["measurement_sources"][config["measurement_source_id"]]
-        checker = build_rf_hv_safety_checker(source)
-        reference = source["rf_safety"]["reference"]
         aggregate = {
-            "hv_setpoint": float(reference["hv_kv"]),
-            "hv_readback": float(reference["hv_kv"]),
+            "hv_setpoint": 39.0,
+            "hv_readback": 39.0,
+            "rf.acc1.amplitude": 25000.0,
+            "rf.acc1.phase": -158.2,
+            "rf.buncher.amplitude": 34000.0,
+            "rf.buncher.phase": -21.0,
         }
-        for channel_id, values in reference["channels"].items():
-            aggregate[f"rf.{channel_id}.amplitude"] = float(values["amplitude"])
-            aggregate[f"rf.{channel_id}.phase"] = float(values["phase_deg"])
+        checker = build_rf_hv_safety_checker(source, aggregate)
 
+        self.assertEqual(source["rf_safety"]["profile_id"], "irfel_energy_feedback")
+        self.assertNotIn("reference", source["rf_safety"])
+        self.assertEqual(
+            source["rf_safety"]["reference_capture"]["mode"],
+            "set_current_as_target",
+        )
         self.assertEqual(checker.cfg.hv_min_kv, 38.5)
         self.assertEqual(checker.cfg.hv_max_kv, 39.5)
+        self.assertEqual(checker.ref.hv_kv, 39.0)
+        self.assertEqual(checker.ref.channel_phases["acc1"], -158.2)
+        self.assertEqual(checker.ref.channel_amplitudes["acc1"], 25000.0)
         result = checker.check_aggregate(aggregate)
         self.assertTrue(result.ok, result.reason)
+
+    def test_field_safety_reference_rejects_incomplete_snapshot(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        config = load_runtime_config(context)
+        source = config["measurement_sources"][config["measurement_source_id"]]
+        with self.assertRaisesRegex(ValueError, "missing fields"):
+            build_rf_hv_safety_checker(
+                source,
+                {"hv_setpoint": 39.0, "hv_readback": 39.0},
+            )
 
     def test_calibration_readiness_is_layered(self):
         calibration = dict(CALIBRATION)

@@ -70,7 +70,38 @@
     "control_period_s": 10.0,
     "require_reference_capture": true
   },
-  "safety": {"hv_feedback_unit": "kly1"},
+  "safety": {
+    "id": "irfel_energy_feedback",
+    "hv": {
+      "setpoint": {"element": "MODULATOR_HV1", "channel": "voltage_set", "unit": "kV"},
+      "readback": {"element": "MODULATOR_HV1", "channel": "voltage_readback", "unit": "kV"}
+    },
+    "rf_channels": [
+      {
+        "id": "acc1",
+        "label": "ACC1",
+        "amplitude": {"element": "KLY1_CH3_AMPLITUDE", "channel": "amplitude_readback", "unit": "a.u."},
+        "phase": {"element": "KLY1_CH3_PHASE", "channel": "phase_readback", "unit": "deg"}
+      },
+      {
+        "id": "buncher",
+        "label": "Buncher",
+        "amplitude": {"element": "KLY1_CH4_AMPLITUDE", "channel": "amplitude_readback", "unit": "a.u."},
+        "phase": {"element": "KLY1_CH4_PHASE", "channel": "phase_readback", "unit": "deg"}
+      }
+    ],
+    "default_feedback_channel": "acc1",
+    "reference_capture": {"mode": "set_current_as_target"},
+    "limits": {
+      "hv_range_kv": {"low": 38.5, "high": 39.5},
+      "hv_readback_tolerance_kv": 0.02,
+      "phase_limit_deg": {"acc1": 3, "buncher": 3},
+      "amplitude_ratio_limit_rel": 0.05,
+      "feedback_amplitude_range_rel": {"low": 0.9, "high": 1.1},
+      "require_valid_pv": true,
+      "hold_on_fault": true
+    }
+  },
   "write_verification": {
     "timeout_s": 2.0,
     "poll_interval_s": 0.05,

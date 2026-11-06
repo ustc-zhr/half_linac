@@ -346,6 +346,7 @@ class AcquisitionThread(QThread):
         rf_hv_checker = None
         control_timing = None
         timing_parameters: dict[str, float] = {}
+        safety_reference_parameters: dict[str, float] = {}
         try:
             if self.config["measurement_kind"] == "bpm_dispersion":
                 controller = self.config["controller"]
@@ -361,7 +362,6 @@ class AcquisitionThread(QThread):
                     period_s=control_timing.effective_control_period_s,
                     aggregation=str(controller["window_aggregation"]),
                 )
-                rf_hv_checker = build_rf_hv_safety_checker(source)
                 timing_parameters = {
                     "sample_period_s": control_timing.sample_period_s,
                     "control_period_s": control_timing.effective_control_period_s,
@@ -415,14 +415,61 @@ class AcquisitionThread(QThread):
                         measurement = fir_result.measurement
                     if self._capture_reference_event.is_set():
                         self._capture_reference_event.clear()
+                        fir.reference = None
+                        rf_hv_checker = None
+                        safety_reference_parameters.clear()
                         try:
+                            if fir.latest_window is None:
+                                raise ValueError("wait for a complete FIR control window")
+                            guard_values, guard_read_issue = read_closed_loop_inputs(
+                                client,
+                                source,
+                                measurement.sampled_at,
+                            )
+                            if guard_read_issue:
+                                raise ValueError(guard_read_issue)
+                            guard_issue = check_session_guards(
+                                guard_values,
+                                source["calibration"],
+                            )
+                            if guard_issue:
+                                raise ValueError(guard_issue)
+                            aggregate = rf_hv_aggregate(guard_values, source)
+                            captured_checker = build_rf_hv_safety_checker(
+                                source,
+                                aggregate,
+                            )
+                            captured_safety = captured_checker.check_aggregate(
+                                aggregate
+                            )
+                            if not captured_safety.ok:
+                                raise ValueError(captured_safety.reason)
                             reference = fir.capture_latest()
                         except Exception as exc:  # noqa: BLE001
                             self.reference_captured.emit(None, str(exc))
                         else:
+                            rf_hv_checker = captured_checker
+                            safety_reference_parameters = {
+                                "safety_reference.hv_kv": rf_hv_checker.ref.hv_kv,
+                                **{
+                                    f"safety_reference.rf.{channel_id}.amplitude": value
+                                    for channel_id, value in (
+                                        rf_hv_checker.ref.channel_amplitudes.items()
+                                    )
+                                },
+                                **{
+                                    f"safety_reference.rf.{channel_id}.phase_deg": value
+                                    for channel_id, value in (
+                                        rf_hv_checker.ref.channel_phases.items()
+                                    )
+                                },
+                            }
                             with self._settings_lock:
                                 self._settings["target_mev"] = reference.target_q_mm
-                            self.reference_captured.emit(reference, "Current energy captured")
+                            self.reference_captured.emit(
+                                reference,
+                                "Current energy and RF/HV safety reference captured",
+                            )
                     if fir.reference is not None and measurement.observable is not None:
                         target_q = fir.reference.target_q_mm
                         q_value = measurement.control_value
@@ -474,7 +521,11 @@ class AcquisitionThread(QThread):
                     decision = replace(
                         unavailable_decision(),
                         error_mev=measurement.control_error,
-                        control_parameters={**settings, **timing_parameters},
+                        control_parameters={
+                            **settings,
+                            **timing_parameters,
+                            **safety_reference_parameters,
+                        },
                     )
                     self.sample_ready.emit(measurement, decision, {})
                     wait_for_next_sample()
@@ -499,7 +550,11 @@ class AcquisitionThread(QThread):
                         "HOLD",
                         f"actuator read failure: {exc}",
                         measurement.control_error,
-                        control_parameters={**settings, **timing_parameters},
+                        control_parameters={
+                            **settings,
+                            **timing_parameters,
+                            **safety_reference_parameters,
+                        },
                     )
                 else:
                     requested = self._feedback_event.is_set()
@@ -509,6 +564,10 @@ class AcquisitionThread(QThread):
                                 raise MachineProfileError(self.config["feedback_block_reason"])
                             if fir is not None and fir.reference is None:
                                 raise MachineProfileError("Set Current as Target before starting feedback")
+                            if fir is not None and rf_hv_checker is None:
+                                raise MachineProfileError(
+                                    "Set Current as Target to capture the RF/HV safety reference"
+                                )
                             require_workflow_write_allowed(
                                 self.context, WORKFLOW_NAME, "Energy feedback"
                             )
@@ -568,6 +627,7 @@ class AcquisitionThread(QThread):
                                 guard_issue = ""
                                 rf_result = None
                                 if feedback_active:
+                                    assert rf_hv_checker is not None
                                     guard_values, guard_read_issue = (
                                         read_closed_loop_inputs(
                                             client,
@@ -606,6 +666,7 @@ class AcquisitionThread(QThread):
                                     parameters = {
                                         **settings,
                                         **timing_parameters,
+                                        **safety_reference_parameters,
                                         "kp": fir.controller.kp,
                                         "ki": fir.controller.ki,
                                         "p_component": proposal.p_component,
@@ -625,6 +686,7 @@ class AcquisitionThread(QThread):
                                         feedback_active
                                         and decision.has_valid_suggestion
                                     ):
+                                        assert rf_hv_checker is not None
                                         hv_result = rf_hv_checker.check_aggregate(
                                             aggregate,
                                             decision.commands[0].proposed,
@@ -655,7 +717,11 @@ class AcquisitionThread(QThread):
                     if not decision.control_parameters:
                         decision = replace(
                             decision,
-                            control_parameters={**settings, **timing_parameters},
+                            control_parameters={
+                                **settings,
+                                **timing_parameters,
+                                **safety_reference_parameters,
+                            },
                         )
 
                     if feedback_active and decision.state == "HOLD" and any(
@@ -715,7 +781,11 @@ class AcquisitionThread(QThread):
                             decision = replace(
                                 manual_decision,
                                 error_mev=measurement.control_error,
-                                control_parameters={**settings, **timing_parameters},
+                                control_parameters={
+                                    **settings,
+                                    **timing_parameters,
+                                    **safety_reference_parameters,
+                                },
                             )
 
                 self.sample_ready.emit(measurement, decision, readbacks)
@@ -1773,6 +1843,8 @@ class EnergyFeedbackWindow(QMainWindow):
         if self.worker is None or not self.worker.isRunning():
             self.event_value.setText("Start acquisition before capturing current energy")
             return
+        self._target_initialized = False
+        self._refresh_write_control_state()
         self.worker.request_capture_reference()
         timing = self._selected_control_timing()
         period = timing.effective_control_period_s if timing is not None else 0.0

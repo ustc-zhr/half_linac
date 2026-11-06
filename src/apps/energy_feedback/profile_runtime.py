@@ -16,10 +16,8 @@ from half_linac.src.shared.energy_measurement import (
 from half_linac.src.shared.machine_profile import (
     AppContext,
     MachineProfileError,
-    load_profile,
     resolve_channel,
     resolve_energy_feedback_workflow,
-    resolve_hv_feedback_workflow,
     workflow_writes_allowed,
 )
 
@@ -93,30 +91,17 @@ def load_runtime_config(
             source_signal_keys.append(key)
         fct_key = "fct"
         add_signal(fct_key, measurement["fct"])
-        hv_profile = load_profile(context.profile.machine.id)
-        hv_workflow = resolve_hv_feedback_workflow(hv_profile)
-        safety_unit_id = str(workflow.get("safety", {}).get("hv_feedback_unit", ""))
-        hv_unit = next(
-            (
-                item
-                for item in hv_workflow["feedback_units"]
-                if str(item["id"]) == safety_unit_id
-            ),
-            None,
-        )
-        if hv_unit is None:
-            raise MachineProfileError(
-                f"Unknown HV Feedback safety unit {safety_unit_id!r}."
-            )
+        safety_profile = workflow["safety"]
+        safety_id = str(safety_profile["id"])
         guard_keys: dict[str, str] = {}
         for guard_name, signal in (
-            ("hv_setpoint", hv_unit["hv"]["setpoint"]),
-            ("hv_readback", hv_unit["hv"]["readback"]),
+            ("hv_setpoint", safety_profile["hv"]["setpoint"]),
+            ("hv_readback", safety_profile["hv"]["readback"]),
         ):
             key = f"guard.{guard_name}"
             add_signal(key, signal)
             guard_keys[guard_name] = key
-        for channel in hv_unit["rf_channels"]:
+        for channel in safety_profile["rf_channels"]:
             channel_id = str(channel["id"])
             for field in ("amplitude", "phase"):
                 guard_name = f"rf.{channel_id}.{field}"
@@ -158,11 +143,47 @@ def load_runtime_config(
             "closed_loop_keys": closed_loop_keys,
             "source_timestamp_exempt_keys": (guard_keys["hv_setpoint"],),
             "rf_safety": {
-                "unit_id": safety_unit_id,
-                "default_feedback_channel": str(hv_unit["default_feedback_channel"]),
-                "rf_channels": copy.deepcopy(list(hv_unit["rf_channels"])),
-                "reference": copy.deepcopy(dict(hv_unit["reference"])),
-                "safety": copy.deepcopy(dict(hv_unit["safety"])),
+                "profile_id": safety_id,
+                "default_feedback_channel": str(
+                    safety_profile["default_feedback_channel"]
+                ),
+                "rf_channels": copy.deepcopy(list(safety_profile["rf_channels"])),
+                "reference_capture": copy.deepcopy(
+                    dict(safety_profile["reference_capture"])
+                ),
+                "safety": {
+                    "hv_min_kv": float(
+                        safety_profile["limits"]["hv_range_kv"]["low"]
+                    ),
+                    "hv_max_kv": float(
+                        safety_profile["limits"]["hv_range_kv"]["high"]
+                    ),
+                    "hv_readback_tolerance_kv": float(
+                        safety_profile["limits"]["hv_readback_tolerance_kv"]
+                    ),
+                    "phase_limit_deg": copy.deepcopy(
+                        dict(safety_profile["limits"]["phase_limit_deg"])
+                    ),
+                    "amplitude_ratio_limit_rel": float(
+                        safety_profile["limits"]["amplitude_ratio_limit_rel"]
+                    ),
+                    "feedback_amplitude_min_rel": float(
+                        safety_profile["limits"]["feedback_amplitude_range_rel"][
+                            "low"
+                        ]
+                    ),
+                    "feedback_amplitude_max_rel": float(
+                        safety_profile["limits"]["feedback_amplitude_range_rel"][
+                            "high"
+                        ]
+                    ),
+                    "require_valid_pv": bool(
+                        safety_profile["limits"].get("require_valid_pv", True)
+                    ),
+                    "hold_on_fault": bool(
+                        safety_profile["limits"].get("hold_on_fault", True)
+                    ),
+                },
             },
             "resolved_signals": {
                 key: signals[key]
