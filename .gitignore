@@ -117,3 +117,4 @@ src/virtual_machine/*_elegant/elegant/*.sig
 # Generated analysis data and figures
 docs/analysis/*.json
 docs/analysis/*.png
+energy_prediction_analysis/
