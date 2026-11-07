@@ -58,6 +58,7 @@ class EnergyMeasurement:
     marker_value: float | None = None
     marker_source_timestamp: float | None = None
     observable: FeedbackObservable | None = None
+    sample_token: tuple[float, ...] | None = None
 
     @property
     def control_value(self) -> float | None:
@@ -88,14 +89,33 @@ class ShadowActuator:
     unit: str
     max_step: float
     max_session_delta: float
-    operating_range: tuple[float, float]
-    machine_limit: tuple[float, float]
+    operating_range: tuple[float, float] | None
+    machine_limit: tuple[float, float] | None
     setpoint_key: str = ""
     readback_key: str = ""
     verify_tolerance: float = 0.05
     command_precision: int = 2
     cyclic_period: float | None = None
     command_basis: str = "readback"
+
+
+def effective_actuator_limit(
+    actuator: ShadowActuator,
+) -> tuple[float, float] | None:
+    """Return the intersection of configured absolute limits, if any."""
+
+    limits = tuple(
+        limit
+        for limit in (actuator.operating_range, actuator.machine_limit)
+        if limit is not None
+    )
+    if not limits:
+        return None
+    low = max(limit[0] for limit in limits)
+    high = min(limit[1] for limit in limits)
+    if low > high:
+        raise ValueError(f"actuator {actuator.id} absolute limits do not overlap")
+    return low, high
 
 
 @dataclass(frozen=True)

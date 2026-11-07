@@ -68,7 +68,7 @@ class _Client:
         self.readings = dict(readings)
         self.requests: list[tuple[str, ...]] = []
 
-    def read_many(self, keys):
+    def read_many(self, keys, *, fresh=False):
         request = tuple(keys)
         self.requests.append(request)
         return {key: self.readings[key] for key in request}

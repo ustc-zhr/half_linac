@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import math
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -11,6 +12,41 @@ from .models import MachineProfile, MachineProfileError
 
 WORKFLOW_NAME = "energy_feedback"
 
+_BPM_DISPERSION_RUNTIME_DEFAULTS = {
+    "plot_period_s": 1.0,
+    "connection_timeout_s": 2.0,
+    "stale_timeout_s": 3.0,
+}
+_BPM_DISPERSION_VERIFICATION_DEFAULTS = {
+    "poll_interval_s": 0.05,
+    "command_precision": 3,
+}
+_BPM_DISPERSION_CONTROL_DEFAULTS = {
+    "sample_period_s": {"label": "Sample period", "decimals": 1},
+    "control_period_s": {"label": "Control period", "decimals": 1},
+    "target": {"decimals": 4},
+    "gain": {"label": "ki", "decimals": 4},
+    "kp": {"label": "kp", "decimals": 4},
+    "max_knob_step": {"label": "Step limit", "decimals": 3},
+    "action_window": {"label": "q action range", "decimals": 3},
+    "max_session_delta": {"label": "Session limit", "decimals": 3},
+}
+_BPM_DISPERSION_OBSERVABLE_DEFAULTS = {
+    "label": "FIR Energy Proxy q",
+    "unit": "mm",
+    "valid_range": [-1000.0, 1000.0],
+}
+_BPM_DISPERSION_OPERATOR_CONTROL_DEFAULTS = {
+    "sample_period_s": [0.1, 1.0],
+    "control_period_s": [1.0, 60.0],
+    "target": [-1000.0, 1000.0],
+    "gain": [0.0, 1.0],
+    "kp": [0.0, 1.0],
+    "max_knob_step": [0.001, 0.5],
+    "action_window": [0.001, 1000.0],
+    "max_session_delta": [0.01, 3.0],
+}
+
 
 def resolve_energy_feedback_workflow(profile: MachineProfile) -> dict[str, Any]:
     workflow = profile.workflows.get(WORKFLOW_NAME)
@@ -18,9 +54,392 @@ def resolve_energy_feedback_workflow(profile: MachineProfile) -> dict[str, Any]:
         raise MachineProfileError(
             f"Machine profile {profile.machine.id!r} does not configure {WORKFLOW_NAME!r}."
         )
-    resolved = dict(workflow)
+    resolved = _normalize_energy_feedback_workflow(profile, workflow)
     validate_energy_feedback_workflow(profile, resolved)
     return resolved
+
+
+def _normalize_energy_feedback_workflow(
+    profile: MachineProfile,
+    raw_workflow: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Expand the compact FIR profile into the existing runtime schema."""
+
+    workflow = copy.deepcopy(dict(raw_workflow))
+    workflow = _expand_compact_bpm_dispersion_workflow(profile, workflow)
+    measurement = workflow.get("measurement")
+    if (
+        not isinstance(measurement, Mapping)
+        or measurement.get("kind") != "bpm_dispersion"
+    ):
+        return workflow
+
+    measurement = dict(measurement)
+    workflow["measurement"] = measurement
+    measurement.setdefault("capabilities", ["energy_proxy"])
+    geometry = measurement.get("geometry")
+    if isinstance(geometry, Mapping) and "bpm_elements" not in measurement:
+        upstream = geometry.get("upstream_bpms")
+        dispersive = geometry.get("dispersive_bpm")
+        if (
+            isinstance(upstream, Sequence)
+            and not isinstance(upstream, (str, bytes))
+            and dispersive is not None
+        ):
+            measurement["bpm_elements"] = [*upstream, dispersive]
+
+    measurement_id = measurement.get("id", "fir_bpm_dispersion")
+    measurement.setdefault("id", measurement_id)
+    workflow.setdefault("default_measurement_source", measurement_id)
+    workflow.setdefault("measurement_alternatives", [])
+    workflow.setdefault(
+        "pulse", {"marker": None, "require_marker_for_write": False}
+    )
+
+    controller = workflow.get("controller")
+    if isinstance(controller, Mapping):
+        controller = dict(controller)
+        workflow["controller"] = controller
+        controller.setdefault("mode", "I")
+        controller.setdefault("kp", 0.0)
+        controller.setdefault("window_aggregation", "median")
+        controller.setdefault("require_reference_capture", True)
+
+    groups = workflow.get("control_groups")
+    actuator = None
+    if (
+        isinstance(groups, Sequence)
+        and not isinstance(groups, (str, bytes))
+        and len(groups) == 1
+        and isinstance(groups[0], Mapping)
+    ):
+        group = dict(groups[0])
+        workflow["control_groups"] = [group]
+        group.setdefault("label", group.get("id", "Control actuator"))
+        if isinstance(controller, Mapping) and "ki" in controller:
+            group.setdefault("loop_gain", controller["ki"])
+        group.setdefault("deadband", 0.0)
+        actuators = group.get("actuators")
+        if (
+            isinstance(actuators, Sequence)
+            and not isinstance(actuators, (str, bytes))
+            and len(actuators) == 1
+            and isinstance(actuators[0], Mapping)
+        ):
+            actuator = dict(actuators[0])
+            group["actuators"] = [actuator]
+            actuator.setdefault(
+                "label", actuator.get("id", "Control actuator")
+            )
+            actuator.setdefault("coefficient", 1.0)
+            if "max_step" in actuator:
+                group.setdefault("max_knob_step", actuator["max_step"])
+
+    safety = workflow.get("safety")
+    if isinstance(safety, Mapping):
+        workflow["safety"] = _normalize_bpm_dispersion_safety(
+            profile, safety, actuator
+        )
+
+    verification = workflow.get("write_verification")
+    if isinstance(verification, Mapping):
+        verification = dict(verification)
+        workflow["write_verification"] = verification
+        for key, value in _BPM_DISPERSION_VERIFICATION_DEFAULTS.items():
+            verification.setdefault(key, value)
+
+    runtime = workflow.get("runtime")
+    if isinstance(runtime, Mapping):
+        runtime = dict(runtime)
+        workflow["runtime"] = runtime
+        for key, value in _BPM_DISPERSION_RUNTIME_DEFAULTS.items():
+            runtime.setdefault(key, value)
+
+    controls = workflow.get("operator_controls")
+    if isinstance(controls, Mapping):
+        controls = dict(controls)
+        workflow["operator_controls"] = controls
+        for key, defaults in _BPM_DISPERSION_CONTROL_DEFAULTS.items():
+            raw_spec = controls.get(key)
+            if (
+                isinstance(raw_spec, Sequence)
+                and not isinstance(raw_spec, (str, bytes))
+                and len(raw_spec) == 2
+            ):
+                spec = {"minimum": raw_spec[0], "maximum": raw_spec[1]}
+            elif isinstance(raw_spec, Mapping):
+                spec = dict(raw_spec)
+            else:
+                continue
+            for default_key, default_value in defaults.items():
+                spec.setdefault(default_key, default_value)
+            controls[key] = spec
+
+        if actuator is not None and "actuator_ratio" not in controls:
+            coefficient = float(actuator.get("coefficient", 1.0))
+            magnitude = abs(coefficient)
+            controls["actuator_ratio"] = {
+                "label": "coefficient",
+                "actuator": str(actuator.get("id", "actuator")),
+                "sign": -1 if coefficient < 0 else 1,
+                "minimum": magnitude,
+                "maximum": magnitude + 1e-6,
+                "decimals": 6,
+                "hidden": True,
+            }
+    return workflow
+
+
+def _expand_compact_bpm_dispersion_workflow(
+    profile: MachineProfile,
+    workflow: dict[str, Any],
+) -> dict[str, Any]:
+    """Translate the single-HV FIR syntax to the generic runtime schema."""
+
+    if "actuator" not in workflow and "feedback" not in workflow:
+        return workflow
+
+    measurement = _mapping(profile, workflow.get("measurement"), "measurement")
+    if measurement.get("kind") != "bpm_dispersion":
+        _fail(profile, "compact actuator/feedback syntax requires bpm_dispersion")
+
+    conflicting = [
+        key
+        for key in (
+            "control_groups",
+            "controller",
+            "operator_controls",
+            "runtime",
+            "logging",
+        )
+        if key in workflow
+    ]
+    if conflicting:
+        _fail(
+            profile,
+            "compact actuator/feedback syntax cannot be mixed with "
+            + ", ".join(conflicting),
+        )
+
+    actuator_config = _mapping(profile, workflow.get("actuator"), "actuator")
+    feedback = _mapping(profile, workflow.get("feedback"), "feedback")
+    safety_config = _mapping(profile, workflow.get("safety"), "safety")
+    verification_config = _mapping(
+        profile,
+        workflow.get("write_verification"),
+        "write_verification",
+    )
+
+    upstream = list(
+        _sequence(
+            profile,
+            measurement.get("upstream_bpms"),
+            "measurement.upstream_bpms",
+        )
+    )
+    dispersive = _text(
+        profile,
+        measurement.get("dispersive_bpm"),
+        "measurement.dispersive_bpm",
+    )
+    bpm_elements = [*upstream, dispersive]
+    measurement_id = "fir_bpm_dispersion"
+    calibration_config = _mapping(
+        profile,
+        measurement.get("calibration"),
+        "measurement.calibration",
+    )
+    status = _text(
+        profile,
+        calibration_config.get("status"),
+        "measurement.calibration.status",
+    )
+    if status not in {"ready", "pending"}:
+        _fail(profile, "measurement.calibration.status must be 'ready' or 'pending'")
+    orbit_subtraction = _mapping(
+        profile,
+        calibration_config.get("orbit_subtraction"),
+        "measurement.calibration.orbit_subtraction",
+    )
+
+    beam_present = _mapping(
+        profile,
+        safety_config.get("beam_present"),
+        "safety.beam_present",
+    )
+    rf_phase_elements = _mapping(
+        profile,
+        safety_config.get("rf_phase_elements"),
+        "safety.rf_phase_elements",
+    )
+
+    element_id = _text(profile, actuator_config.get("element"), "actuator.element")
+    try:
+        element = profile.get_element(element_id)
+    except MachineProfileError as exc:
+        _fail(profile, f"actuator references unknown element {element_id!r}: {exc}")
+    setpoint = "voltage_set"
+    readback = "voltage_readback"
+    setpoint_limit = element.limits.get(setpoint, {})
+    unit = setpoint_limit.get("unit") if isinstance(setpoint_limit, Mapping) else None
+    if not isinstance(unit, str) or not unit.strip():
+        _fail(profile, f"actuator {element_id!r} does not define the {setpoint} unit")
+
+    actuator_id = element_id.lower()
+    actuator_label = element_id.replace("_", " ").title().replace("Hv", "HV")
+    expanded = {
+        key: copy.deepcopy(value)
+        for key, value in workflow.items()
+        if key not in {"actuator", "feedback"}
+    }
+    expanded["measurement"] = {
+        "id": measurement_id,
+        "kind": "bpm_dispersion",
+        "label": "FIR " + "/".join(bpm_elements),
+        "capabilities": ["energy_proxy"],
+        "observable": copy.deepcopy(_BPM_DISPERSION_OBSERVABLE_DEFAULTS),
+        "geometry": {
+            "upstream_bpms": upstream,
+            "dispersive_bpm": dispersive,
+        },
+        "bpm_elements": bpm_elements,
+        "fct": {
+            "element": _text(
+                profile,
+                beam_present.get("element"),
+                "safety.beam_present.element",
+            ),
+            "channel": "sum",
+            "unit": "a.u.",
+        },
+        "calibration": {
+            "ready": status == "ready",
+            "version": calibration_config.get("version"),
+            "a": orbit_subtraction.get("a"),
+            "b": orbit_subtraction.get("b"),
+            "response_q_mm_per_kv": calibration_config.get(
+                "hv_response_mm_per_kv"
+            ),
+            "fct_min": beam_present.get("minimum"),
+            "q_action_range_mm": feedback.get("action_range_mm"),
+        },
+    }
+    expanded["control_groups"] = [
+        {
+            "id": actuator_id,
+            "label": actuator_label,
+            "actuators": [
+                {
+                    "id": actuator_id,
+                    "label": actuator_label,
+                    "element": element_id,
+                    "setpoint": setpoint,
+                    "readback": readback,
+                    "coefficient": 1.0,
+                    "unit": unit,
+                    "max_step": feedback.get("max_step_kv"),
+                    "max_session_delta": feedback.get("max_session_delta_kv"),
+                    "verify_tolerance": verification_config.get(
+                        "readback_tolerance_kv"
+                    ),
+                    "command_basis": "setpoint",
+                }
+            ],
+        }
+    ]
+    expanded["controller"] = {
+        "ki": feedback.get("ki"),
+        "control_period_s": feedback.get("control_period_s"),
+    }
+    expanded["safety"] = {
+        "rf_phase_elements": copy.deepcopy(dict(rf_phase_elements)),
+        "phase_limit_deg": safety_config.get("phase_limit_deg"),
+        "hv_readback_tolerance_kv": safety_config.get(
+            "setpoint_readback_tolerance_kv"
+        ),
+    }
+    expanded["write_verification"] = {
+        "timeout_s": verification_config.get("timeout_s")
+    }
+    expanded["operator_controls"] = copy.deepcopy(
+        _BPM_DISPERSION_OPERATOR_CONTROL_DEFAULTS
+    )
+    expanded["runtime"] = {
+        "sample_period_s": feedback.get("sample_period_s"),
+        "max_history_points": 36000,
+    }
+    expanded["logging"] = {
+        "file_prefix": f"{profile.machine.id}_fir_energy_feedback",
+        "flush_every_n_rows": 10,
+    }
+    return expanded
+
+
+def _normalize_bpm_dispersion_safety(
+    profile: MachineProfile,
+    raw_safety: Mapping[str, Any],
+    actuator: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    safety = copy.deepcopy(dict(raw_safety))
+    if actuator is not None:
+        element = actuator.get("element")
+        setpoint = actuator.get("setpoint")
+        readback = actuator.get("readback")
+        unit = actuator.get("unit")
+        safety["hv"] = {
+            "setpoint": {"element": element, "channel": setpoint, "unit": unit},
+            "readback": {"element": element, "channel": readback, "unit": unit},
+        }
+
+    phase_elements = safety.pop("rf_phase_elements", None)
+    if isinstance(phase_elements, Mapping):
+        safety["rf_channels"] = [
+            {
+                "id": str(channel_id),
+                "label": str(channel_id).upper(),
+                "phase": {
+                    "element": str(element_id),
+                    "channel": "phase_readback",
+                    "unit": "deg",
+                },
+            }
+            for channel_id, element_id in phase_elements.items()
+        ]
+
+    limits = dict(safety.get("limits") or {})
+    for key in ("hv_readback_tolerance_kv", "phase_limit_deg"):
+        if key in safety:
+            limits[key] = safety.pop(key)
+    safety["limits"] = limits
+
+    safety.setdefault("id", f"{profile.machine.id}_energy_feedback")
+    safety.setdefault("reference_capture", {"mode": "set_current_as_target"})
+    channels = safety.get("rf_channels")
+    if isinstance(channels, Sequence) and not isinstance(channels, (str, bytes)):
+        safety["rf_channels"] = [
+            {
+                key: copy.deepcopy(channel[key])
+                for key in ("id", "label", "phase")
+                if key in channel
+            }
+            for channel in channels
+            if isinstance(channel, Mapping)
+        ]
+    safety.pop("default_feedback_channel", None)
+    limits.pop("amplitude_ratio_limit_rel", None)
+    limits.pop("feedback_amplitude_range_rel", None)
+    limits.pop("hv_range_kv", None)
+    limits.setdefault("require_valid_pv", True)
+    limits.setdefault("hold_on_fault", True)
+    phase_limit = limits.get("phase_limit_deg")
+    channels = safety.get("rf_channels")
+    if isinstance(phase_limit, (int, float)) and isinstance(channels, Sequence):
+        limits["phase_limit_deg"] = {
+            str(channel.get("id")): phase_limit
+            for channel in channels
+            if isinstance(channel, Mapping) and channel.get("id") is not None
+        }
+    return safety
 
 
 def _fail(profile: MachineProfile, message: str) -> None:
@@ -301,13 +720,6 @@ def _validate_bpm_dispersion_safety(
         _text(profile, channel.get("label"), f"{name}.label")
         _signal(
             profile,
-            channel.get("amplitude"),
-            f"{name}.amplitude",
-            backends,
-            expected_unit="a.u.",
-        )
-        _signal(
-            profile,
             channel.get("phase"),
             f"{name}.phase",
             backends,
@@ -315,14 +727,6 @@ def _validate_bpm_dispersion_safety(
         )
     if len(channel_ids) != len(set(channel_ids)):
         _fail(profile, "safety.rf_channels ids must be unique")
-
-    feedback_channel = _text(
-        profile,
-        safety.get("default_feedback_channel"),
-        "safety.default_feedback_channel",
-    )
-    if feedback_channel not in channel_ids:
-        _fail(profile, "safety.default_feedback_channel is not an RF channel")
 
     reference_capture = _mapping(
         profile,
@@ -336,23 +740,6 @@ def _validate_bpm_dispersion_safety(
         )
 
     limits = _mapping(profile, safety.get("limits"), "safety.limits")
-    hv_range = _mapping(
-        profile,
-        limits.get("hv_range_kv"),
-        "safety.limits.hv_range_kv",
-    )
-    hv_low = _number(
-        profile,
-        hv_range.get("low"),
-        "safety.limits.hv_range_kv.low",
-    )
-    hv_high = _number(
-        profile,
-        hv_range.get("high"),
-        "safety.limits.hv_range_kv.high",
-    )
-    if hv_low >= hv_high:
-        _fail(profile, "safety.limits.hv_range_kv low must be less than high")
     _number(
         profile,
         limits.get("hv_readback_tolerance_kv"),
@@ -374,38 +761,12 @@ def _validate_bpm_dispersion_safety(
             f"safety.limits.phase_limit_deg.{channel_id}",
             positive=True,
         )
-    _number(
-        profile,
-        limits.get("amplitude_ratio_limit_rel"),
-        "safety.limits.amplitude_ratio_limit_rel",
-        positive=True,
-    )
-
-    amplitude_range = _mapping(
-        profile,
-        limits.get("feedback_amplitude_range_rel"),
-        "safety.limits.feedback_amplitude_range_rel",
-    )
-    amplitude_low = _number(
-        profile,
-        amplitude_range.get("low"),
-        "safety.limits.feedback_amplitude_range_rel.low",
-        positive=True,
-    )
-    amplitude_high = _number(
-        profile,
-        amplitude_range.get("high"),
-        "safety.limits.feedback_amplitude_range_rel.high",
-        positive=True,
-    )
-    if not amplitude_low <= 1.0 <= amplitude_high or amplitude_low >= amplitude_high:
-        _fail(
-            profile,
-            "safety.limits.feedback_amplitude_range_rel must contain 1.0",
-        )
     for key in ("require_valid_pv", "hold_on_fault"):
-        if not isinstance(limits.get(key, True), bool):
-            _fail(profile, f"safety.limits.{key} must be boolean")
+        if limits.get(key, True) is not True:
+            _fail(
+                profile,
+                f"safety.limits.{key} is a fixed fail-closed policy and must be true",
+            )
 
     return hv_setpoint, hv_readback
 
@@ -422,13 +783,6 @@ def _validate_bpm_dispersion_workflow(
     capabilities = list(_sequence(profile, measurement.get("capabilities"), "measurement.capabilities"))
     if capabilities != ["energy_proxy"]:
         _fail(profile, "bpm_dispersion capabilities must be exactly ['energy_proxy']")
-
-    bpm_timestamp_policy = measurement.get("bpm_timestamp_policy", "source")
-    if bpm_timestamp_policy not in {"source", "monitor_receive"}:
-        _fail(
-            profile,
-            "measurement.bpm_timestamp_policy must be 'source' or 'monitor_receive'",
-        )
 
     observable = _mapping(profile, measurement.get("observable"), "measurement.observable")
     _text(profile, observable.get("label"), "measurement.observable.label")
@@ -457,20 +811,14 @@ def _validate_bpm_dispersion_workflow(
         _fail(profile, "FIR geometry requires two upstream and one dispersive BPM")
     if any(item not in bpm_ids for item in (*upstream, dispersive)):
         _fail(profile, "FIR geometry BPMs must be present in bpm_elements")
-    _text(profile, geometry.get("note"), "measurement.geometry.note")
+    if "note" in geometry:
+        _text(profile, geometry.get("note"), "measurement.geometry.note")
 
     fct_id, _ = _signal(
         profile, measurement.get("fct"), "measurement.fct", backends, expected_unit="a.u."
     )
     if profile.get_element(fct_id).kind != "ct":
         _fail(profile, "measurement.fct must reference a current-transformer element")
-
-    timestamp_skew_limit = _number(
-        profile,
-        measurement.get("max_timestamp_skew_s"),
-        "measurement.max_timestamp_skew_s",
-        positive=True,
-    )
 
     calibration = _mapping(profile, measurement.get("calibration"), "measurement.calibration")
     ready = calibration.get("ready")
@@ -529,10 +877,6 @@ def _validate_bpm_dispersion_workflow(
         _fail(profile, "safety HV setpoint must match the control actuator setpoint")
     if safety_hv_readback != (element_id, readback):
         _fail(profile, "safety HV readback must match the control actuator readback")
-    operating_range = _range(profile, actuator.get("operating_range"), "control actuator operating_range")
-    machine_limit = _element_limit(profile, element_id, setpoint)
-    if machine_limit is None or operating_range[0] < machine_limit[0] or operating_range[1] > machine_limit[1]:
-        _fail(profile, "control actuator operating_range exceeds its machine limit")
     _number(profile, actuator.get("coefficient"), "control actuator coefficient")
     max_step = _number(profile, actuator.get("max_step"), "control actuator max_step", positive=True)
     session_limit = _number(profile, actuator.get("max_session_delta"), "control actuator max_session_delta", positive=True)
@@ -585,10 +929,6 @@ def _validate_bpm_dispersion_workflow(
         _fail(profile, "runtime.sample_period_s is outside its operator range")
     if not control_limits[0] <= control_period <= control_limits[1]:
         _fail(profile, "controller.control_period_s is outside its operator range")
-    if timestamp_skew_limit >= sample_limits[0]:
-        _fail(
-            profile, "measurement.max_timestamp_skew_s must be shorter than every sample period"
-        )
     if sample_limits[1] > control_limits[0]:
         _fail(profile, "operator timing ranges permit a control period shorter than the sample period")
 
@@ -603,6 +943,8 @@ def validate_energy_feedback_workflow(
     control_backend: str | None = None,
 ) -> None:
     """Validate monitoring, shadow calculation, and explicitly enabled writes."""
+
+    workflow = _normalize_energy_feedback_workflow(profile, workflow)
 
     backends = [
         _text(profile, item, "control_backends[]")

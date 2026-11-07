@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import copy
 import math
 import sys
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PARENT = REPO_ROOT.parent
@@ -38,9 +40,11 @@ from half_linac.src.apps.energy_feedback.models import (
 from half_linac.src.apps.energy_feedback.profile_runtime import load_runtime_config
 from half_linac.src.apps.energy_feedback.writer import apply_feedback_decision
 from half_linac.src.shared.machine_profile import (
+    MachineProfileError,
     REAL_STATUS_COMMISSIONING,
     load_app_context,
     real_commissioning_status,
+    validate_energy_feedback_workflow,
     workflow_writes_allowed,
 )
 
@@ -69,15 +73,19 @@ def reading(
         value,
         True,
         timestamp,
-        monitor_received_at=monitor_received_at,
+        monitor_received_at=(
+            timestamp if monitor_received_at is None else monitor_received_at
+        ),
     )
 
 
 class FakeClient:
     def __init__(self, values: dict[str, PVReading]):
         self.values = values
+        self.fresh_reads: list[bool] = []
 
-    def read_many(self, keys):
+    def read_many(self, keys, *, fresh=False):
+        self.fresh_reads.append(bool(fresh))
         return {key: self.values[key] for key in keys}
 
 
@@ -89,8 +97,10 @@ class FakeHvClient:
         self.verify_write = verify_write
         self.timestamp = 100.0
         self.writes: list[tuple[str, float]] = []
+        self.fresh_reads: list[bool] = []
 
-    def read_many(self, keys):
+    def read_many(self, keys, *, fresh=False):
+        self.fresh_reads.append(bool(fresh))
         return {key: reading(key, self.value, self.timestamp) for key in keys}
 
     def write(self, key, value, *, wait=True, timeout_s=1.0):
@@ -98,7 +108,6 @@ class FakeHvClient:
         self.writes.append((key, value))
         if value == 39.0 or self.verify_write:
             self.value = value
-            self.timestamp += 1.0
         return True
 
 
@@ -116,14 +125,11 @@ def provider_source() -> dict[str, object]:
         "calibration": dict(CALIBRATION),
         "resolved_signals": {},
         "stale_timeout_s": 3.0,
-        "max_timestamp_skew_s": 0.2,
         "signal_keys": signal_keys,
         "bpm_signal_keys": signal_keys[:-1],
         "measurement_keys": signal_keys[:-1],
         "fct_key": "fct",
         "q_keys": ("bpm.BPM02.x", "bpm.BPM03.x", "bpm.BPM04.x"),
-        "source_timestamp_policy": "enforce",
-        "source_timestamp_exempt_keys": (),
     }
 
 
@@ -144,6 +150,7 @@ def measurement(
         diagnostic_errors={},
         quality=MeasurementQuality("OK", "valid", True),
         observable=FeedbackObservable("q", "mm", q, raw_value=q),
+        sample_token=(timestamp,),
     )
 
 
@@ -161,7 +168,7 @@ class BpmDispersionProviderTests(unittest.TestCase):
         self.assertIsNone(result.energy_mev)
         self.assertEqual(result.observable_unit, "mm")
 
-    def test_timestamp_skew_holds_but_low_fct_remains_monitorable(self):
+    def test_source_timestamp_skew_is_diagnostic_only(self):
         values = {
             "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0, 100.0),
             "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0, 100.0),
@@ -170,8 +177,10 @@ class BpmDispersionProviderTests(unittest.TestCase):
         }
         provider = BpmDispersionProvider(FakeClient(values), provider_source())
         skewed = provider.sample(100.0)
-        self.assertFalse(skewed.quality.valid)
-        self.assertIn("timestamp skew", skewed.quality.reason)
+        self.assertTrue(skewed.quality.valid, skewed.quality.reason)
+        self.assertEqual(
+            skewed.diagnostic_source_timestamps["bpm.BPM04.x"], 100.3
+        )
 
         values["bpm.BPM04.x"] = reading("bpm.BPM04.x", 8.0, 100.0)
         values["fct"] = reading("fct", 0.2, 100.0)
@@ -203,9 +212,6 @@ class BpmDispersionProviderTests(unittest.TestCase):
     def test_closed_loop_inputs_fail_closed_when_fct_is_disconnected(self):
         source = {
             "closed_loop_keys": ("fct",),
-            "source_timestamp_exempt_keys": (),
-            "source_timestamp_policy": "ignore",
-            "stale_timeout_s": 3.0,
         }
         values = {
             "fct": PVReading(
@@ -218,13 +224,13 @@ class BpmDispersionProviderTests(unittest.TestCase):
             )
         }
 
-        resolved, issue = read_closed_loop_inputs(
-            FakeClient(values), source, 100.0
-        )
+        client = FakeClient(values)
+        resolved, issue = read_closed_loop_inputs(client, source, 100.0)
 
         self.assertEqual(resolved, {})
         self.assertIn("fct", issue)
         self.assertIn("disconnected", issue)
+        self.assertEqual(client.fresh_reads, [True])
 
     def test_closed_loop_inputs_fail_closed_when_client_raises(self):
         source = {"closed_loop_keys": ("fct",)}
@@ -235,9 +241,8 @@ class BpmDispersionProviderTests(unittest.TestCase):
         self.assertIn("closed-loop input read failure", issue)
         self.assertIn("fct", issue)
 
-    def test_monitor_receive_policy_accepts_legacy_bpm_source_timestamps(self):
+    def test_monitor_events_accept_legacy_bpm_source_timestamps(self):
         source = provider_source()
-        source["bpm_timestamp_policy"] = "monitor_receive"
         values = {
             key: reading(
                 key,
@@ -256,14 +261,14 @@ class BpmDispersionProviderTests(unittest.TestCase):
         result = BpmDispersionProvider(FakeClient(values), source).sample(100.0)
 
         self.assertTrue(result.quality.valid, result.quality.reason)
-        self.assertIn("monitor receive time", result.quality.reason)
+        self.assertIn("diagnostic only", result.quality.reason)
+        self.assertEqual(result.sample_token, (100.0, 100.0, 100.0))
         self.assertEqual(
             result.diagnostic_source_timestamps["bpm.BPM02.x"], 1.0
         )
 
-    def test_monitor_receive_policy_holds_when_bpm_events_stop(self):
+    def test_repeated_monitor_event_does_not_advance_fir_window(self):
         source = provider_source()
-        source["bpm_timestamp_policy"] = "monitor_receive"
         values = {
             key: reading(
                 key,
@@ -279,16 +284,25 @@ class BpmDispersionProviderTests(unittest.TestCase):
         }
         values["fct"] = reading("fct", 10.0, 100.0)
 
-        result = BpmDispersionProvider(FakeClient(values), source).sample(100.0)
+        provider = BpmDispersionProvider(FakeClient(values), source)
+        result = provider.sample(100.0)
+        coordinator = FirFeedbackCoordinator(
+            source, window_samples=2, kp=0.0, ki=0.1, period_s=2.0
+        )
 
-        self.assertFalse(result.quality.valid)
-        self.assertIn("BPM monitor event", result.quality.reason)
-        self.assertIn("stale", result.quality.reason)
+        self.assertTrue(result.quality.valid, result.quality.reason)
+        self.assertIsNone(coordinator.accept(result))
+        self.assertEqual(coordinator.window.pending, 1)
+        self.assertIsNone(coordinator.accept(result))
+        self.assertEqual(coordinator.window.pending, 1)
+
+        for key in source["bpm_signal_keys"]:
+            values[key] = replace(values[key], monitor_received_at=91.0)
+        self.assertIsNotNone(coordinator.accept(provider.sample(100.2)))
 
     def test_static_hv_setpoint_timestamp_is_not_a_measurement_hold(self):
         source = provider_source()
         source["signal_keys"] = (*source["signal_keys"], "guard.hv_setpoint")
-        source["source_timestamp_exempt_keys"] = ("guard.hv_setpoint",)
         values = {
             "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0),
             "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0),
@@ -301,9 +315,8 @@ class BpmDispersionProviderTests(unittest.TestCase):
 
         self.assertTrue(result.quality.valid, result.quality.reason)
 
-    def test_ignore_policy_accepts_legacy_timestamps_for_all_signals(self):
+    def test_source_timestamps_do_not_gate_any_irfel_signal(self):
         source = provider_source()
-        source["source_timestamp_policy"] = "ignore"
         values = {
             "bpm.BPM02.x": reading("bpm.BPM02.x", 2.0, 1.0),
             "bpm.BPM03.x": reading("bpm.BPM03.x", 4.0, 2.0),
@@ -314,7 +327,7 @@ class BpmDispersionProviderTests(unittest.TestCase):
         result = BpmDispersionProvider(FakeClient(values), source).sample(100.0)
 
         self.assertTrue(result.quality.valid, result.quality.reason)
-        self.assertIn("timestamp checks disabled", result.quality.reason)
+        self.assertIn("diagnostic only", result.quality.reason)
 
 
 class WindowAndControllerTests(unittest.TestCase):
@@ -405,33 +418,149 @@ class WindowAndControllerTests(unittest.TestCase):
 
 
 class IrfelProfileTests(unittest.TestCase):
+    def test_compact_profile_expands_self_contained_safety_values(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        raw = context.profile.workflows["energy_feedback"]
+        self.assertEqual(raw["actuator"], {"element": "MODULATOR_HV1"})
+        self.assertEqual(
+            set(raw["feedback"]),
+            {
+                "sample_period_s",
+                "control_period_s",
+                "ki",
+                "action_range_mm",
+                "max_step_kv",
+                "max_session_delta_kv",
+            },
+        )
+        for implementation_key in (
+            "control_groups",
+            "controller",
+            "operator_controls",
+            "runtime",
+            "logging",
+        ):
+            self.assertNotIn(implementation_key, raw)
+        self.assertNotIn("source", raw["safety"])
+        self.assertNotIn("hv", raw["safety"])
+        self.assertNotIn("rf_channels", raw["safety"])
+        self.assertEqual(
+            raw["safety"]["beam_present"],
+            {"element": "FCT1", "minimum": 1000},
+        )
+        self.assertEqual(
+            raw["safety"]["rf_phase_elements"],
+            {"acc1": "KLY1_CH3_PHASE", "buncher": "KLY1_CH4_PHASE"},
+        )
+        self.assertEqual(raw["safety"]["phase_limit_deg"], 3)
+        self.assertAlmostEqual(
+            raw["safety"]["setpoint_readback_tolerance_kv"], 0.02
+        )
+        self.assertEqual(
+            raw["measurement"]["calibration"]["orbit_subtraction"],
+            {"a": 0.0, "b": 0.0},
+        )
+        self.assertNotIn("fct", raw["measurement"])
+        self.assertNotIn("observable", raw["measurement"])
+        self.assertNotIn("poll_interval_s", raw["write_verification"])
+        self.assertNotIn("bpm_timestamp_policy", raw["measurement"])
+        self.assertNotIn("source_timestamp_policy", raw["measurement"])
+        self.assertNotIn("max_timestamp_skew_s", raw["measurement"])
+
+        config = load_runtime_config(context)
+        workflow = config["workflow"]
+        safety = workflow["safety"]
+        limits = safety["limits"]
+        group = workflow["control_groups"][0]
+        actuator = group["actuators"][0]
+
+        self.assertEqual(safety["id"], "irfel_energy_feedback")
+        self.assertEqual(
+            [channel["id"] for channel in safety["rf_channels"]],
+            ["acc1", "buncher"],
+        )
+        self.assertTrue(
+            all("amplitude" not in channel for channel in safety["rf_channels"])
+        )
+        self.assertNotIn("default_feedback_channel", safety)
+        self.assertNotIn("hv_range_kv", limits)
+        self.assertAlmostEqual(
+            limits["hv_readback_tolerance_kv"],
+            raw["safety"]["setpoint_readback_tolerance_kv"],
+        )
+        self.assertEqual(
+            limits["phase_limit_deg"], {"acc1": 3, "buncher": 3}
+        )
+        self.assertNotIn("amplitude_ratio_limit_rel", limits)
+        self.assertNotIn("feedback_amplitude_range_rel", limits)
+        self.assertTrue(limits["require_valid_pv"])
+        self.assertTrue(limits["hold_on_fault"])
+        self.assertAlmostEqual(group["loop_gain"], raw["feedback"]["ki"])
+        self.assertAlmostEqual(group["max_knob_step"], actuator["max_step"])
+        self.assertAlmostEqual(
+            actuator["max_step"], raw["feedback"]["max_step_kv"]
+        )
+        self.assertAlmostEqual(
+            actuator["max_session_delta"],
+            raw["feedback"]["max_session_delta_kv"],
+        )
+        self.assertEqual(actuator["element"], "MODULATOR_HV1")
+        self.assertEqual(actuator["setpoint"], "voltage_set")
+        self.assertEqual(actuator["readback"], "voltage_readback")
+        self.assertEqual(actuator["unit"], "kV")
+        self.assertAlmostEqual(actuator["coefficient"], 1.0)
+        self.assertAlmostEqual(
+            actuator["verify_tolerance"],
+            raw["write_verification"]["readback_tolerance_kv"],
+        )
+        self.assertEqual(actuator["command_basis"], "setpoint")
+        self.assertNotIn("operating_range", actuator)
+        self.assertAlmostEqual(config["write_verification"]["poll_interval_s"], 0.05)
+        self.assertEqual(config["write_verification"]["command_precision"], 3)
+        self.assertAlmostEqual(config["runtime"]["stale_timeout_s"], 3.0)
+        self.assertTrue(config["operator_controls"]["actuator_ratio"]["hidden"])
+
+    def test_fail_closed_policies_cannot_be_disabled_in_the_profile(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        for key in ("require_valid_pv", "hold_on_fault"):
+            with self.subTest(key=key):
+                workflow = copy.deepcopy(load_runtime_config(context)["workflow"])
+                workflow["safety"]["limits"][key] = False
+                with self.assertRaisesRegex(
+                    MachineProfileError, rf"{key}.*must be true"
+                ):
+                    validate_energy_feedback_workflow(
+                        context.profile, workflow, control_backend="real"
+                    )
+
     def test_commissioning_calibration_allows_feedback(self):
         context = load_app_context(
             "energy_feedback", machine_id="irfel", control_backend="real"
         )
+        raw = context.profile.workflows["energy_feedback"]
         config = load_runtime_config(context)
         self.assertEqual(config["measurement_kind"], "bpm_dispersion")
         timing = derive_control_timing(
             config["runtime"]["sample_period_s"],
             config["controller"]["control_period_s"],
         )
-        self.assertAlmostEqual(config["runtime"]["sample_period_s"], 0.2)
-        self.assertEqual(timing.window_samples, 50)
-        self.assertAlmostEqual(timing.effective_control_period_s, 10.0)
+        self.assertAlmostEqual(
+            config["runtime"]["sample_period_s"],
+            raw["feedback"]["sample_period_s"],
+        )
+        self.assertAlmostEqual(
+            timing.effective_control_period_s,
+            raw["feedback"]["control_period_s"],
+        )
         self.assertEqual(config["controller"]["window_aggregation"], "median")
-        self.assertEqual(
-            config["measurement_sources"][config["measurement_source_id"]][
-                "bpm_timestamp_policy"
-            ],
-            "monitor_receive",
-        )
-        self.assertEqual(
-            config["measurement_sources"][config["measurement_source_id"]][
-                "source_timestamp_policy"
-            ],
-            "ignore",
-        )
         source = config["measurement_sources"][config["measurement_source_id"]]
+        self.assertNotIn("bpm_timestamp_policy", source)
+        self.assertNotIn("source_timestamp_policy", source)
+        self.assertNotIn("max_timestamp_skew_s", source)
         calibration = source["calibration"]
         self.assertEqual(observable_calibration_issue(calibration), "")
         self.assertEqual(shadow_calibration_issue(calibration), "")
@@ -458,10 +587,9 @@ class IrfelProfileTests(unittest.TestCase):
             )
         )
         self.assertEqual(config["pvs"]["fct"], "IRFEL:BD:CT:CH1:WAV:ASUM")
-        self.assertEqual(
-            source["source_timestamp_exempt_keys"],
-            (source["guard_keys"]["hv_setpoint"],),
-        )
+        actuator = config["control_groups"][0].actuators[0]
+        self.assertIsNone(actuator.operating_range)
+        self.assertEqual(actuator.machine_limit, (0.0, 45.0))
         self.assertTrue(config["write_enabled"])
         self.assertTrue(config["feedback_ready"])
         self.assertEqual(config["feedback_block_reason"], "")
@@ -477,12 +605,13 @@ class IrfelProfileTests(unittest.TestCase):
         )
         config = load_runtime_config(context)
         source = config["measurement_sources"][config["measurement_source_id"]]
+        self.assertFalse(
+            any("amplitude" in key for key in source["closed_loop_keys"])
+        )
         aggregate = {
             "hv_setpoint": 39.0,
             "hv_readback": 39.0,
-            "rf.acc1.amplitude": 25000.0,
             "rf.acc1.phase": -158.2,
-            "rf.buncher.amplitude": 34000.0,
             "rf.buncher.phase": -21.0,
         }
         checker = build_rf_hv_safety_checker(source, aggregate)
@@ -493,13 +622,36 @@ class IrfelProfileTests(unittest.TestCase):
             source["rf_safety"]["reference_capture"]["mode"],
             "set_current_as_target",
         )
-        self.assertEqual(checker.cfg.hv_min_kv, 38.5)
-        self.assertEqual(checker.cfg.hv_max_kv, 39.5)
+        self.assertIsNone(checker.cfg.hv_min_kv)
+        self.assertIsNone(checker.cfg.hv_max_kv)
         self.assertEqual(checker.ref.hv_kv, 39.0)
         self.assertEqual(checker.ref.channel_phases["acc1"], -158.2)
-        self.assertEqual(checker.ref.channel_amplitudes["acc1"], 25000.0)
+        self.assertEqual(checker.ref.channel_amplitudes, {})
         result = checker.check_aggregate(aggregate)
         self.assertTrue(result.ok, result.reason)
+        outside_old_app_range = dict(
+            aggregate, hv_setpoint=40.0, hv_readback=40.0
+        )
+        result = checker.check_aggregate(outside_old_app_range, hv_next=40.02)
+        self.assertTrue(result.ok, result.reason)
+
+    def test_missing_machine_hv_limit_means_no_software_absolute_limit(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        element_type = type(context.profile.get_element("MODULATOR_HV1"))
+        original_limits_for = element_type.limits_for
+
+        def limits_without_hv_setpoint(element, channel):
+            if element.id == "MODULATOR_HV1" and channel == "voltage_set":
+                return {}
+            return original_limits_for(element, channel)
+
+        with patch.object(element_type, "limits_for", limits_without_hv_setpoint):
+            actuator = load_runtime_config(context)["control_groups"][0].actuators[0]
+
+        self.assertIsNone(actuator.operating_range)
+        self.assertIsNone(actuator.machine_limit)
 
     def test_field_safety_reference_rejects_incomplete_snapshot(self):
         context = load_app_context(
@@ -586,6 +738,8 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertEqual(applied.state, "APPLIED")
         self.assertTrue(applied.write_verified)
         self.assertAlmostEqual(verified_client.value, 39.02)
+        self.assertEqual(verified_client.timestamp, 100.0)
+        self.assertTrue(all(verified_client.fresh_reads))
 
         failed_client = FakeHvClient(
             actuator.setpoint_key, actuator.readback_key, verify_write=False

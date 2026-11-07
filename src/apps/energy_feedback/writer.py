@@ -1,4 +1,4 @@
-"""Verified actuator writes with all-command rollback on partial failure."""
+"""Actuator transactions verified by active physical readbacks."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from .models import (
     PVReading,
     ShadowActuator,
     ShadowControlGroup,
+    effective_actuator_limit,
 )
 
 
@@ -49,10 +50,17 @@ def apply_feedback_decision(
         actuator = actuators[command.actuator_id]
         proposed = round(float(command.proposed), actuator.command_precision)
         if actuator.cyclic_period is not None:
-            low = max(actuator.operating_range[0], actuator.machine_limit[0])
+            if actuator.operating_range is None:
+                return replace(
+                    decision,
+                    state="HOLD",
+                    reason=f"actuator {actuator.id} cyclic range is not configured",
+                    commands=(),
+                    write_detail="no write attempted",
+                )
             proposed = normalize_cyclic(
                 proposed,
-                lower=low,
+                lower=actuator.operating_range[0],
                 period=actuator.cyclic_period,
             )
             delta = cyclic_delta(
@@ -144,18 +152,29 @@ def apply_manual_targets(
             return FeedbackDecision(
                 "HOLD", f"manual target for {actuator_id} is not finite", None
             )
-        low = max(actuator.operating_range[0], actuator.machine_limit[0])
-        high = min(actuator.operating_range[1], actuator.machine_limit[1])
+        try:
+            absolute_limit = effective_actuator_limit(actuator)
+        except ValueError as exc:
+            return FeedbackDecision("HOLD", str(exc), None)
         if actuator.cyclic_period is not None:
+            if actuator.operating_range is None:
+                return FeedbackDecision(
+                    "HOLD",
+                    f"actuator {actuator_id} cyclic range is not configured",
+                    None,
+                )
             target = normalize_cyclic(
                 target,
-                lower=low,
+                lower=actuator.operating_range[0],
                 period=actuator.cyclic_period,
             )
-        if not low <= target <= high:
+        if absolute_limit is not None and not (
+            absolute_limit[0] <= target <= absolute_limit[1]
+        ):
             return FeedbackDecision(
                 "HOLD",
-                f"manual target for {actuator_id} is outside [{low:g}, {high:g}]",
+                f"manual target for {actuator_id} is outside "
+                f"[{absolute_limit[0]:g}, {absolute_limit[1]:g}]",
                 None,
             )
         current = float(reading.value)
@@ -213,7 +232,10 @@ def _write_commands(
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> tuple[bool, str, bool]:
+    """Write a transaction and confirm values with active Channel Access gets."""
+
     details: list[str] = []
+    attempted: list[ActuatorCommand] = []
     for command in commands:
         actuator = actuators[command.actuator_id]
         if command.delta == 0.0:
@@ -224,14 +246,14 @@ def _write_commands(
             return _failed_with_rollback(
                 client,
                 actuators,
-                commands,
+                tuple(attempted),
                 details,
                 timeout_s=timeout_s,
                 poll_interval_s=poll_interval_s,
                 sleep=sleep,
                 monotonic=monotonic,
             )
-        baseline = client.read_many((actuator.readback_key,))[actuator.readback_key]
+        attempted.append(command)
         try:
             put_ok = client.write(
                 actuator.setpoint_key,
@@ -239,55 +261,49 @@ def _write_commands(
                 wait=True,
                 timeout_s=timeout_s,
             )
-        except Exception as exc:  # noqa: BLE001 - converted to failed/rollback result
+        except Exception as exc:  # noqa: BLE001 - converted to HOLD
             put_ok = False
             details.append(f"{actuator.id} write raised: {exc}")
         if not put_ok:
-            if not details or not details[-1].startswith(f"{actuator.id} write raised"):
+            if not details or not details[-1].startswith(
+                f"{actuator.id} write raised"
+            ):
                 details.append(f"{actuator.id} write failed")
             return _failed_with_rollback(
                 client,
                 actuators,
-                commands,
+                tuple(attempted),
                 details,
                 timeout_s=timeout_s,
                 poll_interval_s=poll_interval_s,
                 sleep=sleep,
                 monotonic=monotonic,
             )
-        verified, readback, fresh_seen = _wait_for_readback(
+        verified, readback = _wait_for_readback(
             client,
             actuator,
             command.proposed,
-            baseline=baseline,
             timeout_s=timeout_s,
             poll_interval_s=poll_interval_s,
             sleep=sleep,
             monotonic=monotonic,
         )
         if not verified:
-            if fresh_seen:
-                details.append(
-                    f"{actuator.id} verify mismatch cmd={command.proposed:.3f}, "
-                    f"rb={_format_readback(readback)}"
-                )
-            else:
-                details.append(
-                    f"{actuator.id} verify timeout waiting for fresh readback "
-                    f"after cmd={command.proposed:.3f}, "
-                    f"last rb={_format_readback(readback)}"
-                )
+            details.append(
+                f"{actuator.id} active-readback verify timeout "
+                f"cmd={command.proposed:.3f}, rb={_format_readback(readback)}"
+            )
             return _failed_with_rollback(
                 client,
                 actuators,
-                commands,
+                tuple(attempted),
                 details,
                 timeout_s=timeout_s,
                 poll_interval_s=poll_interval_s,
                 sleep=sleep,
                 monotonic=monotonic,
             )
-        details.append(f"{actuator.id} verified at {readback:.3f}")
+        details.append(f"{actuator.id} active readback verified at {readback:.3f}")
     return True, "; ".join(details), False
 
 
@@ -298,9 +314,12 @@ def _failed_with_rollback(
     details: list[str],
     **verification,
 ) -> tuple[bool, str, bool]:
+    if not commands:
+        details.append("no rollback needed")
+        return False, "; ".join(details), False
     rollback_ok = _rollback(client, actuators, commands, **verification)
     details.append(
-        "rollback restored previous readbacks" if rollback_ok else "rollback failed"
+        "rollback verified by active readback" if rollback_ok else "rollback failed"
     )
     return False, "; ".join(details), rollback_ok
 
@@ -316,11 +335,8 @@ def _rollback(
     monotonic: Callable[[], float],
 ) -> bool:
     ok = True
-    for command in commands:
+    for command in reversed(commands):
         actuator = actuators[command.actuator_id]
-        if command.delta == 0.0:
-            continue
-        baseline = client.read_many((actuator.readback_key,))[actuator.readback_key]
         try:
             put_ok = client.write(
                 actuator.setpoint_key,
@@ -328,15 +344,14 @@ def _rollback(
                 wait=True,
                 timeout_s=timeout_s,
             )
-        except Exception:  # noqa: BLE001 - rollback result carries the failure
+        except Exception:  # noqa: BLE001 - rollback result carries failure
             put_ok = False
         verified = False
         if put_ok:
-            verified, _, _ = _wait_for_readback(
+            verified, _ = _wait_for_readback(
                 client,
                 actuator,
                 command.current,
-                baseline=baseline,
                 timeout_s=timeout_s,
                 poll_interval_s=poll_interval_s,
                 sleep=sleep,
@@ -351,48 +366,35 @@ def _wait_for_readback(
     actuator: ShadowActuator,
     target: float,
     *,
-    baseline: PVReading,
     timeout_s: float,
     poll_interval_s: float,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
-) -> tuple[bool, float | None, bool]:
+) -> tuple[bool, float | None]:
+    """Poll direct CA gets until the physical readback reaches the target."""
+
     deadline = monotonic() + timeout_s
     last_value = None
-    fresh_seen = False
     while True:
-        reading = client.read_many((actuator.readback_key,))[actuator.readback_key]
-        if reading.connected and reading.value is not None and math.isfinite(reading.value):
+        reading = client.read_many((actuator.readback_key,), fresh=True)[
+            actuator.readback_key
+        ]
+        if (
+            reading.connected
+            and reading.value is not None
+            and math.isfinite(reading.value)
+        ):
             last_value = float(reading.value)
-            reading_is_fresh = _is_fresh_readback(reading, baseline)
-            fresh_seen = fresh_seen or reading_is_fresh
             error = (
-                cyclic_delta(
-                    last_value,
-                    target,
-                    period=actuator.cyclic_period,
-                )
+                cyclic_delta(last_value, target, period=actuator.cyclic_period)
                 if actuator.cyclic_period is not None
                 else last_value - target
             )
-            if reading_is_fresh and abs(error) <= actuator.verify_tolerance:
-                return True, last_value, True
+            if abs(error) <= actuator.verify_tolerance:
+                return True, last_value
         if monotonic() >= deadline:
-            return False, last_value, fresh_seen
+            return False, last_value
         sleep(min(poll_interval_s, max(0.0, deadline - monotonic())))
-
-
-def _is_fresh_readback(reading: PVReading, baseline: PVReading) -> bool:
-    return _timestamp_advanced(
-        reading.monitor_received_at,
-        baseline.monitor_received_at,
-    ) or _timestamp_advanced(reading.source_timestamp, baseline.source_timestamp)
-
-
-def _timestamp_advanced(current: float | None, previous: float | None) -> bool:
-    if current is None:
-        return False
-    return previous is None or current > previous
 
 
 def _format_readback(value: float | None) -> str:

@@ -103,11 +103,10 @@ def load_runtime_config(
             guard_keys[guard_name] = key
         for channel in safety_profile["rf_channels"]:
             channel_id = str(channel["id"])
-            for field in ("amplitude", "phase"):
-                guard_name = f"rf.{channel_id}.{field}"
-                key = f"guard.{guard_name}"
-                add_signal(key, channel[field])
-                guard_keys[guard_name] = key
+            guard_name = f"rf.{channel_id}.phase"
+            key = f"guard.{guard_name}"
+            add_signal(key, channel["phase"])
+            guard_keys[guard_name] = key
 
         closed_loop_keys = (fct_key, *guard_keys.values())
         q_keys = (
@@ -127,13 +126,6 @@ def load_runtime_config(
             "geometry": copy.deepcopy(dict(measurement["geometry"])),
             "calibration": copy.deepcopy(dict(measurement["calibration"])),
             "stale_timeout_s": float(workflow["runtime"]["stale_timeout_s"]),
-            "max_timestamp_skew_s": float(measurement["max_timestamp_skew_s"]),
-            "bpm_timestamp_policy": str(
-                measurement.get("bpm_timestamp_policy", "source")
-            ),
-            "source_timestamp_policy": str(
-                measurement.get("source_timestamp_policy", "enforce")
-            ),
             "bpm_keys": bpm_keys,
             "bpm_signal_keys": tuple(bpm_signal_keys),
             "measurement_keys": q_keys,
@@ -141,41 +133,18 @@ def load_runtime_config(
             "fct_key": fct_key,
             "guard_keys": guard_keys,
             "closed_loop_keys": closed_loop_keys,
-            "source_timestamp_exempt_keys": (guard_keys["hv_setpoint"],),
             "rf_safety": {
                 "profile_id": safety_id,
-                "default_feedback_channel": str(
-                    safety_profile["default_feedback_channel"]
-                ),
                 "rf_channels": copy.deepcopy(list(safety_profile["rf_channels"])),
                 "reference_capture": copy.deepcopy(
                     dict(safety_profile["reference_capture"])
                 ),
                 "safety": {
-                    "hv_min_kv": float(
-                        safety_profile["limits"]["hv_range_kv"]["low"]
-                    ),
-                    "hv_max_kv": float(
-                        safety_profile["limits"]["hv_range_kv"]["high"]
-                    ),
                     "hv_readback_tolerance_kv": float(
                         safety_profile["limits"]["hv_readback_tolerance_kv"]
                     ),
                     "phase_limit_deg": copy.deepcopy(
                         dict(safety_profile["limits"]["phase_limit_deg"])
-                    ),
-                    "amplitude_ratio_limit_rel": float(
-                        safety_profile["limits"]["amplitude_ratio_limit_rel"]
-                    ),
-                    "feedback_amplitude_min_rel": float(
-                        safety_profile["limits"]["feedback_amplitude_range_rel"][
-                            "low"
-                        ]
-                    ),
-                    "feedback_amplitude_max_rel": float(
-                        safety_profile["limits"]["feedback_amplitude_range_rel"][
-                            "high"
-                        ]
                     ),
                     "require_valid_pv": bool(
                         safety_profile["limits"].get("require_valid_pv", True)
@@ -335,6 +304,13 @@ def load_runtime_config(
             machine_limits = context.profile.get_element(element_id).limits_for(
                 setpoint_channel
             )
+            raw_operating_range = raw_actuator.get("operating_range")
+            machine_limit = (
+                (float(machine_limits["low"]), float(machine_limits["high"]))
+                if machine_limits.get("low") is not None
+                and machine_limits.get("high") is not None
+                else None
+            )
             actuators.append(
                 ShadowActuator(
                     id=actuator_id,
@@ -343,13 +319,12 @@ def load_runtime_config(
                     unit=str(raw_actuator["unit"]),
                     max_step=float(raw_actuator["max_step"]),
                     max_session_delta=float(raw_actuator["max_session_delta"]),
-                    operating_range=tuple(
-                        float(value) for value in raw_actuator["operating_range"]
+                    operating_range=(
+                        tuple(float(value) for value in raw_operating_range)
+                        if raw_operating_range is not None
+                        else None
                     ),
-                    machine_limit=(
-                        float(machine_limits["low"]),
-                        float(machine_limits["high"]),
-                    ),
+                    machine_limit=machine_limit,
                     setpoint_key=setpoint_key,
                     readback_key=readback_key,
                     verify_tolerance=float(raw_actuator["verify_tolerance"]),

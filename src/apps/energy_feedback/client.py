@@ -1,7 +1,8 @@
 """Configured EPICS access for energy feedback.
 
-Writes are limited to keys resolved from the machine profile. Channel Access
-source timestamps and local monitor-event receipt times are kept separately.
+Normal sampling may use the monitor cache. Safety and write-confirmation paths can
+request an active Channel Access get without depending on monitor-event timing.
+Writes remain limited to keys resolved from the machine profile.
 """
 
 from __future__ import annotations
@@ -15,8 +16,10 @@ from .models import PVReading
 
 
 class PVClient(Protocol):
-    def read_many(self, keys: Iterable[str]) -> dict[str, PVReading]:
-        """Read configured signals without changing machine state."""
+    def read_many(
+        self, keys: Iterable[str], *, fresh: bool = False
+    ) -> dict[str, PVReading]:
+        """Read configured signals; fresh=True bypasses the monitor cache."""
 
 
 class WritablePVClient(PVClient, Protocol):
@@ -73,7 +76,9 @@ class EpicsPVClient:
         with self._monitor_lock:
             return self._monitor_received_at.get(key)
 
-    def read_many(self, keys: Iterable[str]) -> dict[str, PVReading]:
+    def read_many(
+        self, keys: Iterable[str], *, fresh: bool = False
+    ) -> dict[str, PVReading]:
         readings: dict[str, PVReading] = {}
         for key in keys:
             pv = self._pvs[key]
@@ -94,7 +99,9 @@ class EpicsPVClient:
                         self._monitor_time(key),
                     )
                     continue
-                value = pv.get(timeout=self.connection_timeout_s, use_monitor=True)
+                value = pv.get(
+                    timeout=self.connection_timeout_s, use_monitor=not fresh
+                )
                 timestamp = getattr(pv, "timestamp", None)
                 if value is None:
                     readings[key] = PVReading(

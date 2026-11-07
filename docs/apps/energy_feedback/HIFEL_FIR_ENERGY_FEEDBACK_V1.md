@@ -1,5 +1,14 @@
 # HiFEL FIR 束线能量反馈第一版实施说明
 
+> 现行状态更新（2026-11-06）：Energy Feedback 已根据现场审阅删除 ACC1
+> 幅度相对范围和 Buncher/ACC1 幅度比例门禁，仅保留 RF 相位漂移门；
+> EPICS 源时间戳仅作诊断，BPM monitor 事件只用于样本去重；HV 绝对限值
+> 仅来自 `machine.json`，缺失时不设软件绝对限幅。自动控制仍保留
+> `0.02 kV` 单步和 `±0.2 kV` 会话限制，手动目标不使用这两项限制。
+> 本文后续幅度、时间戳和应用 HV 工作范围内容保留为第一版设计历史；
+> Energy Feedback 现已自包含，不再读取 `hv_feedback.json`；独立 HV
+> Feedback 的安全保护不变。
+
 ## 1. 文档目的
 
 本文档用于指导 `half_linac` 仓库中 HiFEL FIR 束线能量稳定功能的第一版实现。
@@ -216,9 +225,9 @@ delta_E = E_reference * delta
 
 为便于快速开展实机测试，监视、shadow和闭环使用不同的就绪条件：
 
-- q监视只要求BPM02.x、BPM03.x、BPM04.x可读，时间有效，并已配置有限的 `a`、`b`；
-- shadow在q监视基础上要求有限且非零的 `response_q_mm_per_kv`，以及正的 `q_action_range_mm`；
-- 自动闭环再要求标定版本、`fct_min`、FCT束流存在、RF幅相状态和高压状态全部有效。
+- q监视只要求BPM02.x、BPM03.x、BPM04.x可读，并已配置有限的 `calibration.orbit_subtraction.a/b`；
+- shadow在q监视基础上要求有限且非零的 `calibration.hv_response_mm_per_kv`，以及正的 `feedback.action_range_mm`；
+- 自动闭环再要求标定版本、`safety.beam_present.minimum`、FCT束流存在、RF相位状态和高压状态全部有效。
 
 FCT、RF和高压保护PV不参与持续BPM采样，只在自动闭环启用后按需读取。它们异常时禁止高压写入，但不阻止q监视和shadow。BPM05和四极铁不属于第一版门禁。
 

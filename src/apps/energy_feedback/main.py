@@ -65,7 +65,11 @@ from half_linac.src.apps.energy_feedback.engine import (
     evaluate_shadow,
     unavailable_decision,
 )
-from half_linac.src.apps.energy_feedback.models import FeedbackDecision, PVReading
+from half_linac.src.apps.energy_feedback.models import (
+    FeedbackDecision,
+    PVReading,
+    effective_actuator_limit,
+)
 from half_linac.src.apps.energy_feedback.profile_runtime import (
     WORKFLOW_NAME,
     activate_measurement_source,
@@ -323,9 +327,7 @@ class AcquisitionThread(QThread):
 
         sample_period = float(self.config["runtime"]["sample_period_s"])
         stale_timeout = float(self.config["runtime"]["stale_timeout_s"])
-        check_source_timestamps = (
-            str(source.get("source_timestamp_policy", "enforce")) != "ignore"
-        )
+        check_source_timestamps = self.config["measurement_kind"] != "bpm_dispersion"
         verification = self.config["write_verification"]
         groups = tuple(self.config["control_groups"])
         group_template = groups[0] if groups else None
@@ -372,7 +374,7 @@ class AcquisitionThread(QThread):
             return
 
         origins: dict[str, float] = {}
-        last_pulse_token: object | None = None
+        last_action_token: object | None = None
         feedback_active = False
         control_lock: EnergyControlLock | None = None
 
@@ -451,12 +453,6 @@ class AcquisitionThread(QThread):
                             rf_hv_checker = captured_checker
                             safety_reference_parameters = {
                                 "safety_reference.hv_kv": rf_hv_checker.ref.hv_kv,
-                                **{
-                                    f"safety_reference.rf.{channel_id}.amplitude": value
-                                    for channel_id, value in (
-                                        rf_hv_checker.ref.channel_amplitudes.items()
-                                    )
-                                },
                                 **{
                                     f"safety_reference.rf.{channel_id}.phase_deg": value
                                     for channel_id, value in (
@@ -581,7 +577,7 @@ class AcquisitionThread(QThread):
                         else:
                             feedback_active = True
                             origins.clear()
-                            last_pulse_token = None
+                            last_action_token = None
                             self.feedback_state.emit(True, "Feedback enabled")
                     elif not requested and feedback_active:
                         disarm("Feedback stopped")
@@ -729,20 +725,19 @@ class AcquisitionThread(QThread):
                         for token in (
                             "operating or machine limit",
                             "session limit",
-                            "hv out of bounds",
                         )
                     ):
                         disarm(f"Feedback stopped after hard limit: {decision.reason}")
                     elif feedback_active and decision.has_valid_suggestion:
-                        token = self._pulse_token(measurement)
+                        token = self._action_token(measurement)
                         if token is None:
                             decision = replace(
                                 decision,
                                 state="HOLD",
-                                reason="measurement pulse timestamp unavailable",
+                                reason="measurement event token unavailable",
                                 commands=(),
                             )
-                        elif token == last_pulse_token:
+                        elif token == last_action_token:
                             decision = replace(
                                 decision,
                                 state="HOLD",
@@ -750,7 +745,7 @@ class AcquisitionThread(QThread):
                                 commands=(),
                             )
                         else:
-                            last_pulse_token = token
+                            last_action_token = token
                             decision = apply_feedback_decision(
                                 client,
                                 group,
@@ -766,7 +761,7 @@ class AcquisitionThread(QThread):
                                 and not decision.write_verified
                             ):
                                 disarm(
-                                    "Feedback stopped after write/verification failure: "
+                                    "Feedback stopped after write/active-readback failure: "
                                     + decision.write_detail
                                 )
                     elif (
@@ -799,7 +794,7 @@ class AcquisitionThread(QThread):
                 control_lock.release()
 
 
-    def _pulse_token(self, measurement) -> object | None:
+    def _action_token(self, measurement) -> object | None:
         if self.config["require_marker_for_write"]:
             if (
                 measurement.marker_value is None
@@ -807,7 +802,7 @@ class AcquisitionThread(QThread):
             ):
                 return None
             return (measurement.marker_value, measurement.marker_source_timestamp)
-        return measurement.source_timestamp
+        return measurement.sample_token or measurement.source_timestamp
 
     def _process_manual_request(
         self,
@@ -1218,9 +1213,11 @@ class EnergyFeedbackWindow(QMainWindow):
             readback = QLabel("—")
             readback.setProperty("role", "runtimeValue")
             spin = GuardedDoubleSpinBox()
-            low = max(actuator.operating_range[0], actuator.machine_limit[0])
-            high = min(actuator.operating_range[1], actuator.machine_limit[1])
-            spin.setRange(low, high)
+            absolute_limit = effective_actuator_limit(actuator)
+            if absolute_limit is None:
+                spin.setRange(-sys.float_info.max, sys.float_info.max)
+            else:
+                spin.setRange(*absolute_limit)
             spin.setDecimals(actuator.command_precision)
             spin.setSingleStep(0.1)
             spin.setSuffix(f" {actuator.unit}")
@@ -1511,13 +1508,8 @@ class EnergyFeedbackWindow(QMainWindow):
     def _set_data_status(self, measurement) -> None:
         quality = measurement.quality
         if quality.valid:
-            source = self.config["measurement_sources"][
-                self.config["measurement_source_id"]
-            ]
-            if source.get("source_timestamp_policy") == "ignore":
-                value, tone = "TS OFF", "warning"
-            elif source.get("bpm_timestamp_policy") == "monitor_receive":
-                value, tone = "RX Time", "warning"
+            if self.config["measurement_kind"] == "bpm_dispersion":
+                value, tone = "Events", "success"
             else:
                 value, tone = "OK", "success"
         elif not quality.connected:
@@ -2014,7 +2006,7 @@ class EnergyFeedbackWindow(QMainWindow):
     def _on_manual_result(self, decision: FeedbackDecision) -> None:
         if decision.write_verified:
             self.event_value.setText(f"{decision.reason} · {decision.write_detail}")
-            self._set_status_item("action", "Manual write verified", "success")
+            self._set_status_item("action", "Manual write confirmed", "success")
         elif decision.state == "SHADOW":
             self.event_value.setText(f"{decision.reason} · {decision.write_detail}")
             self._set_status_item("action", "Manual target unchanged", "subtle")
@@ -2327,41 +2319,21 @@ class EnergyFeedbackWindow(QMainWindow):
             self.source_detail_value.setText(
                 f"Model ready · {details.get('model_line', '—')} · {quadrupoles}"
             )
-        elif details.get("source_timestamp_policy") == "ignore":
+        elif details.get("sample_identity") == "bpm_monitor_event":
             self.source_detail_value.setVisible(True)
             self.source_detail_value.setText(
-                "Commissioning mode · EPICS source timestamp checks disabled"
+                "BPM monitor events define samples · EPICS timestamps diagnostic only"
             )
             self.source_detail_value.setToolTip(
-                "Source timestamps are retained for diagnostics but do not gate "
-                "feedback. Connection, read errors and finite values remain enforced."
-            )
-        elif details.get("bpm_timestamp_policy") == "monitor_receive":
-            self.source_detail_value.setVisible(True)
-            self.source_detail_value.setText(
-                "Commissioning mode · BPM freshness uses monitor receive time"
-            )
-            self.source_detail_value.setToolTip(
-                "BPM EPICS source timestamps are ignored; FCT, magnet and RF/HV "
-                "timestamps remain enforced."
+                "Connection, read errors and finite values remain enforced. Repeated "
+                "cached monitor samples do not advance the FIR window."
             )
 
     def _update_source_detail(self, measurement: object) -> None:
         if self.config["measurement_kind"] == "bpm_dispersion":
-            source = self.config["measurement_sources"][
-                self.config["measurement_source_id"]
-            ]
-            timestamps_ignored = source.get("source_timestamp_policy") == "ignore"
-            compatibility_mode = timestamps_ignored or (
-                source.get("bpm_timestamp_policy") == "monitor_receive"
-            )
-            self.source_detail_value.setVisible(compatibility_mode)
+            self.source_detail_value.setVisible(True)
             self.source_detail_value.setText(
-                "Commissioning mode · EPICS source timestamp checks disabled"
-                if timestamps_ignored
-                else "Commissioning mode · BPM freshness uses monitor receive time"
-                if compatibility_mode
-                else ""
+                "BPM monitor events define samples · EPICS timestamps diagnostic only"
             )
             self.source_detail_value.setToolTip(measurement.quality.reason)
             return

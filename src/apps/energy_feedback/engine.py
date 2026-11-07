@@ -16,6 +16,7 @@ from .models import (
     FeedbackDecision,
     PVReading,
     ShadowControlGroup,
+    effective_actuator_limit,
 )
 
 
@@ -203,16 +204,26 @@ def evaluate_shadow(
     for actuator in group.actuators:
         current = values[actuator.id]
         delta = float(actuator.coefficient) * knob_delta
-        low = max(actuator.operating_range[0], actuator.machine_limit[0])
-        high = min(actuator.operating_range[1], actuator.machine_limit[1])
+        try:
+            absolute_limit = effective_actuator_limit(actuator)
+        except ValueError as exc:
+            return FeedbackDecision("HOLD", str(exc), error_mev)
         proposed = current + delta
         if actuator.cyclic_period is not None:
+            if actuator.operating_range is None:
+                return FeedbackDecision(
+                    "HOLD",
+                    f"actuator {actuator.id} cyclic range is not configured",
+                    error_mev,
+                )
             proposed = normalize_cyclic(
                 proposed,
-                lower=low,
+                lower=actuator.operating_range[0],
                 period=actuator.cyclic_period,
             )
-        if not low <= proposed <= high:
+        if absolute_limit is not None and not (
+            absolute_limit[0] <= proposed <= absolute_limit[1]
+        ):
             return FeedbackDecision(
                 "HOLD",
                 f"actuator {actuator.id} proposal exceeds operating or machine limit",

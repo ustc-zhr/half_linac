@@ -107,20 +107,8 @@ class BpmDispersionProvider:
     def __init__(self, client: PVClient, source: Mapping[str, Any]) -> None:
         self.client = client
         self.source = source
-        self.stale_timeout_s = float(source["stale_timeout_s"])
-        self.max_timestamp_skew_s = float(source["max_timestamp_skew_s"])
-        self.bpm_timestamp_policy = str(
-            source.get("bpm_timestamp_policy", "source")
-        )
-        self.source_timestamp_policy = str(
-            source.get("source_timestamp_policy", "enforce")
-        )
         self.measurement_keys = frozenset(
             source.get("measurement_keys", source["q_keys"])
-        )
-        self.bpm_signal_keys = frozenset(source["bpm_signal_keys"])
-        self.source_timestamp_exempt_keys = frozenset(
-            source.get("source_timestamp_exempt_keys", ())
         )
         self.calibration = dict(source["calibration"])
         self.runtime_metadata = {
@@ -129,8 +117,7 @@ class BpmDispersionProvider:
             "geometry": dict(source["geometry"]),
             "calibration": dict(source["calibration"]),
             "resolved_signals": dict(source["resolved_signals"]),
-            "bpm_timestamp_policy": self.bpm_timestamp_policy,
-            "source_timestamp_policy": self.source_timestamp_policy,
+            "sample_identity": "bpm_monitor_event",
         }
 
     @property
@@ -149,62 +136,34 @@ class BpmDispersionProvider:
 
         diagnostics: dict[str, float | None] = {}
         timestamps: dict[str, float | None] = {}
-        effective_timestamps: dict[str, float | None] = {}
         errors: dict[str, str] = {}
         primary_issue = ""
         for key in self.required_keys:
             reading = readings.get(key)
-            effective_reading = reading
-            if (
-                reading is not None
-                and key in self.bpm_signal_keys
-                and self.bpm_timestamp_policy == "monitor_receive"
-            ):
-                effective_reading = replace(
-                    reading, source_timestamp=reading.monitor_received_at
-                )
-            value, reading_issue = _reading_value(
-                effective_reading,
-                sampled_at,
-                self.stale_timeout_s,
-                check_source_timestamp=(
-                    self.source_timestamp_policy != "ignore"
-                    and key not in self.source_timestamp_exempt_keys
-                ),
-            )
+            value, reading_issue = _reading_value(reading)
             diagnostics[key] = value
             timestamps[key] = reading.source_timestamp if reading else None
-            effective_timestamps[key] = (
-                effective_reading.source_timestamp if effective_reading else None
-            )
             if reading_issue:
-                error = reading_issue
-                if (
-                    key in self.bpm_signal_keys
-                    and self.bpm_timestamp_policy == "monitor_receive"
-                ):
-                    error = f"BPM monitor event {reading_issue}"
-                errors[key] = error
+                errors[key] = reading_issue
                 if key in self.measurement_keys and not primary_issue:
-                    primary_issue = error
+                    primary_issue = reading_issue
 
         issue = primary_issue
         bpm_time_keys = tuple(self.source["bpm_signal_keys"])
-        valid_times = [
-            effective_timestamps[key]
+        monitor_times = tuple(
+            readings[key].monitor_received_at
             for key in bpm_time_keys
-            if effective_timestamps.get(key) is not None
-        ]
-        if (
-            not issue
-            and self.source_timestamp_policy != "ignore"
-            and self.bpm_timestamp_policy == "source"
-            and len(valid_times) == len(bpm_time_keys)
-        ):
-            skew = max(valid_times) - min(valid_times)
-            diagnostics["bpm_timestamp_skew_s"] = skew
-            if skew > self.max_timestamp_skew_s:
-                issue = f"BPM timestamp skew {skew:.3f} s exceeds limit"
+            if readings.get(key) is not None
+            and readings[key].monitor_received_at is not None
+            and math.isfinite(float(readings[key].monitor_received_at))
+        )
+        sample_token = (
+            tuple(float(value) for value in monitor_times)
+            if len(monitor_times) == len(bpm_time_keys)
+            else None
+        )
+        if not issue and sample_token is None:
+            issue = "BPM monitor event identity unavailable"
 
         calibration_problem = observable_calibration_issue(self.calibration)
         q_value: float | None = None
@@ -225,12 +184,16 @@ class BpmDispersionProvider:
         if not issue and q_value is None:
             issue = "FIR q observable is unavailable"
 
-        source_times = [item for item in valid_times if item is not None]
-        valid_reason = "FIR BPM-dispersion sample valid"
-        if self.source_timestamp_policy == "ignore":
-            valid_reason += "; EPICS source timestamp checks disabled"
-        elif self.bpm_timestamp_policy == "monitor_receive":
-            valid_reason += "; BPM freshness uses monitor receive time"
+        source_times = [
+            timestamp
+            for key in bpm_time_keys
+            if (timestamp := timestamps.get(key)) is not None
+            and math.isfinite(float(timestamp))
+        ]
+        valid_reason = (
+            "FIR BPM-dispersion sample valid; BPM monitor events define samples; "
+            "EPICS timestamps are diagnostic only"
+        )
         return EnergyMeasurement(
             sampled_at=sampled_at,
             source_timestamp=max(source_times) if source_times else None,
@@ -259,6 +222,7 @@ class BpmDispersionProvider:
                 value=q_value,
                 raw_value=q_value,
             ),
+            sample_token=sample_token,
         )
 
     def _measurement(
@@ -289,10 +253,6 @@ class BpmDispersionProvider:
 
 def _reading_value(
     reading: PVReading | None,
-    now: float,
-    stale_timeout_s: float,
-    *,
-    check_source_timestamp: bool = True,
 ) -> tuple[float | None, str]:
     if reading is None:
         return None, "result missing"
@@ -302,15 +262,6 @@ def _reading_value(
         return None, reading.error
     if reading.value is None or not math.isfinite(reading.value):
         return None, "not finite"
-    if not check_source_timestamp:
-        return float(reading.value), ""
-    if reading.source_timestamp is None:
-        return None, "source timestamp missing"
-    age = now - reading.source_timestamp
-    if age > stale_timeout_s:
-        return None, f"source timestamp stale ({age:.2f} s)"
-    if age < -stale_timeout_s:
-        return None, "source timestamp is in the future"
     return float(reading.value), ""
 
 
@@ -342,26 +293,20 @@ class FirFeedbackCoordinator:
         self.controller = IncrementalPIController(kp=kp, ki=ki, period_s=period_s)
         self.reference: FirSessionReference | None = None
         self.latest_window: FirWindowResult | None = None
-        self._last_source_timestamp: float | None = None
+        self._last_sample_token: tuple[float, ...] | None = None
 
     def accept(self, measurement: EnergyMeasurement) -> FirWindowResult | None:
         if not measurement.quality.valid:
-            self._last_source_timestamp = None
+            self._last_sample_token = None
         else:
-            timestamp = measurement.source_timestamp
-            if timestamp is None or not math.isfinite(float(timestamp)):
+            sample_token = measurement.sample_token
+            if sample_token is None:
                 self.window.clear()
-                self._last_source_timestamp = None
+                self._last_sample_token = None
                 return None
-            timestamp = float(timestamp)
-            if timestamp == self._last_source_timestamp:
+            if sample_token == self._last_sample_token:
                 return None
-            if (
-                self._last_source_timestamp is not None
-                and timestamp < self._last_source_timestamp
-            ):
-                self.window.clear()
-            self._last_source_timestamp = timestamp
+            self._last_sample_token = sample_token
         completed = self.window.add(
             measurement.control_value,
             measurement.diagnostics,
@@ -428,12 +373,7 @@ def build_rf_hv_safety_checker(
     safety = raw["safety"]
     channel_ids = tuple(str(channel["id"]) for channel in raw["rf_channels"])
     required = ("hv_setpoint", "hv_readback") + tuple(
-        key
-        for channel_id in channel_ids
-        for key in (
-            f"rf.{channel_id}.amplitude",
-            f"rf.{channel_id}.phase",
-        )
+        f"rf.{channel_id}.phase" for channel_id in channel_ids
     )
     missing = [key for key in required if key not in aggregate]
     if missing:
@@ -446,65 +386,40 @@ def build_rf_hv_safety_checker(
         raise ValueError(
             f"cannot capture RF/HV safety reference; invalid fields: {invalid}"
         )
-    nonpositive_amplitudes = [
-        channel_id
-        for channel_id in channel_ids
-        if values[f"rf.{channel_id}.amplitude"] <= 0
-    ]
-    if nonpositive_amplitudes:
-        raise ValueError(
-            "cannot capture RF/HV safety reference; non-positive amplitudes: "
-            f"{nonpositive_amplitudes}"
-        )
     cfg = SafetyConfig(
-        hv_min_kv=float(safety["hv_min_kv"]),
-        hv_max_kv=float(safety["hv_max_kv"]),
+        hv_min_kv=None,
+        hv_max_kv=None,
         hv_readback_tolerance_kv=float(safety["hv_readback_tolerance_kv"]),
         phase_limit_deg={
             str(key): float(value) for key, value in safety["phase_limit_deg"].items()
         },
-        amplitude_ratio_limit_rel=float(safety["amplitude_ratio_limit_rel"]),
-        feedback_amplitude_min_rel=float(safety["feedback_amplitude_min_rel"]),
-        feedback_amplitude_max_rel=float(safety["feedback_amplitude_max_rel"]),
         require_valid_pv=bool(safety.get("require_valid_pv", True)),
         hold_on_fault=bool(safety.get("hold_on_fault", True)),
     )
     ref = SafetyReference(
         hv_kv=values["hv_readback"],
-        channel_amplitudes={
-            channel_id: values[f"rf.{channel_id}.amplitude"]
-            for channel_id in channel_ids
-        },
+        channel_amplitudes={},
         channel_phases={
             channel_id: values[f"rf.{channel_id}.phase"]
             for channel_id in channel_ids
         },
     )
-    return SafetyChecker(cfg, ref, str(raw["default_feedback_channel"]))
+    return SafetyChecker(cfg, ref)
 
 
 def read_closed_loop_inputs(
     client: PVClient,
     source: Mapping[str, Any],
-    sampled_at: float,
+    _sampled_at: float,
 ) -> tuple[dict[str, float], str]:
     keys = tuple(source["closed_loop_keys"])
     try:
-        readings = client.read_many(keys)
+        readings = client.read_many(keys, fresh=True)
     except Exception as exc:  # noqa: BLE001 - guard failures must block writes
         return {}, f"closed-loop input read failure: {exc}"
     values: dict[str, float] = {}
-    exempt_keys = frozenset(source.get("source_timestamp_exempt_keys", ()))
-    check_timestamps = str(
-        source.get("source_timestamp_policy", "enforce")
-    ) != "ignore"
     for key in keys:
-        value, issue = _reading_value(
-            readings.get(key),
-            sampled_at,
-            float(source["stale_timeout_s"]),
-            check_source_timestamp=check_timestamps and key not in exempt_keys,
-        )
+        value, issue = _reading_value(readings.get(key))
         if issue:
             return values, f"{key}: {issue}"
         assert value is not None

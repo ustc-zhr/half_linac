@@ -63,10 +63,12 @@ class FakeClient:
     def __init__(self, readings):
         self.readings = dict(readings)
         self.requests = []
+        self.fresh_requests = []
 
-    def read_many(self, keys):
+    def read_many(self, keys, *, fresh=False):
         keys = tuple(keys)
         self.requests.append(keys)
+        self.fresh_requests.append(bool(fresh))
         return {key: self.readings[key] for key in keys}
 
 
@@ -122,8 +124,8 @@ def actuator(
     *,
     coefficient: float = 1.0,
     max_step: float = 10.0,
-    operating_range: tuple[float, float] = (-20.0, 20.0),
-    machine_limit: tuple[float, float] = (-30.0, 30.0),
+    operating_range: tuple[float, float] | None = (-20.0, 20.0),
+    machine_limit: tuple[float, float] | None = (-30.0, 30.0),
     cyclic_period: float | None = None,
     command_basis: str = "readback",
 ) -> ShadowActuator:
@@ -316,6 +318,33 @@ class ShadowEngineTests(unittest.TestCase):
         self.assertEqual(result.state, "HOLD")
         self.assertEqual(result.commands, ())
 
+    def test_machine_limit_is_optional_but_enforced_when_present(self):
+        bounded = actuator(
+            "bounded", operating_range=None, machine_limit=(-1.0, 1.0)
+        )
+        held = evaluate_shadow(
+            measurement(-1.0),
+            group(bounded, response=1.0, gain=1.0),
+            {"bounded": reading("bounded", 0.9)},
+            stale_timeout_s=3.0,
+            now=101.0,
+        )
+        self.assertEqual(held.state, "HOLD")
+        self.assertIn("machine limit", held.reason)
+
+        unbounded = actuator(
+            "unbounded", operating_range=None, machine_limit=None
+        )
+        allowed = evaluate_shadow(
+            measurement(-1.0),
+            group(unbounded, response=1.0, gain=1.0),
+            {"unbounded": reading("unbounded", 0.9)},
+            stale_timeout_s=3.0,
+            now=101.0,
+        )
+        self.assertEqual(allowed.state, "SHADOW")
+        self.assertAlmostEqual(allowed.commands[0].proposed, 1.9)
+
         stale = evaluate_shadow(
             measurement(),
             group(actuator("a")),
@@ -445,7 +474,7 @@ class FeedbackWriterTests(unittest.TestCase):
         self.assertTrue(result.write_verified)
         self.assertEqual([item[0] for item in self.client.writes], ["a.set", "b.set"])
 
-    def test_delayed_fresh_readback_is_accepted_within_timeout(self):
+    def test_delayed_active_readback_is_accepted_within_timeout(self):
         proposal = FeedbackDecision(
             "SHADOW",
             "valid feedback suggestion",
@@ -464,14 +493,14 @@ class FeedbackWriterTests(unittest.TestCase):
                 self.pending = float(value)
                 return True
 
-            def read_many(self, keys):
+            def read_many(self, keys, *, fresh=False):
                 if self.pending is not None:
                     self.polls += 1
                     if self.polls == 3:
                         self.readings["a.read"] = reading(
                             "a.read", self.pending, timestamp=101.0
                         )
-                return super().read_many(keys)
+                return super().read_many(keys, fresh=fresh)
 
         client = DelayedClient({"a.read": reading("a.read", 10.0)})
         result = apply_feedback_decision(
@@ -484,26 +513,30 @@ class FeedbackWriterTests(unittest.TestCase):
         self.assertEqual(result.state, "APPLIED")
         self.assertTrue(result.write_verified)
         self.assertGreaterEqual(client.polls, 3)
+        self.assertTrue(all(client.fresh_requests))
 
-    def test_stale_in_tolerance_readback_does_not_verify_a_write(self):
+    def test_active_get_does_not_require_a_timestamp_advance(self):
         proposal = FeedbackDecision(
             "SHADOW",
             "valid feedback suggestion",
-            0.005,
-            commands=(ActuatorCommand("a", 10.0, 0.005, 10.005, "deg"),),
+            1.0,
+            commands=(ActuatorCommand("a", 10.0, 1.0, 11.0, "deg"),),
         )
         selected_group = replace(self.group, actuators=(self.group.actuators[0],))
 
-        class StaleClient(FakeClient):
+        class ActiveValueClient(FakeClient):
             def __init__(self, readings):
                 super().__init__(readings)
                 self.writes = []
 
             def write(self, key, value, *, wait=True, timeout_s=1.0):
                 self.writes.append((key, float(value)))
+                self.readings["a.read"] = reading(
+                    "a.read", float(value), timestamp=100.0
+                )
                 return True
 
-        client = StaleClient({"a.read": reading("a.read", 10.0)})
+        client = ActiveValueClient({"a.read": reading("a.read", 10.0)})
         result = apply_feedback_decision(
             client,
             selected_group,
@@ -511,10 +544,9 @@ class FeedbackWriterTests(unittest.TestCase):
             timeout_s=0.0,
             poll_interval_s=0.01,
         )
-        self.assertEqual(result.state, "HOLD")
-        self.assertFalse(result.write_verified)
-        self.assertFalse(result.rollback_applied)
-        self.assertIn("waiting for fresh readback", result.write_detail)
+        self.assertEqual(result.state, "APPLIED")
+        self.assertTrue(result.write_verified)
+        self.assertIn("active readback verified", result.write_detail)
 
     def test_quantized_noop_stays_shadow_and_does_not_write(self):
         proposal = FeedbackDecision(
@@ -564,6 +596,45 @@ class FeedbackWriterTests(unittest.TestCase):
         self.assertTrue(result.write_verified)
         self.assertEqual(self.client.writes, [("a.set", 11.0)])
 
+    def test_manual_write_uses_only_optional_absolute_machine_limit(self):
+        bounded = actuator(
+            "bounded", operating_range=None, machine_limit=(-1.0, 1.0)
+        )
+        bounded_readbacks = {"bounded": reading("bounded.read", 0.9)}
+        bounded_client = FakeWritableClient(
+            {"bounded.read": bounded_readbacks["bounded"]},
+            {"bounded.set": "bounded.read"},
+        )
+        held = apply_manual_targets(
+            bounded_client,
+            group(bounded),
+            bounded_readbacks,
+            {"bounded": 1.1},
+            timeout_s=0.1,
+            poll_interval_s=0.01,
+        )
+        self.assertEqual(held.state, "HOLD")
+        self.assertEqual(bounded_client.writes, [])
+
+        unbounded = actuator(
+            "unbounded", operating_range=None, machine_limit=None
+        )
+        unbounded_readbacks = {"unbounded": reading("unbounded.read", 0.9)}
+        unbounded_client = FakeWritableClient(
+            {"unbounded.read": unbounded_readbacks["unbounded"]},
+            {"unbounded.set": "unbounded.read"},
+        )
+        applied = apply_manual_targets(
+            unbounded_client,
+            group(unbounded),
+            unbounded_readbacks,
+            {"unbounded": 100.0},
+            timeout_s=0.1,
+            poll_interval_s=0.01,
+        )
+        self.assertTrue(applied.write_verified)
+        self.assertEqual(unbounded_client.writes, [("unbounded.set", 100.0)])
+
     def test_cyclic_manual_write_uses_shortest_phase_delta(self):
         phase = actuator(
             "phase",
@@ -611,11 +682,13 @@ class FeedbackWriterTests(unittest.TestCase):
                 self.connected = True
                 self.timestamp = 1.0
                 self.callback = None
+                self.use_monitor_values = []
 
             def add_callback(self, callback):
                 self.callback = callback
 
             def get(self, **_kwargs):
+                self.use_monitor_values.append(_kwargs.get("use_monitor"))
                 return 2.0
 
         with (
@@ -628,9 +701,11 @@ class FeedbackWriterTests(unittest.TestCase):
             client = EpicsPVClient({"energy": "SYN:ENERGY"})
             client._pvs["energy"].callback()
             result = client.read_many(("energy",))["energy"]
+            client.read_many(("energy",), fresh=True)
 
         self.assertEqual(result.source_timestamp, 1.0)
         self.assertEqual(result.monitor_received_at, 100.0)
+        self.assertEqual(client._pvs["energy"].use_monitor_values, [True, False])
 
 
 def synthetic_profile() -> MachineProfile:
