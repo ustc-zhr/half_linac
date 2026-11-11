@@ -1530,6 +1530,41 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
         finally:
             window.close()
 
+    def test_setpoint_trace_uses_hollow_same_color_markers(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="half", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            window._history["time"].extend((100.0, 101.0))
+            window._history["actuator.llrf18_phase.readback_delta"].extend(
+                (0.0, 0.1)
+            )
+            window._history["actuator.llrf18_phase.command_delta"].extend(
+                (math.nan, 0.1)
+            )
+            window._draw_plot()
+
+            readback_line = next(
+                line
+                for line in window.actuator_axis.lines
+                if line.get_label() == "Phase 1 · LLRF18 Δ readback"
+            )
+            setpoint_line = next(
+                line
+                for line in window.actuator_axis.lines
+                if line.get_label() == "Phase 1 · LLRF18 Δ setpoint"
+            )
+            self.assertEqual(setpoint_line.get_color(), readback_line.get_color())
+            self.assertEqual(setpoint_line.get_markerfacecolor(), "none")
+            self.assertEqual(
+                setpoint_line.get_markeredgecolor(), setpoint_line.get_color()
+            )
+            self.assertAlmostEqual(setpoint_line.get_markeredgewidth(), 1.2)
+            self.assertAlmostEqual(setpoint_line.get_markersize(), 5.0)
+        finally:
+            window.close()
+
     def test_error_plot_detail_scale_and_action_window_modes(self):
         context = load_app_context(
             "energy_feedback", machine_id="half", control_backend="real"

@@ -2790,7 +2790,10 @@ class EnergyFeedbackWindow(QMainWindow):
                         color=color,
                         linestyle="None",
                         marker="o",
-                        markersize=3,
+                        markerfacecolor="none",
+                        markeredgecolor=color,
+                        markeredgewidth=1.2,
+                        markersize=5,
                     )
         if self.error_axis is not None:
             usable_action_window = (
