@@ -95,6 +95,13 @@ def _normalize_energy_feedback_workflow(
     workflow.setdefault(
         "pulse", {"marker": None, "require_marker_for_write": False}
     )
+    recording = workflow.get("recording")
+    if recording is None:
+        workflow["recording"] = {"additional_signals": []}
+    elif isinstance(recording, Mapping):
+        recording = dict(recording)
+        recording.setdefault("additional_signals", [])
+        workflow["recording"] = recording
 
     controller = workflow.get("controller")
     if isinstance(controller, Mapping):
@@ -850,6 +857,23 @@ def _validate_bpm_dispersion_workflow(
         workflow.get("safety"),
         backends,
     )
+
+    recording = _mapping(profile, workflow.get("recording"), "recording")
+    additional_signals = _sequence(
+        profile,
+        recording.get("additional_signals"),
+        "recording.additional_signals",
+    )
+    recording_ids: list[str] = []
+    for index, raw_signal in enumerate(additional_signals):
+        name = f"recording.additional_signals[{index}]"
+        signal = _mapping(profile, raw_signal, name)
+        recording_ids.append(_text(profile, signal.get("id"), f"{name}.id"))
+        _signal(profile, signal, name, backends)
+        if "unit" in signal:
+            _text(profile, signal.get("unit"), f"{name}.unit")
+    if len(recording_ids) != len(set(recording_ids)):
+        _fail(profile, "recording.additional_signals ids must be unique")
 
     groups = _sequence(profile, workflow.get("control_groups"), "control_groups")
     if len(groups) != 1:

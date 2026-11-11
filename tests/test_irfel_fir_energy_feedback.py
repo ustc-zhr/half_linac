@@ -19,8 +19,11 @@ from half_linac.src.apps.energy_feedback.bpm_dispersion import (
     build_rf_hv_safety_checker,
     calibration_issue,
     check_session_guards,
+    closed_loop_values_from_recording,
     observable_calibration_issue,
     read_closed_loop_inputs,
+    read_window_recording,
+    safety_audit_fields,
     shadow_calibration_issue,
 )
 from half_linac.src.apps.energy_feedback.engine import (
@@ -241,6 +244,36 @@ class BpmDispersionProviderTests(unittest.TestCase):
         self.assertIn("closed-loop input read failure", issue)
         self.assertIn("fct", issue)
 
+    def test_window_recording_keeps_extra_signal_failures_diagnostic_only(self):
+        source = {
+            "recording_keys": ("fct", "record.extra"),
+            "closed_loop_keys": ("fct",),
+        }
+        values = {
+            "fct": reading("fct", 2000.0, 101.0),
+            "record.extra": PVReading(
+                "record.extra",
+                "PV:record.extra",
+                None,
+                False,
+                None,
+                "not connected",
+            ),
+        }
+
+        client = FakeClient(values)
+        logged, timestamps, errors = read_window_recording(client, source)
+        guard_values, guard_issue = closed_loop_values_from_recording(
+            source, logged, errors
+        )
+
+        self.assertEqual(client.fresh_reads, [True])
+        self.assertEqual(logged["fct"], 2000.0)
+        self.assertEqual(timestamps["fct"], 101.0)
+        self.assertIn("disconnected", errors["record.extra"])
+        self.assertEqual(guard_values, {"fct": 2000.0})
+        self.assertEqual(guard_issue, "")
+
     def test_monitor_events_accept_legacy_bpm_source_timestamps(self):
         source = provider_source()
         values = {
@@ -458,6 +491,7 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertAlmostEqual(
             raw["safety"]["setpoint_readback_tolerance_kv"], 0.02
         )
+        self.assertEqual(raw["recording"], {"additional_signals": []})
         self.assertEqual(
             raw["measurement"]["calibration"]["orbit_subtraction"],
             {"a": 0.0, "b": 0.0},
@@ -577,6 +611,10 @@ class IrfelProfileTests(unittest.TestCase):
         )
         self.assertEqual(source["signal_keys"], source["measurement_keys"])
         self.assertIn("fct", source["closed_loop_keys"])
+        self.assertEqual(source["recording_keys"], source["closed_loop_keys"])
+        self.assertTrue(
+            set(source["recording_keys"]).issubset(source["resolved_signals"])
+        )
         self.assertFalse(
             any(
                 key.startswith("bpm.BPM01")
@@ -598,6 +636,33 @@ class IrfelProfileTests(unittest.TestCase):
             REAL_STATUS_COMMISSIONING,
         )
         self.assertTrue(workflow_writes_allowed(context, "energy_feedback"))
+
+    def test_additional_recording_signal_is_resolved_from_profile(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        workflow = copy.deepcopy(context.profile.workflows["energy_feedback"])
+        workflow["recording"]["additional_signals"] = [
+            {
+                "id": "ict2",
+                "element": "ICT02",
+                "channel": "current",
+                "unit": "a.u.",
+            }
+        ]
+        profile = replace(
+            context.profile,
+            workflows={**context.profile.workflows, "energy_feedback": workflow},
+        )
+        config = load_runtime_config(replace(context, profile=profile))
+        source = config["measurement_sources"][config["measurement_source_id"]]
+
+        self.assertIn("record.ict2", source["recording_keys"])
+        self.assertNotIn("record.ict2", source["closed_loop_keys"])
+        self.assertEqual(
+            config["pvs"]["record.ict2"],
+            "IRFEL:BD:CT:CT2:I",
+        )
 
     def test_resolved_safety_config_captures_and_accepts_field_reference(self):
         context = load_app_context(
@@ -634,6 +699,52 @@ class IrfelProfileTests(unittest.TestCase):
         )
         result = checker.check_aggregate(outside_old_app_range, hv_next=40.02)
         self.assertTrue(result.ok, result.reason)
+
+    def test_safety_audit_records_current_values_limits_and_deltas(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        config = load_runtime_config(context)
+        source = config["measurement_sources"][config["measurement_source_id"]]
+        reference = {
+            "hv_setpoint": 39.0,
+            "hv_readback": 39.0,
+            "rf.acc1.phase": -158.2,
+            "rf.buncher.phase": -21.0,
+        }
+        checker = build_rf_hv_safety_checker(source, reference)
+        guard_keys = source["guard_keys"]
+        guard_values = {
+            source["fct_key"]: 2000.0,
+            guard_keys["hv_setpoint"]: 39.0,
+            guard_keys["hv_readback"]: 38.99,
+            guard_keys["rf.acc1.phase"]: -158.0,
+            guard_keys["rf.buncher.phase"]: -21.0,
+        }
+
+        diagnostics, errors, aggregate, issue = safety_audit_fields(
+            source, guard_values, "", checker
+        )
+
+        self.assertEqual(issue, "")
+        self.assertEqual(errors, {})
+        self.assertEqual(aggregate["hv_setpoint"], 39.0)
+        self.assertEqual(aggregate["rf.acc1.phase"], -158.0)
+        self.assertEqual(diagnostics["safety.reference_captured"], 1.0)
+        self.assertEqual(diagnostics["safety.ok"], 1.0)
+        self.assertAlmostEqual(diagnostics["safety.fct_margin"], 1000.0)
+        self.assertAlmostEqual(
+            diagnostics["safety.hv_readback_minus_setpoint_kv"],
+            -0.01,
+        )
+        self.assertAlmostEqual(
+            diagnostics["safety.rf.acc1.phase_delta_deg"],
+            0.2,
+        )
+        self.assertEqual(
+            diagnostics["safety.rf.acc1.phase_limit_deg"],
+            3.0,
+        )
 
     def test_missing_machine_hv_limit_means_no_software_absolute_limit(self):
         context = load_app_context(

@@ -31,6 +31,9 @@
     "phase_limit_deg": 3,
     "setpoint_readback_tolerance_kv": 0.02
   },
+  "recording": {
+    "additional_signals": []
+  },
   "write_verification": {
     "timeout_s": 5.0,
     "readback_tolerance_kv": 0.015

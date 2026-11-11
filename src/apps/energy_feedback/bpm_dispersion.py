@@ -11,6 +11,7 @@ from half_linac.src.shared.rf_hv_safety import (
     SafetyChecker,
     SafetyConfig,
     SafetyReference,
+    phase_diff_deg,
 )
 
 from .client import PVClient
@@ -405,6 +406,116 @@ def build_rf_hv_safety_checker(
         },
     )
     return SafetyChecker(cfg, ref)
+
+
+def read_window_recording(
+    client: PVClient,
+    source: Mapping[str, Any],
+) -> tuple[
+    dict[str, float | None],
+    dict[str, float | None],
+    dict[str, str],
+]:
+    """Read one traceable snapshot without changing measurement validity."""
+
+    keys = tuple(source.get("recording_keys", source["closed_loop_keys"]))
+    try:
+        readings = client.read_many(keys, fresh=True)
+    except Exception as exc:  # noqa: BLE001 - failures belong in the audit log
+        issue = f"recording input read failure: {exc}"
+        return (
+            {key: None for key in keys},
+            {key: None for key in keys},
+            {key: issue for key in keys},
+        )
+
+    values: dict[str, float | None] = {}
+    timestamps: dict[str, float | None] = {}
+    errors: dict[str, str] = {}
+    for key in keys:
+        reading = readings.get(key)
+        value, issue = _reading_value(reading)
+        values[key] = value
+        timestamps[key] = reading.source_timestamp if reading else None
+        if issue:
+            errors[key] = issue
+    return values, timestamps, errors
+
+
+def closed_loop_values_from_recording(
+    source: Mapping[str, Any],
+    values: Mapping[str, float | None],
+    errors: Mapping[str, str],
+) -> tuple[dict[str, float], str]:
+    """Resolve fail-closed guard values from a possibly partial snapshot."""
+
+    resolved: dict[str, float] = {}
+    for key in source["closed_loop_keys"]:
+        issue = errors.get(key, "")
+        value = values.get(key)
+        if issue:
+            return resolved, f"{key}: {issue}"
+        if value is None or not math.isfinite(float(value)):
+            return resolved, f"{key}: not finite"
+        resolved[key] = float(value)
+    return resolved, ""
+
+
+def safety_audit_fields(
+    source: Mapping[str, Any],
+    guard_values: Mapping[str, float],
+    guard_read_issue: str,
+    checker: SafetyChecker | None,
+) -> tuple[dict[str, float | None], dict[str, str], dict[str, float], str]:
+    """Build safety diagnostics for a freshly recorded window snapshot."""
+
+    calibration = source["calibration"]
+    safety = source["rf_safety"]["safety"]
+    diagnostics: dict[str, float | None] = {
+        "safety.reference_captured": 1.0 if checker is not None else 0.0,
+        "safety.fct_minimum": float(calibration["fct_min"]),
+        "safety.hv_readback_tolerance_kv": float(
+            safety["hv_readback_tolerance_kv"]
+        ),
+    }
+    errors: dict[str, str] = {}
+
+    fct = guard_values.get(source["fct_key"])
+    if fct is not None:
+        diagnostics["safety.fct_margin"] = (
+            abs(float(fct)) - float(calibration["fct_min"])
+        )
+
+    aggregate = rf_hv_aggregate(guard_values, source)
+    if "hv_setpoint" in aggregate and "hv_readback" in aggregate:
+        diagnostics["safety.hv_readback_minus_setpoint_kv"] = (
+            aggregate["hv_readback"] - aggregate["hv_setpoint"]
+        )
+
+    for channel_id, limit in safety["phase_limit_deg"].items():
+        diagnostics[f"safety.rf.{channel_id}.phase_limit_deg"] = float(limit)
+        phase_key = f"rf.{channel_id}.phase"
+        if checker is not None and phase_key in aggregate:
+            diagnostics[f"safety.rf.{channel_id}.phase_delta_deg"] = (
+                phase_diff_deg(
+                    aggregate[phase_key],
+                    checker.ref.channel_phases[channel_id],
+                )
+            )
+
+    issue = guard_read_issue
+    if not issue:
+        issue = check_session_guards(guard_values, calibration)
+    if checker is not None and not issue:
+        result = checker.check_aggregate(aggregate)
+        if not result.ok:
+            issue = result.reason
+    diagnostics["safety.ok"] = (
+        None if checker is None else (0.0 if issue else 1.0)
+    )
+    if checker is not None and issue:
+        errors["safety"] = issue
+    return diagnostics, errors, aggregate, issue
 
 
 def read_closed_loop_inputs(

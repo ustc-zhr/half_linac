@@ -109,6 +109,12 @@ def load_runtime_config(
             guard_keys[guard_name] = key
 
         closed_loop_keys = (fct_key, *guard_keys.values())
+        recording_keys = list(closed_loop_keys)
+        for raw_signal in workflow["recording"]["additional_signals"]:
+            recording_id = str(raw_signal["id"])
+            key = f"record.{recording_id}"
+            add_signal(key, raw_signal)
+            recording_keys.append(key)
         q_keys = (
             bpm_keys["BPM02"]["x"],
             bpm_keys["BPM03"]["x"],
@@ -156,9 +162,10 @@ def load_runtime_config(
             },
             "resolved_signals": {
                 key: signals[key]
-                for key in (*source_signal_keys, *closed_loop_keys)
+                for key in (*source_signal_keys, *recording_keys)
             },
             "diagnostic_keys": tuple(source_signal_keys),
+            "recording_keys": tuple(recording_keys),
             "marker_key": marker_key,
             "target_key": None,
             "signal_keys": tuple(source_signal_keys + ([marker_key] if marker_key else [])),
@@ -406,6 +413,7 @@ def load_runtime_config(
             dict(workflow.get("operator_controls", {}))
         ),
         "runtime": copy.deepcopy(dict(workflow["runtime"])),
+        "recording": copy.deepcopy(dict(workflow.get("recording", {}))),
         "logging": copy.deepcopy(dict(workflow["logging"])),
         "measurement_sources": measurement_sources,
         "observable": copy.deepcopy(dict(measurement_sources[default_measurement_id]["observable"])),

@@ -54,8 +54,11 @@ from half_linac.src.apps.energy_feedback.bpm_dispersion import (
     FirFeedbackCoordinator,
     build_rf_hv_safety_checker,
     check_session_guards,
+    closed_loop_values_from_recording,
     read_closed_loop_inputs,
+    read_window_recording,
     rf_hv_aggregate,
+    safety_audit_fields,
     shadow_calibration_issue,
 )
 from half_linac.src.apps.energy_feedback.client import EpicsPVClient
@@ -302,6 +305,7 @@ class AcquisitionThread(QThread):
             ]
             active_keys = set(source["signal_keys"])
             active_keys.update(source.get("closed_loop_keys", ()))
+            active_keys.update(source.get("recording_keys", ()))
             for group in self.config["control_groups"]:
                 for actuator in group.actuators:
                     active_keys.add(actuator.readback_key)
@@ -482,6 +486,47 @@ class AcquisitionThread(QThread):
                                 target=target_q,
                                 error=q_value - target_q if q_value is not None else None,
                             ),
+                        )
+                    if fir_result is not None:
+                        (
+                            recording_values,
+                            recording_timestamps,
+                            recording_errors,
+                        ) = read_window_recording(client, source)
+                        guard_values, guard_read_issue = (
+                            closed_loop_values_from_recording(
+                                source,
+                                recording_values,
+                                recording_errors,
+                            )
+                        )
+                        (
+                            safety_diagnostics,
+                            safety_errors,
+                            _recorded_safety_aggregate,
+                            _recorded_safety_issue,
+                        ) = safety_audit_fields(
+                            source,
+                            guard_values,
+                            guard_read_issue,
+                            rf_hv_checker,
+                        )
+                        measurement = replace(
+                            measurement,
+                            diagnostics={
+                                **dict(measurement.diagnostics),
+                                **recording_values,
+                                **safety_diagnostics,
+                            },
+                            diagnostic_source_timestamps={
+                                **dict(measurement.diagnostic_source_timestamps),
+                                **recording_timestamps,
+                            },
+                            diagnostic_errors={
+                                **dict(measurement.diagnostic_errors),
+                                **recording_errors,
+                                **safety_errors,
+                            },
                         )
                 else:
                     target_override = settings.get("target_mev")
