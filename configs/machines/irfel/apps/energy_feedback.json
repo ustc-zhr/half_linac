@@ -17,7 +17,7 @@
   "feedback": {
     "sample_period_s": 0.2,
     "control_period_s": 5.0,
-    "ki": 0.1,
+    "ki": 0.2,
     "action_range_mm": 3.0,
     "max_step_kv": 0.05,
     "max_session_delta_kv": 0.5
