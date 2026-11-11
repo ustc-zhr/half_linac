@@ -1454,6 +1454,14 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
                 ["Feedback", "Error Focus", "Full Detail"],
             )
             self.assertEqual(window.plot_view_combo.currentText(), "Feedback")
+            self.assertEqual(
+                [
+                    window.plot_scale_combo.itemText(index)
+                    for index in range(window.plot_scale_combo.count())
+                ],
+                ["Detail", "Full Window"],
+            )
+            self.assertEqual(window.plot_scale_combo.currentText(), "Detail")
         finally:
             window.close()
 
@@ -1519,6 +1527,50 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
                 window.actuator_axis.get_ylabel(), "Phase Correction [deg]"
             )
 
+        finally:
+            window.close()
+
+    def test_error_plot_detail_scale_and_action_window_modes(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="half", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            action_window = float(
+                window._committed_feedback_settings["action_window_mev"]
+            )
+            window._history["time"].extend((100.0, 101.0, 102.0))
+            window._history["error"].extend((0.0, 0.2, 0.1))
+            window._draw_plot()
+
+            detail_lower, detail_upper = window.error_axis.get_ylim()
+            self.assertLess(detail_upper, action_window)
+            self.assertGreater(detail_lower, -action_window)
+            self.assertIn(
+                f"Action window ±{action_window:g} {window.observable_unit}",
+                [text.get_text() for text in window.error_axis.texts],
+            )
+
+            window.plot_scale_combo.setCurrentText("Full Window")
+            full_lower, full_upper = window.error_axis.get_ylim()
+            self.assertLessEqual(full_lower, -action_window)
+            self.assertGreaterEqual(full_upper, action_window)
+            self.assertTrue(
+                any(
+                    label.startswith("Action window ±")
+                    for label in window.error_axis.get_legend_handles_labels()[1]
+                )
+            )
+
+            window.plot_scale_combo.setCurrentText("Detail")
+            window._history["error"].clear()
+            window._history["error"].extend(
+                (0.0, action_window * 0.8, action_window * 0.7)
+            )
+            window._draw_plot()
+            automatic_lower, automatic_upper = window.error_axis.get_ylim()
+            self.assertLessEqual(automatic_lower, -action_window)
+            self.assertGreaterEqual(automatic_upper, action_window)
         finally:
             window.close()
 

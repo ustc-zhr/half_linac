@@ -104,6 +104,7 @@ PLOT_RANGE_SECONDS = {
     "All": None,
 }
 MAX_RENDERED_PLOT_POINTS = 1600
+ACTION_WINDOW_AUTO_EXPAND_FRACTION = 0.75
 
 
 DARK_THEME = {
@@ -1099,12 +1100,16 @@ class EnergyFeedbackWindow(QMainWindow):
         self.plot_axis_combo = QComboBox()
         self.plot_axis_combo.addItems(("Index", "Elapsed", "Clock"))
         self.plot_axis_combo.setCurrentText("Elapsed")
+        self.plot_scale_combo = QComboBox()
+        self.plot_scale_combo.addItems(("Detail", "Full Window"))
         plot_grid.addWidget(self._field_label("View"), 1, 0)
         plot_grid.addWidget(self.plot_view_combo, 1, 1)
         plot_grid.addWidget(self._field_label("Range"), 1, 2)
         plot_grid.addWidget(self.plot_range_combo, 1, 3)
         plot_grid.addWidget(self._field_label("X"), 1, 4)
         plot_grid.addWidget(self.plot_axis_combo, 1, 5)
+        plot_grid.addWidget(self._field_label("Y Scale"), 2, 0)
+        plot_grid.addWidget(self.plot_scale_combo, 2, 1, 1, 2)
         right_layout.addWidget(plot_card)
 
         feedback_card, feedback_grid = self._create_section_card(
@@ -1313,6 +1318,7 @@ class EnergyFeedbackWindow(QMainWindow):
         )
         self.plot_range_combo.currentTextChanged.connect(self._draw_plot)
         self.plot_axis_combo.currentTextChanged.connect(self._draw_plot)
+        self.plot_scale_combo.currentTextChanged.connect(self._draw_plot)
         self.target_energy_spin.editingFinished.connect(
             self._push_operator_parameters
         )
@@ -2602,6 +2608,10 @@ class EnergyFeedbackWindow(QMainWindow):
         theme = self._theme()["mpl"]
         self.figure.patch.set_facecolor(theme["figure"])
         axes = self._plot_axes()
+        action_window_ready = False
+        action_window = 0.0
+        deadband = 0.0
+        visible_error_values: list[float] = []
         for axis in axes:
             axis.clear()
             axis.set_facecolor(theme["axes"])
@@ -2628,30 +2638,6 @@ class EnergyFeedbackWindow(QMainWindow):
                 if groups
                 else 0.0
             )
-            if (
-                action_window_ready
-                and math.isfinite(action_window)
-                and action_window > 0
-            ):
-                self.error_axis.axhspan(
-                    -action_window,
-                    action_window,
-                    color=theme["action_window"],
-                    alpha=0.045,
-                    label="Action window",
-                )
-                self.error_axis.axhline(
-                    action_window,
-                    color=theme["action_window"],
-                    linewidth=0.8,
-                    linestyle="--",
-                )
-                self.error_axis.axhline(
-                    -action_window,
-                    color=theme["action_window"],
-                    linewidth=0.8,
-                    linestyle="--",
-                )
             if deadband > 0:
                 self.error_axis.axhspan(
                     -deadband,
@@ -2753,9 +2739,10 @@ class EnergyFeedbackWindow(QMainWindow):
                     if self.config["measurement_kind"] == "bpm_dispersion"
                     else "Measured − Target"
                 )
+                visible_error_values = values("error")
                 self.error_axis.plot(
                     x_values,
-                    values("error"),
+                    visible_error_values,
                     label=error_label,
                     color=theme["error"],
                 )
@@ -2805,6 +2792,66 @@ class EnergyFeedbackWindow(QMainWindow):
                         marker="o",
                         markersize=3,
                     )
+        if self.error_axis is not None:
+            usable_action_window = (
+                action_window
+                if action_window_ready
+                and math.isfinite(action_window)
+                and action_window > 0
+                else 0.0
+            )
+            error_limits, show_action_window = _error_axis_limits(
+                visible_error_values,
+                action_window=usable_action_window,
+                deadband=deadband,
+                full_window=(
+                    hasattr(self, "plot_scale_combo")
+                    and self.plot_scale_combo.currentText() == "Full Window"
+                ),
+            )
+            if usable_action_window > 0:
+                action_window_label = (
+                    f"Action window ±{usable_action_window:g} {self.observable_unit}"
+                )
+                if show_action_window:
+                    self.error_axis.axhspan(
+                        -usable_action_window,
+                        usable_action_window,
+                        color=theme["action_window"],
+                        alpha=0.045,
+                        label=action_window_label,
+                    )
+                    self.error_axis.axhline(
+                        usable_action_window,
+                        color=theme["action_window"],
+                        linewidth=0.8,
+                        linestyle="--",
+                    )
+                    self.error_axis.axhline(
+                        -usable_action_window,
+                        color=theme["action_window"],
+                        linewidth=0.8,
+                        linestyle="--",
+                    )
+                else:
+                    self.error_axis.text(
+                        0.01,
+                        0.98,
+                        action_window_label,
+                        transform=self.error_axis.transAxes,
+                        color=theme["action_window"],
+                        fontsize=8,
+                        horizontalalignment="left",
+                        verticalalignment="top",
+                        bbox={
+                            "facecolor": theme["legend"],
+                            "edgecolor": theme["spine"],
+                            "alpha": 0.85,
+                            "pad": 2,
+                        },
+                        zorder=6,
+                    )
+            self.error_axis.set_ylim(*error_limits)
         if self.energy_axis is not None:
             if self.config["measurement_kind"] == "bpm_dispersion":
                 energy_axis_label = (
@@ -2887,6 +2934,33 @@ class EnergyFeedbackWindow(QMainWindow):
 
 def _plot_value(value: float | None) -> float:
     return math.nan if value is None else float(value)
+
+
+def _error_axis_limits(
+    error_values: list[float],
+    *,
+    action_window: float,
+    deadband: float,
+    full_window: bool,
+) -> tuple[tuple[float, float], bool]:
+    finite_errors = [abs(value) for value in error_values if math.isfinite(value)]
+    maximum_error = max(finite_errors, default=0.0)
+    valid_action_window = math.isfinite(action_window) and action_window > 0
+    show_action_window = valid_action_window and (
+        full_window
+        or maximum_error >= ACTION_WINDOW_AUTO_EXPAND_FRACTION * action_window
+    )
+    deadband_extent = abs(deadband) if math.isfinite(deadband) else 0.0
+    if show_action_window:
+        half_range = max(action_window * 1.05, maximum_error * 1.15)
+    else:
+        minimum_range = 0.05
+        half_range = max(
+            minimum_range,
+            maximum_error * 1.15,
+            deadband_extent * 1.10,
+        )
+    return (-half_range, half_range), show_action_window
 
 
 def _decimated_indices(
