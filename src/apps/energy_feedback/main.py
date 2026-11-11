@@ -411,6 +411,8 @@ class AcquisitionThread(QThread):
                 group = self._configured_group(settings)
                 measurement = provider.sample()
                 fir_result = None
+                window_safety_aggregate: dict[str, float] = {}
+                window_safety_issue = ""
                 if fir is not None:
                     assert control_timing is not None
                     fir.configure_controller(
@@ -503,8 +505,8 @@ class AcquisitionThread(QThread):
                         (
                             safety_diagnostics,
                             safety_errors,
-                            _recorded_safety_aggregate,
-                            _recorded_safety_issue,
+                            window_safety_aggregate,
+                            window_safety_issue,
                         ) = safety_audit_fields(
                             source,
                             guard_values,
@@ -665,43 +667,20 @@ class AcquisitionThread(QThread):
                                     measurement.control_error,
                                 )
                             else:
-                                aggregate: dict[str, float] = {}
-                                guard_read_issue = ""
-                                guard_issue = ""
-                                rf_result = None
-                                if feedback_active:
-                                    assert rf_hv_checker is not None
-                                    guard_values, guard_read_issue = (
-                                        read_closed_loop_inputs(
-                                            client,
-                                            source,
-                                            measurement.sampled_at,
-                                        )
-                                    )
-                                    if not guard_read_issue:
-                                        guard_issue = check_session_guards(
-                                            guard_values,
-                                            source["calibration"],
-                                        )
-                                        aggregate = rf_hv_aggregate(
-                                            guard_values, source
-                                        )
-                                        rf_result = rf_hv_checker.check_aggregate(
-                                            aggregate
-                                        )
-                                if (
-                                    guard_read_issue
-                                    or guard_issue
-                                    or (
-                                        rf_result is not None
-                                        and not rf_result.ok
-                                    )
-                                ):
+                                aggregate = (
+                                    window_safety_aggregate
+                                    if feedback_active
+                                    else {}
+                                )
+                                safety_issue = (
+                                    window_safety_issue
+                                    if feedback_active
+                                    else ""
+                                )
+                                if safety_issue:
                                     decision = FeedbackDecision(
                                         "HOLD",
-                                        guard_read_issue
-                                        or guard_issue
-                                        or rf_result.reason,
+                                        safety_issue,
                                         measurement.control_error,
                                     )
                                 else:

@@ -868,6 +868,101 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertAlmostEqual(failed_client.value, 39.0)
         self.assertEqual(failed_client.writes[-1], (actuator.setpoint_key, 39.0))
 
+    def test_closed_loop_reuses_recorded_window_safety_snapshot(self):
+        from half_linac.src.apps.energy_feedback import main as feedback_main
+
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        config = copy.deepcopy(load_runtime_config(context))
+        config["runtime"]["sample_period_s"] = 0.2
+        config["controller"]["control_period_s"] = 0.2
+        source = config["measurement_sources"][config["measurement_source_id"]]
+
+        values = {
+            key: reading(key, 39.0, 101.0)
+            for key in set(source["recording_keys"])
+            | set(source["closed_loop_keys"])
+        }
+        values[source["fct_key"]] = reading(source["fct_key"], 2000.0, 101.0)
+        guard_keys = source["guard_keys"]
+        values[guard_keys["hv_setpoint"]] = reading(
+            guard_keys["hv_setpoint"], 39.0, 101.0
+        )
+        values[guard_keys["hv_readback"]] = reading(
+            guard_keys["hv_readback"], 39.0, 101.0
+        )
+        values[guard_keys["rf.acc1.phase"]] = reading(
+            guard_keys["rf.acc1.phase"], -158.2, 101.0
+        )
+        values[guard_keys["rf.buncher.phase"]] = reading(
+            guard_keys["rf.buncher.phase"], -21.0, 101.0
+        )
+        for group in config["control_groups"]:
+            for actuator in group.actuators:
+                values[actuator.readback_key] = reading(
+                    actuator.readback_key, 39.0, 101.0
+                )
+                values[actuator.setpoint_key] = reading(
+                    actuator.setpoint_key, 39.0, 101.0
+                )
+
+        class TrackingClient(FakeClient):
+            def __init__(self, readings):
+                super().__init__(readings)
+                self.requests: list[tuple[tuple[str, ...], bool]] = []
+
+            def read_many(self, keys, *, fresh=False):
+                self.requests.append((tuple(keys), bool(fresh)))
+                return super().read_many(keys, fresh=fresh)
+
+        class OneShotProvider:
+            runtime_metadata: dict[str, object] = {}
+
+            def __init__(self, stop_event):
+                self.stop_event = stop_event
+
+            def sample(self):
+                self.stop_event.set()
+                return measurement(-3.0, timestamp=101.0)
+
+        class FakeLock:
+            def acquire(self):
+                return None
+
+            def release(self):
+                return None
+
+        client = TrackingClient(values)
+        worker = feedback_main.AcquisitionThread(context, config)
+        provider = OneShotProvider(worker._stop_event)
+        worker.request_capture_reference()
+        worker.set_feedback_enabled(True)
+
+        with (
+            patch.object(feedback_main, "EpicsPVClient", return_value=client),
+            patch.object(
+                feedback_main,
+                "build_measurement_provider",
+                return_value=provider,
+            ),
+            patch.object(
+                feedback_main.EnergyControlLock,
+                "for_machine",
+                return_value=FakeLock(),
+            ),
+        ):
+            worker.run()
+
+        fresh_requests = [keys for keys, fresh in client.requests if fresh]
+        self.assertEqual(
+            fresh_requests,
+            [
+                tuple(source["closed_loop_keys"]),
+                tuple(source["recording_keys"]),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
