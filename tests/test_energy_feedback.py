@@ -1155,6 +1155,97 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
         finally:
             window.close()
 
+    def test_feedback_settings_dialog_does_not_take_acquisition_timing(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            dialog = window.feedback_settings_dialog
+            self.assertEqual(dialog.windowTitle(), "Feedback Settings")
+            self.assertTrue(dialog.isModal())
+            for control in (
+                window.controller_mode_combo,
+                window.gain_spin,
+                window.kp_spin,
+                window.step_limit_spin,
+                window.action_window_spin,
+                window.session_limit_spin,
+            ):
+                self.assertTrue(dialog.isAncestorOf(control))
+            for main_control in (
+                window.target_energy_spin,
+                window.sample_period_spin,
+                window.control_period_spin,
+            ):
+                self.assertFalse(dialog.isAncestorOf(main_control))
+            self.assertEqual(
+                {group.title() for group in dialog.findChildren(QGroupBox)},
+                {"Controller", "Operating Limits"},
+            )
+        finally:
+            self.app.processEvents()
+            window.close()
+
+    def test_feedback_settings_apply_atomically_and_cancel_restores_draft(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="half", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            original_gain = window._operator_parameters()["loop_gain"]
+            window._show_feedback_settings()
+            self.app.processEvents()
+            window.gain_spin.setValue(0.2)
+            self.assertAlmostEqual(
+                window._operator_parameters()["loop_gain"], original_gain
+            )
+            window.feedback_settings_dialog.reject()
+            self.assertAlmostEqual(window.gain_spin.value(), original_gain)
+
+            window._show_feedback_settings()
+            self.app.processEvents()
+            window.gain_spin.setValue(0.2)
+            window.feedback_settings_apply_button.click()
+            self.app.processEvents()
+            self.assertAlmostEqual(
+                window._operator_parameters()["loop_gain"], 0.2
+            )
+            self.assertIn("ki=0.2000", window.feedback_parameter_summary.text())
+            self.assertFalse(window.feedback_settings_dialog.isVisible())
+
+            window._set_parameter_editing(False)
+            self.assertFalse(window.feedback_settings_button.isEnabled())
+            window._set_parameter_editing(True)
+            self.assertTrue(window.feedback_settings_button.isEnabled())
+        finally:
+            window.close()
+
+    def test_irfel_pi_settings_reveal_and_apply_kp(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            self.assertTrue(window.kp_spin.isHidden())
+            window._show_feedback_settings()
+            self.app.processEvents()
+            window.controller_mode_combo.setCurrentText("PI")
+            self.assertFalse(window.kp_spin.isHidden())
+            self.assertTrue(window.kp_spin.isEnabled())
+            window.kp_spin.setValue(0.25)
+            window.feedback_settings_apply_button.click()
+            self.app.processEvents()
+
+            parameters = window._operator_parameters()
+            self.assertAlmostEqual(parameters["kp"], 0.25)
+            self.assertIn("PI", window.feedback_parameter_summary.text())
+            self.assertIn("kp=0.2500", window.feedback_parameter_summary.text())
+            window._set_parameter_editing(False)
+            self.assertFalse(window.kp_spin.isEnabled())
+        finally:
+            window.close()
+
     def test_half_write_controls_are_present_but_safe_until_connected(self):
         context = load_app_context(
             "energy_feedback", machine_id="half", control_backend="real"

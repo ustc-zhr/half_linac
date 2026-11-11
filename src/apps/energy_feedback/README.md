@@ -5,8 +5,9 @@ engine. The application contains no HALF-specific PV names; machine wiring and
 hard limits come from the selected machine profile.
 
 For HALF, the current profile uses the independent phase setpoint/readback pairs
-of LLRF18 and LLRF19. The operator can edit target energy, `ki`, `alpha`, step
-limit, action window, and session limit while feedback is off. Enabling feedback
+of LLRF18 and LLRF19. The target remains on the main panel; the operator edits
+`ki`, `alpha`, step limit, action window, and session limit together in Feedback
+Settings while feedback is off. Enabling feedback
 locks a parameter snapshot for that run. Writes are serialized by the shared
 energy-control lock. Each put is confirmed from an independent physical
 readback using an active Channel Access get; it no

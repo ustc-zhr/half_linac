@@ -32,6 +32,8 @@ from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFrame,
     QGridLayout,
@@ -1098,11 +1100,6 @@ class EnergyFeedbackWindow(QMainWindow):
         self.controller_mode_combo.setCurrentText(
             str(self.config.get("controller", {}).get("mode", "I"))
         )
-        controller_label = self._field_label("Controller")
-        controller_label.setVisible(self._reference_capture_required)
-        self.controller_mode_combo.setVisible(self._reference_capture_required)
-        feedback_grid.addWidget(controller_label, 2, 0)
-        feedback_grid.addWidget(self.controller_mode_combo, 2, 1, 1, 2)
 
         groups = tuple(self.config["control_groups"])
         group = groups[0] if groups else None
@@ -1176,20 +1173,20 @@ class EnergyFeedbackWindow(QMainWindow):
             ),
             suffix=f" {knob_unit}",
         )
-        parameter_rows = [
-            (f"Target {self.observable_label}", self.target_energy_spin),
-            (str(controls["gain"].get("label", "ki")), self.gain_spin),
-            (str(controls.get("kp", {}).get("label", "kp")), self.kp_spin),
-            (str(controls["actuator_ratio"].get("label", "alpha")), self.ratio_spin),
-            ("Step limit", self.step_limit_spin),
-            ("Action window", self.action_window_spin),
-            ("Session limit", self.session_limit_spin),
-        ]
-        if controls["actuator_ratio"].get("hidden"):
-            parameter_rows = [item for item in parameter_rows if item[1] is not self.ratio_spin]
-        for row, (label, spin) in enumerate(parameter_rows, start=3):
-            feedback_grid.addWidget(self._field_label(label), row, 0)
-            feedback_grid.addWidget(spin, row, 1, 1, 2)
+        feedback_grid.addWidget(
+            self._field_label(f"Target {self.observable_label}"), 2, 0
+        )
+        feedback_grid.addWidget(self.target_energy_spin, 2, 1, 1, 2)
+        self.feedback_parameter_summary = QLabel()
+        self.feedback_parameter_summary.setObjectName("feedbackParameterSummary")
+        self.feedback_parameter_summary.setProperty("role", "hint")
+        self.feedback_parameter_summary.setWordWrap(True)
+        feedback_grid.addWidget(self.feedback_parameter_summary, 3, 0, 1, 3)
+        self.feedback_settings_button = QPushButton("Feedback Settings…")
+        feedback_grid.addWidget(self.feedback_settings_button, 4, 0, 1, 3)
+        self._build_feedback_settings_dialog(controls)
+        self._committed_feedback_settings = self._feedback_settings_values()
+        self._update_feedback_parameter_summary()
         right_layout.addWidget(feedback_card)
 
         actuator_title = (
@@ -1292,8 +1289,12 @@ class EnergyFeedbackWindow(QMainWindow):
         )
         self.plot_range_combo.currentTextChanged.connect(self._draw_plot)
         self.plot_axis_combo.currentTextChanged.connect(self._draw_plot)
-        for spin in self._parameter_spins():
-            spin.editingFinished.connect(self._push_operator_parameters)
+        self.target_energy_spin.editingFinished.connect(
+            self._push_operator_parameters
+        )
+        self.feedback_settings_button.clicked.connect(
+            self._show_feedback_settings
+        )
         for spin in (self.sample_period_spin, self.control_period_spin):
             if spin is not None:
                 spin.valueChanged.connect(self._update_timing_summary)
@@ -1386,6 +1387,188 @@ class EnergyFeedbackWindow(QMainWindow):
         spin.setSuffix(suffix)
         return spin
 
+    def _build_feedback_settings_dialog(self, controls: Mapping[str, Any]) -> None:
+        dialog = QDialog(self)
+        dialog.setObjectName("feedbackSettingsDialog")
+        dialog.setWindowTitle("Feedback Settings")
+        dialog.setModal(True)
+        dialog.setMinimumWidth(430)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        note = QLabel(
+            "Settings are applied together and can only be changed while "
+            "feedback is off."
+        )
+        note.setProperty("role", "hint")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        controller_group = QGroupBox("Controller")
+        controller_group.setProperty("themeCard", True)
+        controller_grid = QGridLayout(controller_group)
+        controller_grid.setContentsMargins(12, 32, 12, 10)
+        controller_grid.setHorizontalSpacing(10)
+        controller_grid.setVerticalSpacing(7)
+        row = 0
+        self.feedback_mode_label = self._field_label("Mode")
+        self.feedback_mode_label.setVisible(self._reference_capture_required)
+        self.controller_mode_combo.setVisible(self._reference_capture_required)
+        controller_grid.addWidget(self.feedback_mode_label, row, 0)
+        controller_grid.addWidget(self.controller_mode_combo, row, 1)
+        if self._reference_capture_required:
+            row += 1
+
+        controller_grid.addWidget(
+            self._field_label(str(controls["gain"].get("label", "ki"))),
+            row,
+            0,
+        )
+        controller_grid.addWidget(self.gain_spin, row, 1)
+        row += 1
+
+        self.feedback_kp_label = self._field_label(
+            str(controls.get("kp", {}).get("label", "kp"))
+        )
+        controller_grid.addWidget(self.feedback_kp_label, row, 0)
+        controller_grid.addWidget(self.kp_spin, row, 1)
+        row += 1
+
+        self.feedback_ratio_label = self._field_label(
+            str(controls["actuator_ratio"].get("label", "alpha"))
+        )
+        ratio_visible = not bool(controls["actuator_ratio"].get("hidden"))
+        self.feedback_ratio_label.setVisible(ratio_visible)
+        self.ratio_spin.setVisible(ratio_visible)
+        controller_grid.addWidget(self.feedback_ratio_label, row, 0)
+        controller_grid.addWidget(self.ratio_spin, row, 1)
+        controller_grid.setColumnStretch(1, 1)
+        layout.addWidget(controller_group)
+
+        limits_group = QGroupBox("Operating Limits")
+        limits_group.setProperty("themeCard", True)
+        limits_grid = QGridLayout(limits_group)
+        limits_grid.setContentsMargins(12, 32, 12, 10)
+        limits_grid.setHorizontalSpacing(10)
+        limits_grid.setVerticalSpacing(7)
+        for row, (label, spin) in enumerate(
+            (
+                ("Step limit", self.step_limit_spin),
+                ("Action window", self.action_window_spin),
+                ("Session limit", self.session_limit_spin),
+            )
+        ):
+            limits_grid.addWidget(self._field_label(label), row, 0)
+            limits_grid.addWidget(spin, row, 1)
+        limits_grid.setColumnStretch(1, 1)
+        layout.addWidget(limits_group)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=dialog
+        )
+        apply_button = buttons.button(QDialogButtonBox.Ok)
+        apply_button.setText("Apply")
+        buttons.accepted.connect(self._apply_feedback_settings)
+        buttons.rejected.connect(dialog.reject)
+        dialog.rejected.connect(self._discard_feedback_settings)
+        layout.addWidget(buttons)
+
+        self.feedback_settings_dialog = dialog
+        self.feedback_settings_buttons = buttons
+        self.feedback_settings_apply_button = apply_button
+        self._controller_mode_changed(self.controller_mode_combo.currentText())
+
+    def _feedback_settings_values(self) -> dict[str, float | str]:
+        return {
+            "controller_mode": self.controller_mode_combo.currentText(),
+            "loop_gain": self.gain_spin.value(),
+            "kp": self.kp_spin.value(),
+            "ratio": self.ratio_spin.value(),
+            "max_knob_step": self.step_limit_spin.value(),
+            "action_window_mev": self.action_window_spin.value(),
+            "max_session_delta": self.session_limit_spin.value(),
+        }
+
+    def _load_feedback_settings(
+        self, settings: Mapping[str, float | str]
+    ) -> None:
+        self.controller_mode_combo.blockSignals(True)
+        self.controller_mode_combo.setCurrentText(
+            str(settings["controller_mode"])
+        )
+        self.controller_mode_combo.blockSignals(False)
+        for key, spin in (
+            ("loop_gain", self.gain_spin),
+            ("kp", self.kp_spin),
+            ("ratio", self.ratio_spin),
+            ("max_knob_step", self.step_limit_spin),
+            ("action_window_mev", self.action_window_spin),
+            ("max_session_delta", self.session_limit_spin),
+        ):
+            spin.setValue(float(settings[key]))
+        self._controller_mode_changed(self.controller_mode_combo.currentText())
+
+    def _show_feedback_settings(self) -> None:
+        if self._feedback_active:
+            self.event_value.setText(
+                "Stop feedback before changing feedback settings"
+            )
+            return
+        self._load_feedback_settings(self._committed_feedback_settings)
+        self.feedback_settings_dialog.open()
+
+    def _apply_feedback_settings(self) -> None:
+        if self._feedback_active:
+            self.feedback_settings_dialog.reject()
+            return
+        self._committed_feedback_settings = self._feedback_settings_values()
+        self._update_feedback_parameter_summary()
+        self._push_operator_parameters()
+        self._draw_plot()
+        self.feedback_settings_dialog.accept()
+
+    def _discard_feedback_settings(self) -> None:
+        self._load_feedback_settings(self._committed_feedback_settings)
+
+    @staticmethod
+    def _format_feedback_setting(spin: QDoubleSpinBox, value: float) -> str:
+        return f"{value:.{spin.decimals()}f}{spin.suffix()}"
+
+    def _update_feedback_parameter_summary(self) -> None:
+        settings = self._committed_feedback_settings
+        mode = str(settings["controller_mode"])
+        controller_parts = [
+            mode,
+            f"ki={float(settings['loop_gain']):.{self.gain_spin.decimals()}f}",
+        ]
+        if mode == "PI":
+            controller_parts.append(
+                f"kp={float(settings['kp']):.{self.kp_spin.decimals()}f}"
+            )
+        if not self.ratio_spin.isHidden():
+            controller_parts.append(
+                f"alpha={float(settings['ratio']):.{self.ratio_spin.decimals()}f}"
+            )
+        limit_parts = [
+            "Step ≤ "
+            + self._format_feedback_setting(
+                self.step_limit_spin, float(settings["max_knob_step"])
+            ),
+            "|error| < "
+            + self._format_feedback_setting(
+                self.action_window_spin, float(settings["action_window_mev"])
+            ),
+            "Session ≤ "
+            + self._format_feedback_setting(
+                self.session_limit_spin, float(settings["max_session_delta"])
+            ),
+        ]
+        summary = " · ".join(controller_parts) + "\n" + " · ".join(limit_parts)
+        self.feedback_parameter_summary.setText(summary)
+        self.feedback_parameter_summary.setToolTip(
+            "Applied feedback settings\n" + summary
+        )
 
     def _selected_control_timing(self):
         if self.sample_period_spin is None or self.control_period_spin is None:
@@ -1454,14 +1637,17 @@ class EnergyFeedbackWindow(QMainWindow):
         )
 
     def _operator_parameters(self) -> dict[str, float]:
+        settings = self._committed_feedback_settings
         return {
             "target_mev": self.target_energy_spin.value(),
-            "loop_gain": self.gain_spin.value(),
-            "kp": self.kp_spin.value() if self.controller_mode_combo.currentText() == "PI" else 0.0,
-            "ratio": self.ratio_spin.value(),
-            "max_knob_step": self.step_limit_spin.value(),
-            "action_window_mev": self.action_window_spin.value(),
-            "max_session_delta": self.session_limit_spin.value(),
+            "loop_gain": float(settings["loop_gain"]),
+            "kp": float(settings["kp"])
+            if settings["controller_mode"] == "PI"
+            else 0.0,
+            "ratio": float(settings["ratio"]),
+            "max_knob_step": float(settings["max_knob_step"]),
+            "action_window_mev": float(settings["action_window_mev"]),
+            "max_session_delta": float(settings["max_session_delta"]),
         }
 
     def _push_operator_parameters(self) -> None:
@@ -1577,7 +1763,7 @@ class EnergyFeedbackWindow(QMainWindow):
     @staticmethod
     def _build_theme_stylesheet(theme: Mapping[str, Any]) -> str:
         return f"""
-        QMainWindow, QWidget#centralRoot {{
+        QMainWindow, QWidget#centralRoot, QDialog#feedbackSettingsDialog {{
             background-color: {theme['window']}; color: {theme['text']};
         }}
         QWidget {{
@@ -1862,8 +2048,14 @@ class EnergyFeedbackWindow(QMainWindow):
         self._refresh_write_control_state()
 
     def _controller_mode_changed(self, mode: str) -> None:
-        self.kp_spin.setEnabled(mode == "PI" and not self._feedback_active)
-        self._push_operator_parameters()
+        show_kp = self._reference_capture_required and mode == "PI"
+        self.feedback_kp_label.setVisible(show_kp)
+        self.kp_spin.setVisible(show_kp)
+        self.kp_spin.setEnabled(
+            show_kp
+            and not self._feedback_active
+            and self.feedback_settings_button.isEnabled()
+        )
 
     def start_feedback(self) -> None:
         if not self.config.get("feedback_ready", True):
@@ -1877,6 +2069,11 @@ class EnergyFeedbackWindow(QMainWindow):
             return
         parameters = self._operator_parameters()
         group = self.config["control_groups"][0]
+        ratio_text = (
+            f", alpha={parameters['ratio']:.{self.ratio_spin.decimals()}f}"
+            if not self.ratio_spin.isHidden()
+            else ""
+        )
         actuator_text = ", ".join(
             f"{actuator.label}: {self.config['signals'][actuator.setpoint_key]['pv']}"
             for actuator in group.actuators
@@ -1885,8 +2082,8 @@ class EnergyFeedbackWindow(QMainWindow):
             "Enable automatic real-machine control-knob writes?\n\n"
             f"{actuator_text}\n"
             f"target={parameters['target_mev']:.4f} {self.observable_unit}, "
-            f"mode={self.controller_mode_combo.currentText()}, "
-            f"kp={parameters['kp']:.4f}, ki={parameters['loop_gain']:.4f}\n"
+            f"mode={self._committed_feedback_settings['controller_mode']}, "
+            f"kp={parameters['kp']:.4f}, ki={parameters['loop_gain']:.4f}{ratio_text}\n"
             f"step≤{parameters['max_knob_step']:.3f} {group.actuators[0].unit}, "
             f"|error|<{parameters['action_window_mev']:.4f} {self.observable_unit}, "
             f"session≤{parameters['max_session_delta']:.3f} {group.actuators[0].unit}"
@@ -2016,15 +2213,25 @@ class EnergyFeedbackWindow(QMainWindow):
         self._refresh_write_control_state()
 
     def _set_parameter_editing(self, enabled: bool) -> None:
+        if not enabled and self.feedback_settings_dialog.isVisible():
+            self.feedback_settings_dialog.reject()
         for spin in self._parameter_spins():
             editable = enabled and (
                 spin is not self.target_energy_spin
                 or (self._target_initialized and not self._reference_capture_required)
             )
             if spin is self.kp_spin:
-                editable = editable and self.controller_mode_combo.currentText() == "PI"
+                editable = (
+                    editable
+                    and self._reference_capture_required
+                    and self.controller_mode_combo.currentText() == "PI"
+                )
             spin.setEnabled(editable)
-        self.controller_mode_combo.setEnabled(enabled)
+        self.feedback_settings_button.setEnabled(enabled)
+        self.controller_mode_combo.setEnabled(
+            enabled and self._reference_capture_required
+        )
+        self._controller_mode_changed(self.controller_mode_combo.currentText())
         self.capture_target_button.setEnabled(enabled and self._reference_capture_required)
 
     def _set_manual_controls(self, enabled: bool) -> None:
@@ -2391,8 +2598,8 @@ class EnergyFeedbackWindow(QMainWindow):
             )
             deadband = groups[0].deadband_mev if groups else 0.0
             action_window = (
-                self.action_window_spin.value()
-                if hasattr(self, "action_window_spin")
+                float(self._committed_feedback_settings["action_window_mev"])
+                if hasattr(self, "_committed_feedback_settings")
                 else groups[0].action_window_mev
                 if groups
                 else 0.0
