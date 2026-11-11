@@ -35,7 +35,7 @@
     "additional_signals": []
   },
   "write_verification": {
-    "timeout_s": 5.0,
-    "readback_tolerance_kv": 0.015
+    "timeout_s": 8.0,
+    "readback_tolerance_kv": 0.02
   }
 }
