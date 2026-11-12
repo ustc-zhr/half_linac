@@ -336,6 +336,11 @@ def load_runtime_config(
                     readback_key=readback_key,
                     verify_tolerance=float(raw_actuator["verify_tolerance"]),
                     command_precision=command_precision,
+                    command_resolution=(
+                        float(raw_actuator["command_resolution"])
+                        if raw_actuator.get("command_resolution") is not None
+                        else None
+                    ),
                     cyclic_period=(
                         float(raw_actuator["cyclic_period"])
                         if raw_actuator.get("cyclic_period") is not None

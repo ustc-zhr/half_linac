@@ -82,6 +82,7 @@
           "max_step": 0.3,
           "max_session_delta": 3.0,
           "verify_tolerance": 0.1,
+          "command_resolution": 0.01,
           "cyclic_period": 360.0,
           "operating_range": [-180.0, 180.0]
         },
@@ -96,6 +97,7 @@
           "max_step": 0.325,
           "max_session_delta": 3.0,
           "verify_tolerance": 0.1,
+          "command_resolution": 0.01,
           "cyclic_period": 360.0,
           "operating_range": [-180.0, 180.0]
         }
@@ -105,7 +107,8 @@
   "write_verification": {
     "timeout_s": 1.0,
     "poll_interval_s": 0.05,
-    "command_precision": 2
+    "command_precision": 2,
+    "verify_readback": true
   },
   "operator_controls": {
     "target": {

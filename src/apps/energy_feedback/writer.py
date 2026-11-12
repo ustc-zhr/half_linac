@@ -6,6 +6,7 @@ import math
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import replace
+from decimal import Decimal
 
 from .client import WritablePVClient
 from .cyclic import cyclic_delta, normalize_cyclic
@@ -22,6 +23,14 @@ from .models import (
 _QUANTIZED_NOOP_REASON = "feedback command unchanged after rounding"
 
 
+def _quantize_command(value: float, resolution: float | None) -> float:
+    if resolution is None:
+        return float(value)
+    decimal_resolution = Decimal(str(resolution))
+    steps = round(Decimal(str(value)) / decimal_resolution)
+    return float(decimal_resolution * steps)
+
+
 def apply_feedback_decision(
     client: WritablePVClient,
     group: ShadowControlGroup,
@@ -29,10 +38,11 @@ def apply_feedback_decision(
     *,
     timeout_s: float,
     poll_interval_s: float,
+    verify_readback: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> FeedbackDecision:
-    """Apply one complete suggestion and verify every independent readback."""
+    """Apply one complete suggestion with the configured verification policy."""
 
     if not decision.has_valid_suggestion:
         return decision
@@ -48,7 +58,9 @@ def apply_feedback_decision(
     rounded_commands: list[ActuatorCommand] = []
     for command in decision.commands:
         actuator = actuators[command.actuator_id]
-        proposed = round(float(command.proposed), actuator.command_precision)
+        proposed = _quantize_command(
+            float(command.proposed), actuator.command_resolution
+        )
         if actuator.cyclic_period is not None:
             if actuator.operating_range is None:
                 return replace(
@@ -81,6 +93,7 @@ def apply_feedback_decision(
             write_verified=False,
             rollback_applied=False,
             write_detail="no write attempted",
+            command_accepted=True,
         )
     ok, detail, rollback_applied = _write_commands(
         client,
@@ -88,6 +101,7 @@ def apply_feedback_decision(
         rounded,
         timeout_s=timeout_s,
         poll_interval_s=poll_interval_s,
+        verify_readback=verify_readback,
         sleep=sleep,
         monotonic=monotonic,
     )
@@ -97,9 +111,10 @@ def apply_feedback_decision(
             state="APPLIED",
             reason="feedback applied",
             commands=rounded,
-            write_verified=True,
+            write_verified=verify_readback,
             rollback_applied=False,
             write_detail=detail,
+            command_accepted=True,
         )
     return replace(
         decision,
@@ -120,6 +135,7 @@ def apply_manual_targets(
     *,
     timeout_s: float,
     poll_interval_s: float,
+    verify_readback: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> FeedbackDecision:
@@ -209,10 +225,11 @@ def apply_manual_targets(
         proposal,
         timeout_s=timeout_s,
         poll_interval_s=poll_interval_s,
+        verify_readback=verify_readback,
         sleep=sleep,
         monotonic=monotonic,
     )
-    if result.write_verified:
+    if result.state == "APPLIED":
         return replace(result, reason="manual control-knob write applied")
     if result.reason == _QUANTIZED_NOOP_REASON:
         return replace(
@@ -229,10 +246,11 @@ def _write_commands(
     *,
     timeout_s: float,
     poll_interval_s: float,
+    verify_readback: bool,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> tuple[bool, str, bool]:
-    """Write a transaction and confirm values with active Channel Access gets."""
+    """Write a transaction and optionally confirm physical readbacks."""
 
     details: list[str] = []
     attempted: list[ActuatorCommand] = []
@@ -248,6 +266,7 @@ def _write_commands(
                 actuators,
                 tuple(attempted),
                 details,
+                verify_readback=verify_readback,
                 timeout_s=timeout_s,
                 poll_interval_s=poll_interval_s,
                 sleep=sleep,
@@ -274,11 +293,18 @@ def _write_commands(
                 actuators,
                 tuple(attempted),
                 details,
+                verify_readback=verify_readback,
                 timeout_s=timeout_s,
                 poll_interval_s=poll_interval_s,
                 sleep=sleep,
                 monotonic=monotonic,
             )
+        if not verify_readback:
+            details.append(
+                f"{actuator.id} setpoint write completed; "
+                "active readback verification disabled"
+            )
+            continue
         verified, readback = _wait_for_readback(
             client,
             actuator,
@@ -298,6 +324,7 @@ def _write_commands(
                 actuators,
                 tuple(attempted),
                 details,
+                verify_readback=verify_readback,
                 timeout_s=timeout_s,
                 poll_interval_s=poll_interval_s,
                 sleep=sleep,
@@ -318,9 +345,14 @@ def _failed_with_rollback(
         details.append("no rollback needed")
         return False, "; ".join(details), False
     rollback_ok = _rollback(client, actuators, commands, **verification)
-    details.append(
-        "rollback verified by active readback" if rollback_ok else "rollback failed"
-    )
+    if rollback_ok:
+        details.append(
+            "rollback verified by active readback"
+            if verification["verify_readback"]
+            else "rollback write completed; active readback verification disabled"
+        )
+    else:
+        details.append("rollback failed")
     return False, "; ".join(details), rollback_ok
 
 
@@ -331,6 +363,7 @@ def _rollback(
     *,
     timeout_s: float,
     poll_interval_s: float,
+    verify_readback: bool,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> bool:
@@ -346,8 +379,8 @@ def _rollback(
             )
         except Exception:  # noqa: BLE001 - rollback result carries failure
             put_ok = False
-        verified = False
-        if put_ok:
+        verified = put_ok and not verify_readback
+        if put_ok and verify_readback:
             verified, _ = _wait_for_readback(
                 client,
                 actuator,

@@ -390,6 +390,8 @@ class AcquisitionThread(QThread):
             self._feedback_event.clear()
             feedback_active = False
             origins.clear()
+            if fir is not None:
+                fir.reset_controller()
             if control_lock is not None:
                 control_lock.release()
                 control_lock = None
@@ -628,6 +630,8 @@ class AcquisitionThread(QThread):
                             feedback_active = True
                             origins.clear()
                             last_action_token = None
+                            if fir is not None:
+                                fir.reset_controller()
                             self.feedback_state.emit(True, "Feedback enabled")
                     elif not requested and feedback_active:
                         disarm("Feedback stopped")
@@ -694,6 +698,7 @@ class AcquisitionThread(QThread):
                                         "ki": fir.controller.ki,
                                         "p_component": proposal.p_component,
                                         "i_component": proposal.i_component,
+                                        "quantization_residual": proposal.residual_component,
                                     }
                                     decision = evaluate_shadow(
                                         measurement,
@@ -779,9 +784,30 @@ class AcquisitionThread(QThread):
                                 decision,
                                 timeout_s=float(verification["timeout_s"]),
                                 poll_interval_s=float(verification["poll_interval_s"]),
+                                verify_readback=bool(
+                                    verification.get("verify_readback", True)
+                                ),
                             )
-                            if decision.write_verified and fir is not None and proposal is not None:
-                                fir.commit(proposal)
+                            if (
+                                decision.command_accepted
+                                and fir is not None
+                                and proposal is not None
+                            ):
+                                command = decision.commands[0]
+                                actuator = group.actuators[0]
+                                fir.commit(
+                                    proposal,
+                                    applied_knob_delta=(
+                                        command.delta / actuator.coefficient
+                                    ),
+                                )
+                                decision = replace(
+                                    decision,
+                                    control_parameters={
+                                        **dict(decision.control_parameters),
+                                        "quantization_residual": fir.controller.residual,
+                                    },
+                                )
                             if (
                                 decision.state == "HOLD"
                                 and decision.write_detail
@@ -860,6 +886,9 @@ class AcquisitionThread(QThread):
                 targets,
                 timeout_s=float(verification["timeout_s"]),
                 poll_interval_s=float(verification["poll_interval_s"]),
+                verify_readback=bool(
+                    verification.get("verify_readback", True)
+                ),
             )
         except Exception as exc:  # noqa: BLE001
             result = FeedbackDecision("HOLD", f"manual phase write failed: {exc}", None)
@@ -2231,9 +2260,14 @@ class EnergyFeedbackWindow(QMainWindow):
         self.event_value.setText(message)
 
     def _on_manual_result(self, decision: FeedbackDecision) -> None:
-        if decision.write_verified:
+        if decision.state == "APPLIED":
             self.event_value.setText(f"{decision.reason} · {decision.write_detail}")
-            self._set_status_item("action", "Manual write confirmed", "success")
+            status = (
+                "Manual write confirmed"
+                if decision.write_verified
+                else "Manual write sent"
+            )
+            self._set_status_item("action", status, "success")
         elif decision.state == "SHADOW":
             self.event_value.setText(f"{decision.reason} · {decision.write_detail}")
             self._set_status_item("action", "Manual target unchanged", "subtle")
@@ -2496,7 +2530,7 @@ class EnergyFeedbackWindow(QMainWindow):
                 else None
             )
             command = (
-                commands.get(actuator.id) if decision.write_verified else None
+                commands.get(actuator.id) if decision.state == "APPLIED" else None
             )
             command_delta = (
                 cyclic_delta(

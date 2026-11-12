@@ -357,13 +357,28 @@ class FirFeedbackCoordinator:
             float(self.calibration["response_q_mm_per_kv"]),
         )
 
-    def commit(self, proposal: PIProposal) -> None:
-        self.controller.commit(proposal)
+    def commit(
+        self,
+        proposal: PIProposal,
+        *,
+        applied_knob_delta: float | None = None,
+    ) -> None:
+        self.controller.commit(
+            proposal,
+            applied_knob_delta=applied_knob_delta,
+        )
+
+    def reset_controller(self) -> None:
+        self.controller.reset()
 
     def configure_controller(self, *, kp: float, ki: float, period_s: float) -> None:
-        mode_changed = (self.controller.kp == 0.0) != (float(kp) == 0.0)
+        changed = (
+            self.controller.kp,
+            self.controller.ki,
+            self.controller.period_s,
+        ) != (float(kp), float(ki), float(period_s))
         self.controller.configure(kp=kp, ki=ki, period_s=period_s)
-        if mode_changed:
+        if changed:
             self.controller.reset()
 
 

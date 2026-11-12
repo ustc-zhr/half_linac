@@ -417,6 +417,32 @@ class WindowAndControllerTests(unittest.TestCase):
         after_commit = controller.propose(error=1.0, response=-2.0)
         self.assertAlmostEqual(after_commit.p_component, 0.25)
 
+    def test_sub_resolution_integral_motion_accumulates_and_resets(self):
+        controller = IncrementalPIController(kp=0.0, ki=0.01, period_s=5.0)
+
+        first = controller.propose(error=0.1, response=15.0)
+        self.assertAlmostEqual(first.knob_delta, 1.0 / 3000.0)
+        controller.commit(first, applied_knob_delta=0.0)
+
+        second = controller.propose(error=0.1, response=15.0)
+        self.assertAlmostEqual(second.knob_delta, 2.0 / 3000.0)
+        controller.commit(second, applied_knob_delta=0.001)
+        self.assertAlmostEqual(controller.residual, -1.0 / 3000.0)
+
+        third = controller.propose(error=0.1, response=15.0)
+        self.assertAlmostEqual(third.knob_delta, 0.0, places=12)
+        controller.reset()
+        self.assertEqual(controller.residual, 0.0)
+
+    def test_sub_resolution_motion_cancels_when_error_reverses(self):
+        controller = IncrementalPIController(kp=0.0, ki=0.01, period_s=5.0)
+        first = controller.propose(error=0.1, response=15.0)
+        controller.commit(first, applied_knob_delta=0.0)
+
+        reversed_proposal = controller.propose(error=-0.1, response=15.0)
+
+        self.assertAlmostEqual(reversed_proposal.knob_delta, 0.0, places=12)
+
     def test_target_capture_and_session_guards(self):
         source = {"calibration": dict(CALIBRATION)}
         coordinator = FirFeedbackCoordinator(
@@ -456,7 +482,10 @@ class IrfelProfileTests(unittest.TestCase):
             "energy_feedback", machine_id="irfel", control_backend="real"
         )
         raw = context.profile.workflows["energy_feedback"]
-        self.assertEqual(raw["actuator"], {"element": "MODULATOR_HV1"})
+        self.assertEqual(
+            raw["actuator"],
+            {"element": "MODULATOR_HV1", "command_resolution": 0.001},
+        )
         self.assertEqual(
             set(raw["feedback"]),
             {
@@ -499,6 +528,7 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertNotIn("fct", raw["measurement"])
         self.assertNotIn("observable", raw["measurement"])
         self.assertNotIn("poll_interval_s", raw["write_verification"])
+        self.assertFalse(raw["write_verification"]["verify_readback"])
         self.assertNotIn("bpm_timestamp_policy", raw["measurement"])
         self.assertNotIn("source_timestamp_policy", raw["measurement"])
         self.assertNotIn("max_timestamp_skew_s", raw["measurement"])
@@ -550,9 +580,18 @@ class IrfelProfileTests(unittest.TestCase):
             raw["write_verification"]["readback_tolerance_kv"],
         )
         self.assertEqual(actuator["command_basis"], "setpoint")
+        self.assertAlmostEqual(
+            actuator["command_resolution"],
+            raw["actuator"]["command_resolution"],
+        )
+        self.assertAlmostEqual(
+            config["control_groups"][0].actuators[0].command_resolution,
+            raw["actuator"]["command_resolution"],
+        )
         self.assertNotIn("operating_range", actuator)
         self.assertAlmostEqual(config["write_verification"]["poll_interval_s"], 0.05)
         self.assertEqual(config["write_verification"]["command_precision"], 3)
+        self.assertFalse(config["write_verification"]["verify_readback"])
         self.assertAlmostEqual(config["runtime"]["stale_timeout_s"], 3.0)
         self.assertTrue(config["operator_controls"]["actuator_ratio"]["hidden"])
 
@@ -867,6 +906,44 @@ class IrfelProfileTests(unittest.TestCase):
         self.assertTrue(held.rollback_applied)
         self.assertAlmostEqual(failed_client.value, 39.0)
         self.assertEqual(failed_client.writes[-1], (actuator.setpoint_key, 39.0))
+
+    def test_irfel_hv_write_can_use_caput_completion_only(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        config = load_runtime_config(context)
+        group = config["control_groups"][0]
+        actuator = group.actuators[0]
+        client = FakeHvClient(
+            actuator.setpoint_key, actuator.readback_key, verify_write=False
+        )
+        decision = FeedbackDecision(
+            "SHADOW",
+            "valid feedback suggestion",
+            1.0,
+            knob_delta=0.02,
+            commands=(
+                ActuatorCommand(
+                    actuator.id, 39.0, 0.02, 39.02, actuator.unit
+                ),
+            ),
+        )
+
+        applied = apply_feedback_decision(
+            client,
+            group,
+            decision,
+            timeout_s=0.01,
+            poll_interval_s=0.001,
+            verify_readback=False,
+        )
+
+        self.assertEqual(applied.state, "APPLIED")
+        self.assertFalse(applied.write_verified)
+        self.assertTrue(applied.command_accepted)
+        self.assertEqual(client.writes, [(actuator.setpoint_key, 39.02)])
+        self.assertEqual(client.fresh_reads, [])
+        self.assertAlmostEqual(client.value, 39.0)
 
     def test_closed_loop_reuses_recorded_window_safety_snapshot(self):
         from half_linac.src.apps.energy_feedback import main as feedback_main

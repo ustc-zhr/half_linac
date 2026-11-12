@@ -95,6 +95,7 @@ class ShadowActuator:
     readback_key: str = ""
     verify_tolerance: float = 0.05
     command_precision: int = 2
+    command_resolution: float | None = None
     cyclic_period: float | None = None
     command_basis: str = "readback"
 
@@ -150,6 +151,7 @@ class FeedbackDecision:
     rollback_applied: bool = False
     write_detail: str = ""
     control_parameters: Mapping[str, float] = field(default_factory=dict)
+    command_accepted: bool = False
 
     @property
     def has_valid_suggestion(self) -> bool:

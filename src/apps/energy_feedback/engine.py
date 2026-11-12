@@ -279,6 +279,7 @@ class PIProposal:
     p_component: float
     i_component: float
     knob_delta: float
+    residual_component: float = 0.0
 
 
 class IncrementalPIController:
@@ -287,6 +288,11 @@ class IncrementalPIController:
     def __init__(self, *, kp: float = 0.0, ki: float = 0.1, period_s: float = 1.0):
         self.configure(kp=kp, ki=ki, period_s=period_s)
         self._previous_error: float | None = None
+        self._residual = 0.0
+
+    @property
+    def residual(self) -> float:
+        return self._residual
 
     def configure(self, *, kp: float, ki: float, period_s: float) -> None:
         values = (float(kp), float(ki), float(period_s))
@@ -302,6 +308,7 @@ class IncrementalPIController:
             if current_error is not None and math.isfinite(current_error)
             else None
         )
+        self._residual = 0.0
 
     def propose(self, error: float, response: float) -> PIProposal:
         error = float(error)
@@ -311,10 +318,31 @@ class IncrementalPIController:
         previous = error if self._previous_error is None else self._previous_error
         p_component = self.kp * (error - previous) / response
         i_component = self.ki * self.period_s * error / response
-        return PIProposal(error, p_component, i_component, p_component + i_component)
+        return PIProposal(
+            error,
+            p_component,
+            i_component,
+            p_component + i_component + self._residual,
+            self._residual,
+        )
 
-    def commit(self, proposal: PIProposal) -> None:
+    def commit(
+        self,
+        proposal: PIProposal,
+        *,
+        applied_knob_delta: float | None = None,
+    ) -> None:
+        applied = (
+            float(proposal.knob_delta)
+            if applied_knob_delta is None
+            else float(applied_knob_delta)
+        )
+        if not math.isfinite(applied):
+            raise ValueError("applied knob delta must be finite")
         self._previous_error = float(proposal.error)
+        self._residual = float(proposal.knob_delta) - applied
+        if math.isclose(self._residual, 0.0, abs_tol=1e-15):
+            self._residual = 0.0
 
 
 class NonOverlappingAggregateWindow:

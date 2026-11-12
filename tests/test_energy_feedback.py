@@ -128,6 +128,7 @@ def actuator(
     machine_limit: tuple[float, float] | None = (-30.0, 30.0),
     cyclic_period: float | None = None,
     command_basis: str = "readback",
+    command_resolution: float | None = 0.001,
 ) -> ShadowActuator:
     return ShadowActuator(
         id=actuator_id,
@@ -142,6 +143,7 @@ def actuator(
         readback_key=f"{actuator_id}.read",
         verify_tolerance=0.01,
         command_precision=3,
+        command_resolution=command_resolution,
         cyclic_period=cyclic_period,
         command_basis=command_basis,
     )
@@ -474,6 +476,22 @@ class FeedbackWriterTests(unittest.TestCase):
         self.assertTrue(result.write_verified)
         self.assertEqual([item[0] for item in self.client.writes], ["a.set", "b.set"])
 
+    def test_write_can_skip_active_readback_verification(self):
+        result = apply_feedback_decision(
+            self.client,
+            self.group,
+            self._decision(),
+            timeout_s=0.1,
+            poll_interval_s=0.01,
+            verify_readback=False,
+        )
+
+        self.assertEqual(result.state, "APPLIED")
+        self.assertFalse(result.write_verified)
+        self.assertTrue(result.command_accepted)
+        self.assertEqual(self.client.fresh_requests, [])
+        self.assertIn("active readback verification disabled", result.write_detail)
+
     def test_delayed_active_readback_is_accepted_within_timeout(self):
         proposal = FeedbackDecision(
             "SHADOW",
@@ -565,9 +583,34 @@ class FeedbackWriterTests(unittest.TestCase):
         )
         self.assertEqual(result.state, "SHADOW")
         self.assertEqual(result.reason, "feedback command unchanged after rounding")
+        self.assertTrue(result.command_accepted)
         self.assertFalse(result.write_verified)
         self.assertEqual(result.write_detail, "no write attempted")
         self.assertEqual(self.client.writes, [])
+
+    def test_actuator_without_resolution_preserves_continuous_command(self):
+        proposal = FeedbackDecision(
+            "SHADOW",
+            "valid feedback suggestion",
+            0.0004,
+            commands=(ActuatorCommand("a", 10.0, 0.0004, 10.0004, "deg"),),
+        )
+        continuous = replace(
+            self.group.actuators[0], command_resolution=None
+        )
+        selected_group = replace(self.group, actuators=(continuous,))
+
+        result = apply_feedback_decision(
+            self.client,
+            selected_group,
+            proposal,
+            timeout_s=0.1,
+            poll_interval_s=0.01,
+        )
+
+        self.assertEqual(result.state, "APPLIED")
+        self.assertTrue(result.command_accepted)
+        self.assertAlmostEqual(self.client.writes[-1][1], 10.0004)
 
     def test_second_write_failure_rolls_back_both_actuators(self):
         self.client.fail_once.add("b.set")
@@ -581,6 +624,7 @@ class FeedbackWriterTests(unittest.TestCase):
         self.assertEqual(result.state, "HOLD")
         self.assertFalse(result.write_verified)
         self.assertTrue(result.rollback_applied)
+        self.assertFalse(result.command_accepted)
         self.assertEqual(self.client.readings["a.read"].value, 10.0)
         self.assertEqual(self.client.readings["b.read"].value, -20.0)
 
@@ -951,6 +995,13 @@ class EnergyFeedbackProfileTests(unittest.TestCase):
         bad_period["control_groups"][0]["actuators"][0]["cyclic_period"] = 360
         mutations.append(bad_period)
 
+        bad_resolution = deepcopy(base)
+        bad_resolution["control_groups"][0]["actuators"][0][
+            "command_resolution"
+        ] = 0
+        mutations.append(bad_resolution)
+
+
         for workflow in mutations:
             with self.subTest(workflow=workflow):
                 with self.assertRaises(MachineProfileError):
@@ -997,6 +1048,10 @@ class EnergyFeedbackProfileTests(unittest.TestCase):
             },
         }
         validate_energy_feedback_workflow(profile, workflow)
+
+        workflow["write_verification"]["verify_readback"] = "false"
+        with self.assertRaisesRegex(MachineProfileError, "verify_readback.*boolean"):
+            validate_energy_feedback_workflow(profile, workflow)
 
 
 class EnergyFeedbackLoggingTests(unittest.TestCase):

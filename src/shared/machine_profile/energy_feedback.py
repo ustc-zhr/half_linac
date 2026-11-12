@@ -20,6 +20,7 @@ _BPM_DISPERSION_RUNTIME_DEFAULTS = {
 _BPM_DISPERSION_VERIFICATION_DEFAULTS = {
     "poll_interval_s": 0.05,
     "command_precision": 3,
+    "verify_readback": True,
 }
 _BPM_DISPERSION_CONTROL_DEFAULTS = {
     "sample_period_s": {"label": "Sample period", "decimals": 1},
@@ -349,6 +350,9 @@ def _expand_compact_bpm_dispersion_workflow(
                     "verify_tolerance": verification_config.get(
                         "readback_tolerance_kv"
                     ),
+                    "command_resolution": actuator_config.get(
+                        "command_resolution"
+                    ),
                     "command_basis": "setpoint",
                 }
             ],
@@ -366,7 +370,8 @@ def _expand_compact_bpm_dispersion_workflow(
         ),
     }
     expanded["write_verification"] = {
-        "timeout_s": verification_config.get("timeout_s")
+        "timeout_s": verification_config.get("timeout_s"),
+        "verify_readback": verification_config.get("verify_readback", True),
     }
     expanded["operator_controls"] = copy.deepcopy(
         _BPM_DISPERSION_OPERATOR_CONTROL_DEFAULTS
@@ -907,6 +912,13 @@ def _validate_bpm_dispersion_workflow(
     if session_limit < max_step:
         _fail(profile, "control actuator session limit must be at least one step")
     _number(profile, actuator.get("verify_tolerance"), "control actuator verify_tolerance", positive=True)
+    if actuator.get("command_resolution") is not None:
+        _number(
+            profile,
+            actuator.get("command_resolution"),
+            "control actuator command_resolution",
+            positive=True,
+        )
     if actuator.get("command_basis", "readback") not in {"readback", "setpoint"}:
         _fail(profile, "control actuator command_basis must be 'readback' or 'setpoint'")
 
@@ -929,6 +941,8 @@ def _validate_bpm_dispersion_workflow(
     if poll > timeout:
         _fail(profile, "write verification poll interval exceeds timeout")
     _integer(profile, verification.get("command_precision"), "write_verification.command_precision")
+    if not isinstance(verification.get("verify_readback", True), bool):
+        _fail(profile, "write_verification.verify_readback must be boolean")
 
     runtime = _mapping(profile, workflow.get("runtime"), "runtime")
     for key in ("sample_period_s", "plot_period_s", "connection_timeout_s", "stale_timeout_s"):
@@ -1251,6 +1265,13 @@ def validate_energy_feedback_workflow(
                 f"{item}.verify_tolerance",
                 positive=True,
             )
+            if actuator.get("command_resolution") is not None:
+                _number(
+                    profile,
+                    actuator.get("command_resolution"),
+                    f"{item}.command_resolution",
+                    positive=True,
+                )
             operating_range = _range(
                 profile, actuator.get("operating_range"), f"{item}.operating_range"
             )
@@ -1311,6 +1332,8 @@ def validate_energy_feedback_workflow(
         )
         if not 0 <= precision <= 6:
             _fail(profile, "write_verification.command_precision must be between 0 and 6")
+        if not isinstance(write_verification.get("verify_readback", True), bool):
+            _fail(profile, "write_verification.verify_readback must be boolean")
 
         operator_controls = _mapping(
             profile,

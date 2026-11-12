@@ -9,10 +9,11 @@ of LLRF18 and LLRF19. The target remains on the main panel; the operator edits
 `ki`, `alpha`, step limit, action window, and session limit together in Feedback
 Settings while feedback is off. Enabling feedback
 locks a parameter snapshot for that run. Writes are serialized by the shared
-energy-control lock. Each put is confirmed from an independent physical
-readback using an active Channel Access get; it no
-longer waits for a monitor callback or timestamp advance. A partial write or
-physical mismatch rolls back only the actuators already attempted.
+energy-control lock. `write_verification.verify_readback` controls the post-put
+policy. When enabled, each put is confirmed from an independent physical
+readback using an active Channel Access get. When disabled, Channel Access put
+completion marks the command APPLIED while `write_verified` remains false. Put
+failures still stop feedback and attempt rollback.
 
 Readback supervision is deliberately split into three layers:
 
@@ -21,9 +22,10 @@ Readback supervision is deliberately split into three layers:
 - Before every control action, closed-loop safety inputs use active reads. The
   machine HV limit (when configured), HV setpoint-to-readback mismatch, RF phase
   drift, beam presence, step limits, and session limits remain fail-closed.
-- After a put, only physical arrival is polled. The value must enter the
-  configured tolerance before timeout; source timestamps and monitor receipt
-  times are not additional gates. Rollback uses the same active-readback check.
+- After a put, physical arrival is polled only when `verify_readback` is enabled.
+  The value must then enter the configured tolerance before timeout; source
+  timestamps and monitor receipt times are not additional gates. Rollback uses
+  the same policy.
 
 This policy is specific to continuous energy feedback. Ordered motion and scan
 workflows elsewhere in the repository keep strict arrival checks because their
@@ -50,7 +52,7 @@ but do not gate BPM samples, closed-loop safety reads, or writes.
 Automatic feedback retains the configured per-step and per-session limits
 (`0.02 kV` and `±0.2 kV` in the current IRFEL profile). Manual targets do not use
 those automatic-control limits; they require operator confirmation, obey the
-machine limit when present, and must pass active physical-readback verification.
+machine limit when present, and use the configured post-write verification policy.
 
 The raw IRFEL profile uses the compact single-actuator fields
 `actuator.element` and `feedback`. The machine-profile normalizer expands them
@@ -62,8 +64,9 @@ For IRFEL, `feedback.ki` is the only gain source and
 `feedback.max_step_kv` is the only default step-limit source. Fixed policy
 values such as reference capture, valid-PV enforcement, HOLD-on-fault, operator
 ranges, readback polling interval, command precision, and display metadata are
-code defaults rather than operator choices. The explicit 5-second write timeout
-remains in the profile for commissioning review.
+code defaults rather than operator choices. The explicit write timeout remains in the profile for commissioning review.
+IRFEL currently sets `verify_readback` to false for comparison with the
+independent HV Feedback behavior; HALF keeps it enabled.
 
 The HALF workflow currently selects the `energy_spectrum_target` provider as a
 commissioning source. It supplies the feedback input `energy` from `H:E` in

@@ -13,7 +13,10 @@
       "hv_response_mm_per_kv": 15
     }
   },
-  "actuator": {"element": "MODULATOR_HV1"},
+  "actuator": {
+    "element": "MODULATOR_HV1",
+    "command_resolution": 0.001
+  },
   "feedback": {
     "sample_period_s": 0.2,
     "control_period_s": 5.0,
@@ -36,6 +39,7 @@
   },
   "write_verification": {
     "timeout_s": 8.0,
-    "readback_tolerance_kv": 0.02
+    "readback_tolerance_kv": 0.02,
+    "verify_readback": false
   }
 }
