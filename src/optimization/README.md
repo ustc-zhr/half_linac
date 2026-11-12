@@ -21,8 +21,15 @@
 
 - GUI launcher entry: `python3 src/optimization/mainOPT.py`
 - HALF task-config wrapper: `src/optimization/configs/para_half.py`
+- Offline finite-pool InfoBAX kernel: `src/optimization/infobax/`
 
 The wrapper config currently forwards to the vendored GOTAcc HALF config so the call site can stabilize first. If you later move the full HALF configuration out of GOTAcc, the `half_linac` side can keep using the same wrapper path.
+
+The InfoBAX package is deliberately separate from GOTAcc and the existing
+full-scan RCDS/BO/cBO adapters. Its P2-B0 interface consumes one finite-pool
+beam-size-variance observation at a time and performs no machine I/O. See
+[`infobax/README.md`](infobax/README.md) for its numerical contract and stage
+boundary.
 
 ## Runtime Artifacts
 
