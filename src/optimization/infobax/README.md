@@ -46,6 +46,25 @@ On 2026-11-13, scoring the 57 unobserved queries in the research 7×9 pool took
 0.595 s in the local HALF Python environment, below the 2 s reporting target.
 Timing is intentionally not a cross-machine CI gate.
 
-This stage does not include a HALF session adapter, GUI, EPICS, real-machine
-authorization, Mphi, PSD, Laplace, or HMC. Those require later stages and must
-not be inferred from this package's availability.
+## HALF VM session integration (P2-B1)
+
+`src/apps/emit_measure/infobax_session.py` adds a recoverable orchestration
+layer around this numerical core. It records one candidate/K1/image result per
+query, writes an atomic `infobax_session.json` checkpoint after every committed
+observation, restores the pre-run machine state on every terminal path, and
+refuses automatic execution when the core reports `degraded_negative_eig`.
+Paused sessions can be loaded with `InfoBAXSession.from_run_dir(...)`; finite
+pool and machine/workpoint fingerprints must still match, and resume is refused
+if the restored VM state has drifted.
+
+`src/apps/emit_measure/infobax_vm.py` provides the corresponding HALF-only VM
+adapter and finite-pool builder. Physical workpoints are mapped through the
+machine profile, the scan design matrix comes from the configured elegant
+quad-to-screen transport model, and a single screen image fit is converted to
+beam-size variance in mm². The adapter rejects every backend except `vm` and
+does not import EPICS, Qt, GOTAcc, or research code on module import.
+
+P2-B1 still does not add a GUI, authorize the real backend, or constitute
+machine commissioning. It also does not add Mphi, PSD, Laplace, HMC, or any
+physics-informed recommendation path. The existing RCDS/BO/cBO workflows are
+unchanged.
