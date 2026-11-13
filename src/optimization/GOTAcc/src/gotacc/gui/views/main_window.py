@@ -801,6 +801,7 @@ class MainWindow(QMainWindow):
     def _simplify_bottom_output_tabs(self) -> None:
         bottom_tabs = self.ui.tabWidget_bottomOutput
         bottom_tabs.setTabText(bottom_tabs.indexOf(self.ui.tab_consoleLog), "Log")
+        bottom_tabs.setTabBarAutoHide(True)
 
         for tab in (self.ui.tab_warningError, self.ui.tab_pvLog, self.ui.tab_runHistory):
             index = bottom_tabs.indexOf(tab)
@@ -1107,7 +1108,7 @@ class MainWindow(QMainWindow):
         bottom_tabs = self.ui.tabWidget_bottomOutput
         bottom_tabs.setParent(self.workspace_shell)
         bottom_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        bottom_tabs.setFixedHeight(132)
+        bottom_tabs.setFixedHeight(100)
         self.workspace_shell_layout.addWidget(bottom_tabs, 0)
         self._set_log_panel_visible(False)
 
