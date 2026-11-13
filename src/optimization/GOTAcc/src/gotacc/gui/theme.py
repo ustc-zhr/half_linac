@@ -743,6 +743,28 @@ QDoubleSpinBox::drop-down {
     width: 20px;
 }
 
+QToolButton[trajectoryMode="true"] {
+    background: transparent;
+    color: $button_text;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 2px 8px;
+    min-height: 17px;
+}
+
+QToolButton[trajectoryMode="true"]:hover {
+    background: $button_hover_bg;
+}
+
+QToolButton[trajectoryMode="true"]:checked {
+    background: $nav_item_selected_bg;
+    color: $nav_item_selected_text;
+}
+
+QToolButton[trajectoryMode="true"]:focus {
+    border-color: $accent;
+}
+
 QPlainTextEdit {
     color: $button_text;
     padding: 12px;
@@ -814,6 +836,11 @@ QTabWidget::pane {
     top: -1px;
 }
 
+QTabBar {
+    font-size: 12px;
+    font-weight: 700;
+}
+
 QTabBar::tab {
     background: $button_bg;
     border: 1px solid $button_border;
@@ -823,8 +850,6 @@ QTabBar::tab {
     color: $button_text;
     padding: 8px 14px;
     margin-right: 6px;
-    font-size: 12px;
-    font-weight: 700;
     min-width: 88px;
 }
 

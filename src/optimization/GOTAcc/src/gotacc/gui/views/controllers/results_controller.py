@@ -11,6 +11,7 @@ from PyQt5.QtCore import QSize, QUrl, Qt
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QFileDialog,
     QGroupBox,
     QHeaderView,
@@ -23,8 +24,10 @@ from PyQt5.QtWidgets import (
     QStyle,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QTreeWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
@@ -164,31 +167,47 @@ class ResultsController:
         }.get(outcome, "subtle")
         self.window._set_status_label_tone(self.window.label_results_source_outcome, tone)
 
-    def _variable_trajectory_controls(self) -> list[Any]:
+    def _variable_trajectory_controls(self) -> list[QButtonGroup]:
         controls = []
         for owner in (getattr(self.window, "run_ui", None), getattr(self.window, "ui", None)):
-            combo = getattr(owner, "comboBox_variableTrajectoryMode", None)
-            if combo is not None:
-                controls.append(combo)
+            group = getattr(owner, "buttonGroup_variableTrajectoryMode", None)
+            if group is not None:
+                controls.append(group)
         return controls
 
     def _init_variable_trajectory_controls(self) -> None:
-        for combo in self._variable_trajectory_controls():
-            combo.blockSignals(True)
-            combo.clear()
-            for mode, label, tooltip in self.VARIABLE_TRAJECTORY_MODES:
-                combo.addItem(label, mode)
-                combo.setItemData(combo.count() - 1, tooltip, Qt.ToolTipRole)
-            combo.setCurrentIndex(max(0, combo.findData(self.variable_trajectory_mode)))
-            combo.blockSignals(False)
-            combo.setToolTip("Choose how variable trajectories are scaled for display.")
-            if not combo.property("trajectoryModeConnected"):
-                combo.currentIndexChanged.connect(
-                    lambda _index, source=combo: self.set_variable_trajectory_mode(
-                        source.currentData()
-                    )
+        for owner in (getattr(self.window, "run_ui", None), getattr(self.window, "ui", None)):
+            combo = getattr(owner, "comboBox_variableTrajectoryMode", None)
+            if combo is None:
+                continue
+            selector = QWidget(combo.parentWidget())
+            selector.setObjectName("variableTrajectorySelector")
+            selector.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            layout = QHBoxLayout(selector)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(2)
+            group = QButtonGroup(selector)
+            for index, (mode, label, tooltip) in enumerate(self.VARIABLE_TRAJECTORY_MODES):
+                button = QToolButton(selector)
+                button.setText(label)
+                button.setToolTip(tooltip)
+                button.setProperty("trajectoryMode", True)
+                button.setCheckable(True)
+                button.setFocusPolicy(Qt.StrongFocus)
+                button.setChecked(mode == self.variable_trajectory_mode)
+                group.addButton(button, index)
+                layout.addWidget(button)
+            group.buttonClicked[int].connect(
+                lambda index: self.set_variable_trajectory_mode(
+                    self.VARIABLE_TRAJECTORY_MODES[index][0]
                 )
-                combo.setProperty("trajectoryModeConnected", True)
+            )
+            owner.horizontalLayout_variableDisplay.replaceWidget(combo, selector)
+            combo.hide()
+            combo.deleteLater()
+            del owner.comboBox_variableTrajectoryMode
+            owner.widget_variableTrajectoryMode = selector
+            owner.buttonGroup_variableTrajectoryMode = group
 
     def set_variable_trajectory_mode(self, mode: str | None) -> None:
         valid_modes = {item[0] for item in self.VARIABLE_TRAJECTORY_MODES}
@@ -196,11 +215,9 @@ class ResultsController:
         if resolved not in valid_modes:
             resolved = "raw"
         self.variable_trajectory_mode = resolved
-        for combo in self._variable_trajectory_controls():
-            index = combo.findData(resolved)
-            combo.blockSignals(True)
-            combo.setCurrentIndex(max(0, index))
-            combo.blockSignals(False)
+        index = next(i for i, item in enumerate(self.VARIABLE_TRAJECTORY_MODES) if item[0] == resolved)
+        for group in self._variable_trajectory_controls():
+            group.button(index).setChecked(True)
         if hasattr(self.window, "var_canvas") or hasattr(self.window, "run_var_canvas"):
             self.draw_variable_trajectories()
 

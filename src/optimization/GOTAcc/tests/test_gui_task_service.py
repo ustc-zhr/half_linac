@@ -1091,8 +1091,8 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.run_ui.splitter_main.sizes()[1] == 0
         window.run_ui.splitter_main.setSizes([430, 240])
         assert window.run_ui.tabWidget_plots.documentMode()
-        run_mode_combo = window.run_ui.comboBox_variableTrajectoryMode
-        results_mode_combo = window.ui.comboBox_variableTrajectoryMode
+        run_modes = window.run_ui.buttonGroup_variableTrajectoryMode
+        results_modes = window.ui.buttonGroup_variableTrajectoryMode
         for overlay_layout in (
             window.run_ui.verticalLayout_variables,
             window.ui.verticalLayout_variablePlot,
@@ -1102,18 +1102,21 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
                 overlay_layout.getItemPosition(index)
                 for index in range(overlay_layout.count())
             ] == [(0, 0, 1, 1), (0, 0, 1, 1)]
-        assert [run_mode_combo.itemData(i) for i in range(run_mode_combo.count())] == [
-            "raw",
-            "bounds",
-            "delta_initial",
+        assert [button.text() for button in run_modes.buttons()] == [
+            "Raw",
+            "Bounds %",
+            "Δ Initial %",
         ]
-        assert run_mode_combo.currentData() == "raw"
-        run_mode_combo.setCurrentIndex(run_mode_combo.findData("bounds"))
+        assert run_modes.checkedId() == 0
+        run_modes.button(1).click()
         assert window.results_controller.variable_trajectory_mode == "bounds"
-        assert results_mode_combo.currentData() == "bounds"
-        results_mode_combo.setCurrentIndex(results_mode_combo.findData("delta_initial"))
+        assert results_modes.checkedId() == 1
+        results_modes.button(2).click()
         assert window.results_controller.variable_trajectory_mode == "delta_initial"
-        assert run_mode_combo.currentData() == "delta_initial"
+        assert run_modes.checkedId() == 2
+        run_modes.button(2).click()
+        assert run_modes.checkedId() == 2
+        assert sum(button.isChecked() for button in run_modes.buttons()) == 1
 
         window.state.latest_task_snapshot = _offline_task(tmp_path)
         window.state.eval_x_history[:] = [[-1.0], [0.0], [1.5]]
