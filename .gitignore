@@ -117,3 +117,6 @@ src/virtual_machine/*_elegant/elegant/*.sig
 # Generated analysis data and figures
 docs/analysis/*.json
 docs/analysis/*.png
+
+# Local InfoBAX experiment outputs; test inputs are versioned in tests/fixtures.
+/src/optimization/infobax/benchmarks/

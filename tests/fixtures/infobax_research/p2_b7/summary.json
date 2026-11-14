@@ -1,0 +1,33 @@
+{
+  "stage": "P2-B7",
+  "status": "NOISE-PASS",
+  "reference_arm": "native_100k",
+  "noise_scale": 0.6902834680118383,
+  "calibration_gates": {
+    "all_frames_valid": true,
+    "primary_variance_closure": true,
+    "heldout_variance_closure": true,
+    "all_references_physical": true,
+    "emittance_closure": true,
+    "heldout_noise_coverage": true,
+    "heldout_noise_mean": true,
+    "heldout_noise_scale": true,
+    "primary_grid_complete": true,
+    "training_grid_complete": true,
+    "validation_grid_complete": true,
+    "selected_reference_acceptance": true,
+    "reference_reproduction": true
+  },
+  "new_tracking_attempts": 2304,
+  "training_seeds": 32,
+  "validation_seeds": 32,
+  "reused_primary_frames": 189,
+  "validation_started": true,
+  "optimizer_runs": 0,
+  "ioc_access": false,
+  "gp_or_acquisition_changes": false,
+  "seed_uncertainty": "descriptive only; unchanged empirical acceptance gates",
+  "runtime_acceptance_at_100k": "pending",
+  "future_query_noise": "existing fixed forecast; unvalidated by this stage",
+  "gui_acceptance": "not established by offline particle-noise validation"
+}

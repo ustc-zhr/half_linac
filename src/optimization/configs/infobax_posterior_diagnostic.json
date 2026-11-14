@@ -1,0 +1,38 @@
+{
+  "schema": "half_infobax_p2_b9_posterior_diagnostic_v1",
+  "stage": "P2-B9",
+  "scope": "Read-only B8 trajectory/posterior and full-scan-functional diagnosis; no model, acquisition, threshold, observation, IOC or machine changes",
+  "predecessor_config_sha256": "8c5210207bebdc9e584b490e5395598f61f8f86efa18880995e189c5b20df95f",
+  "trajectory_source": "p2_b8/trajectories.json",
+  "endpoints": [
+    6,
+    14
+  ],
+  "native_summary": "Exact B8 seed/sample count and stable_seed(summary,policy_seed,M0,active_step); compare all summary fields",
+  "enhanced_samples": 16384,
+  "enhanced_seed_namespace": "p2_b9_physicality",
+  "failed_recommendation_progression": [
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "metrics": [
+    "Exclusive candidate invalidity partition: nonfinite/nonpositive curve, nonfinite moments, nonpositive covariance diagonal, nonpositive determinant, physical",
+    "Output invalidity partition: no positive curve candidate vs positive curves but no physical covariance candidate",
+    "Per-query Gaussian negative-variance mass, observed/unobserved, descriptive residual vs finite primary reference",
+    "Expected curve energy outside span of the transport design; no samples projected or changed",
+    "Exact fixed-kernel scale components and observation-jitter ratios",
+    "Original and enhanced posterior physicality; enhanced Monte Carlo Wilson intervals condition on each fitted posterior",
+    "Weighted-reference vs existing unweighted M0 full-scan functional, fixed-energy vs entrance-momentum normalization"
+  ],
+  "model_maps": "Rebuild 18 transport matrices in private temporary workspaces; require exact pool fingerprints before checkpoint replay; no particle tracking",
+  "inference_policy": "No parameter sweep, gate relaxation, posterior clipping, sample rejection, model edits or performance claims. Preserve B8 outcome. Monte Carlo intervals quantify sampling of a fitted posterior only.",
+  "continuation": "Report supported causes, unresolved causal questions and one concrete next bounded model/target-consistency investigation; no new policy benchmark.",
+  "reference_numerical_tolerance": 1e-08
+}

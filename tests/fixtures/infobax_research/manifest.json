@@ -1,0 +1,29 @@
+{
+  "source_root": "src/optimization/infobax/benchmarks",
+  "files_sha256": {
+    "p2_b2/config.json": "943b23e481028caf32242d3ccbdc0f0337c7d7ed82ca772d49f87c3cab3cd4ef",
+    "p2_b2/trajectories.csv": "4055e84cc2e1f8dced40640b622ab844904ee4ce9c3c345b54be8e1ad22beaa5",
+    "p2_b3/config.json": "8181a88289a0c6e29a72fc7d10156fb3aa21498eac2818091a83ad904d28a41b",
+    "p2_b3/queries.csv": "fff1cd43a58ce32882937d0e53cce0846247f3c7d34990dc14ea9d91cd9c14ef",
+    "p2_b3/reconstructions.csv": "7f5609205a473a987e01c46b1623d87ef9f577ac33862d2f41c8bf9739441eaa",
+    "p2_b3/repeats.csv": "bc653dc2390df3f547f337e9f038720cc7c31f70b29b9a1a46a967bc492a1f82",
+    "p2_b4/calibration.csv": "e11bf0493e5c1f6248990d43f533745401688e2ac085810bb3f60b3cddac1eeb",
+    "p2_b4/config.json": "07513d70a0741299d52516e3bd089ad6d728ff43818ad43906853329502eba17",
+    "p2_b4/primary.csv": "7b4f7cbc290b40e2ca1158cbdd4e0f867cd69f9ca94d5cfd566962a05e7b9818",
+    "p2_b4/references.csv": "0c61c135f0fc67fd03c45dc8e33fa5ebf7b36d5a062fa8719ddc26efb904df07",
+    "p2_b4/validation.csv": "516da49bf225c99ee01d9c18aad618694302817201a409745300957cb6fbd25a",
+    "p2_b4_1/calibration.csv": "a404b577c624fd693ef8bad1e27736473245049f2290c4c4aaf5577744c4fafb",
+    "p2_b4_1/config.json": "31438d927045ce446de5918205c264e65a0ebf8bb96f8187e1bf633dff888d4e",
+    "p2_b4_1/primary.csv": "5726b1f7aac62d7d47e0a9ea16c3ff10987e69726c0a0544ceb18376e0854aa1",
+    "p2_b4_1/references.csv": "8a16a339900b73fa1460f4c76cb195dc92f499d9cd1f7d92afb732d4136c501e",
+    "p2_b4_1/validation.csv": "8532b313337df2b63fdef348dbb47ba118dda6210026ca7a1e808c139836fb71",
+    "p2_b5/config.json": "90ed7181966b6eab2971e5c4a90c3fe6128b5714ee8c81728ace89d8b408f611",
+    "p2_b5/queries.csv": "198241528133f016d41584bad27d65ddca29a4c46584a3fb8c04d423ddce6fff",
+    "p2_b5/references.csv": "91ff05e0b18c8520d7aec6f6660654454cb47caa37e7d915d1f71f538c4375fb",
+    "p2_b5/summary.json": "48f8dbd70d9d3142abf18321720721416a6af81383407ab264e4b674c69fe9b0",
+    "p2_b6/config.json": "9b9e4755ce55742dad5a56844fc16508b26f77f9611ab2f10d27e241eebf00d9",
+    "p2_b7/config.json": "75f3a91c234ce4152004e33b75330471b83f1c6764baf45b08cbd555e219c781",
+    "p2_b7/noise_scale_fit.json": "827fd26eca229efdf17bd6260f536b5a2697ccd1a9786e33a96d8840b60bbac9",
+    "p2_b7/summary.json": "432f5c80dc123fca2df33272924c7c33f16d49a0dd72b72ae4dc52196ee80e08"
+  }
+}

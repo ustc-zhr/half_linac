@@ -1,0 +1,81 @@
+{
+  "schema": "half_infobax_p2_b5_reference_precision_v1",
+  "stage": "P2-B5",
+  "scope": "Offline particle-statistics/pixel-resolution factorial reference validation only; no GP, acquisition, GUI, IOC or real-machine changes",
+  "predecessor_config_sha256": "31438d927045ce446de5918205c264e65a0ebf8bb96f8187e1bf633dff888d4e",
+  "cases": [
+    {
+      "id": "linear_control",
+      "sextupole_k2": 0.0
+    },
+    {
+      "id": "nonlinear",
+      "sextupole_k2": 1000.0
+    },
+    {
+      "id": "near_tie",
+      "sextupole_k2": 100.0
+    }
+  ],
+  "workpoints": [
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0
+  ],
+  "scan_values": [
+    -4.0,
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0
+  ],
+  "energy_mev": 225.0,
+  "primary_particle_seed": 12345,
+  "validation_particle_seeds": [
+    104729,
+    130363
+  ],
+  "particle_counts": [
+    20000,
+    100000
+  ],
+  "linear_resolution_factors": [
+    1,
+    2
+  ],
+  "geometry": "Preserve physical field of view; multiply both pixel counts by factor and divide pixel pitch by factor; rasterize each tracked particle population at both resolutions",
+  "measurement": {
+    "minimum_count": 1000,
+    "minimum_sigma_pixels": 1.0,
+    "maximum_edge_fraction": 0.001
+  },
+  "noise_scale_source": "frozen P2-B4.1/noise_scale_fit.json",
+  "noise_interpretation": "The inherited global noise scale is used only in relative WLS weights; noise calibration across particle count/pixel pitch is not asserted",
+  "reference_solver": "shared weighted SVD with RMS-size errors = per-frame variance std / (2 * sqrt(variance)); no beam-matrix projection",
+  "reference_gates": {
+    "all_frames_valid": true,
+    "all_reconstructions_physical": true,
+    "maximum_variance_relative_error": 0.02,
+    "maximum_emittance_relative_error": 0.05,
+    "minimum_image_retention_fraction": 0.999999,
+    "maximum_particle_rms_emittance_relative_error": 0.05,
+    "maximum_native_20k_reproduction_relative_error": 1e-08
+  },
+  "selection_order": [
+    "native_100k",
+    "fine_20k",
+    "fine_100k"
+  ],
+  "selection_policy": "Select the first passing arm on primary seed only, preferring native image geometry. Validate that single selected arm with both new seeds. If it fails validation do not switch to another arm.",
+  "validation_policy": "Report every arm on held-out seeds for attribution; held-out results never change the selected arm",
+  "failure_policy": "Keep failed queries and nonphysical reconstructions; never clip, project, interpolate, retry or silently omit samples",
+  "continuation": "Keep B2/B3/B4/B4.1 immutable. This stage performs no policy benchmark. Reference acceptance establishes only this finite optical/sampling scope; independent noise and runtime validation are still required for any adopted settings."
+}
