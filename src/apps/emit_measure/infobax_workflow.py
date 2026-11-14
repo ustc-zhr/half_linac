@@ -16,10 +16,10 @@ from scipy.linalg import qr
 
 from half_linac.src.optimization.infobax import FinitePoolSpec, InfoBAXCore, InfoBAXConfig, PointObservation
 from half_linac.src.shared.beam_matrix import (
-    DEFAULT_MAX_CONDITION_NUMBER, reconstruct_beam_matrix, normalized_emittance,
+    DEFAULT_MAX_CONDITION_NUMBER,
 )
 from .control import emittance_lock
-from .infobax_camera import fingerprint
+from .measurement_service import fingerprint, PointAcquisitionResult, fit_grid_results
 
 
 class WorkflowInterrupted(RuntimeError):
@@ -103,8 +103,10 @@ class InfoBAXWorkflow:
     filename = "infobax_workflow.json"
 
     def __init__(self, config, machine, run_dir, *, approve=None, progress=None,
-                 numerical_config=None, clock=time.monotonic):
+                 numerical_config=None, clock=time.monotonic, full_scan=None, control_lease=None):
         self.config, self.machine, self.run_dir = config, machine, Path(run_dir)
+        self.full_scan, self.control_lease = full_scan, control_lease
+        self.scan_results = {}
         self.approve, self.progress, self.clock = approve, progress, clock
         self.numerical_config = numerical_config or InfoBAXConfig()
         self.cancelled, self.pause_requested = Event(), Event()
@@ -144,7 +146,7 @@ class InfoBAXWorkflow:
                            "confirmed": self.confirmed, "elapsed_seconds": self.elapsed(), **extra})
 
     def payload(self):
-        return {"schema": "half_infobax_workflow_v1", "config": asdict(self.config),
+        return {"schema": "half_infobax_workflow_v2", "config": asdict(self.config),
                 "config_fingerprint": self.config.fingerprint,
                 "machine_fingerprint": self.machine.fingerprint,
                 "numerical_config": self.numerical_config.to_dict(),
@@ -154,10 +156,12 @@ class InfoBAXWorkflow:
                 "core": None if self.core is None else self.core.to_checkpoint(),
                 "recommendation": self.recommendation,
                 "baseline_fit": self.baseline_fit, "verification_fit": self.verification_fit,
+                "scan_results": self.scan_results,
                 "confirmed": self.confirmed, "status": self.status, "error": self.error,
                 "restoration_status": self.restoration_status,
                 "elapsed_seconds": self.elapsed(),
                 "cost": {"attempted_points": len(self.records),
+                         "raw_frame_count": sum(1 for _ in self.run_dir.rglob("*.npz")) if self.run_dir.exists() else 0,
                          "observed_points": sum(r["state"] == "observed" for r in self.records),
                          "accepted_frames": sum(r.get("measurement", {}).get("metadata", {}).get("frame_count", 0)
                                                 for r in self.records)},
@@ -182,8 +186,19 @@ class InfoBAXWorkflow:
                 current = self.path.read_bytes() if self.path.exists() else None
                 if current != self._content:
                     raise ValueError("Run directory changed; load its checkpoint before continuing")
-                with emittance_lock(self.machine.machine_id, self.machine.backend):
-                    yield
+                from contextlib import nullcontext
+                from half_linac.src.shared.machine_profile.control_lock import MachineControlLock
+                expected = emittance_lock(self.machine.machine_id, self.machine.backend)
+                inherited = self.control_lease
+                if inherited is not None and (not isinstance(inherited, MachineControlLock)
+                        or inherited.path != expected.path or inherited._stream is None):
+                    raise RuntimeError("A matching held control lease is required")
+                with (expected if inherited is None else nullcontext(inherited)) as lease:
+                    self.control_lease = lease
+                    try:
+                        yield
+                    finally:
+                        self.control_lease = inherited
             finally:
                 fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
@@ -256,21 +271,62 @@ class InfoBAXWorkflow:
         return core
 
     def _fit(self, records):
-        y = np.asarray([r["measurement"]["variance_mm2"] for r in records])
-        dy = np.asarray([r["measurement"]["noise_std_mm2"] for r in records])
-        sigma = np.sqrt(y) * 1e-3
-        result = reconstruct_beam_matrix(self.config.projections, sigma,
-                                        dy*1e-6/(2*sigma))
-        if not result.valid:
-            raise ValueError(f"Full scan is not physical: {result.status}: {result.message}")
-        emit = normalized_emittance(result.geometric_emittance_m_rad, self.config.energy_mev)*1e6
-        error = result.geometric_emittance_standard_deviation_m_rad
-        return {"normalized_emittance_mm_mrad": float(emit),
-                "standard_error_mm_mrad": None if error is None else
-                float(normalized_emittance(error, self.config.energy_mev)*1e6),
-                "condition_number": float(result.condition_number), "status": result.status}
+        # Headless/Fake runs use the same grid solver as the application.
+        return fit_grid_results(self.config, records)
+
+    def _full_scan_phase(self, candidate, phase, records):
+        if self.full_scan is None:
+            for i in range(len(records), len(self.config.scan_values)):
+                records.append(self._point(candidate, i, phase, approved=True))
+                self.save()
+            return self._fit(records)
+        self.machine.apply_current(candidate)
+        completed = [r["measurement"]["metadata"]["point_result"] for r in records]
+        def commit_point(result):
+            index = min(range(len(self.config.scan_values)), key=lambda i: abs(self.config.scan_values[i]-result.k1))
+            if abs(self.config.scan_values[index]-result.k1)>1e-10:
+                raise ValueError("Scan returned a K1 outside the frozen grid")
+            if any(r["scan_index"]==index for r in records):
+                raise ValueError("Scan returned a duplicate completed K1")
+            record={"sequence":len(self.records),"query_index":candidate*len(self.config.scan_values)+index,
+                    "candidate_index":candidate,"current_a":self.candidates[candidate],
+                    "scan_index":index,"scan_k1":result.k1,"phase":phase,"state":"pending",
+                    "point_result":result.to_dict()}
+            self.records.append(record)
+            camera=getattr(self.machine,"camera",None)
+            if camera is not None:
+                camera.statistics["accepted_frames"]=camera.statistics.get("accepted_frames",0)+sum(
+                    "sigx" in f and "sigy" in f for f in result.frames)
+            try:
+                measurement = result.observation(self.config.plane)
+                metadata = dict(measurement.metadata, point_result=result.to_dict())
+                record.update(state="observed",measurement={"variance_mm2":measurement.variance_mm2,
+                    "noise_std_mm2":measurement.noise_std_mm2,"metadata":metadata})
+                records.append(record)
+                records.sort(key=lambda r:r["scan_index"])
+            except Exception as error:
+                record.update(state="failed",error=str(error))
+                self.save()
+                raise
+            self.save()
+            self.emit(record=record)
+        result=self.full_scan(phase,completed,commit_point)
+        self.scan_results[phase]=result
+        self.save()
+        if not result.get("restored"):
+            raise RuntimeError(result.get("restore_error") or "Scan quadrupole restore failed")
+        self._last_confirmed=dict(self.machine.snapshot())
+        self.check()
+        from .optimization import measurement_values
+        value=measurement_values(result, "grid", required_planes=(self.config.plane,))[self.config.plane]
+        if len(records)!=len(self.config.scan_values):
+            raise ValueError("Full scan did not complete the frozen K1 grid")
+        return {"normalized_emittance_mm_mrad":value,"standard_error_mm_mrad":None,
+                "status":"valid","source":"existing_scan","archive":result.get("archive")}
 
     def run(self):
+        if getattr(self.machine,"recovery_only",False):
+            raise RuntimeError("Restore-only handle: prepare the shared measurement before resuming")
         with self.exclusive():
             if self.status == "completed":
                 return self.payload()
@@ -300,10 +356,9 @@ class InfoBAXWorkflow:
                     self._approval({"phase": "baseline", "current_a": self.initial["current_a"],
                                     "scan_values": self.config.scan_values[len(self.baseline):],
                                     "remaining_points": n-len(self.baseline)})
-                    for i in range(len(self.baseline), n):
-                        self.baseline.append(self._point(initial_index, i, "baseline", approved=True))
-                        self.save()
-                self.baseline_fit = self._fit(self.baseline)
+                    self.baseline_fit = self._full_scan_phase(initial_index, "baseline", self.baseline)
+                elif self.baseline_fit is None:
+                    self.baseline_fit = self._full_scan_phase(initial_index, "baseline", self.baseline)
                 if self.core is None:
                     self.core = self._create_core()
                     self.save()
@@ -333,10 +388,9 @@ class InfoBAXWorkflow:
                     self._approval({"phase": "verification", "current_a": self.candidates[candidate],
                                     "scan_values": self.config.scan_values[len(self.verification):],
                                     "remaining_points": n-len(self.verification)})
-                    for i in range(len(self.verification), n):
-                        self.verification.append(self._point(candidate, i, "verification", approved=True))
-                        self.save()
-                self.verification_fit = self._fit(self.verification)
+                    self.verification_fit = self._full_scan_phase(candidate, "verification", self.verification)
+                elif self.verification_fit is None:
+                    self.verification_fit = self._full_scan_phase(candidate, "verification", self.verification)
                 self.confirmed = (self.verification_fit["normalized_emittance_mm_mrad"] <
                                   self.baseline_fit["normalized_emittance_mm_mrad"])
                 self.status = "completed"
@@ -362,6 +416,8 @@ class InfoBAXWorkflow:
 
     def manual_move(self, *, apply_verified=False):
         with self.exclusive():
+            if apply_verified and getattr(self.machine,"recovery_only",False):
+                raise ValueError("Restore-only handle cannot apply recommendations")
             if self.initial is None:
                 raise ValueError("No initial snapshot exists")
             if apply_verified and (not self.confirmed or self.restoration_status != "succeeded"):
@@ -400,7 +456,7 @@ class InfoBAXWorkflow:
     def load(cls, config, machine, run_dir, **kwargs):
         content = (Path(run_dir)/cls.filename).read_bytes()
         data = json.loads(content)
-        if (data.get("schema") != "half_infobax_workflow_v1"
+        if (data.get("schema") != "half_infobax_workflow_v2"
                 or data["config_fingerprint"] != config.fingerprint
                 or data["machine_fingerprint"] != machine.fingerprint):
             raise ValueError("Workflow configuration or machine fingerprint changed")
@@ -410,6 +466,7 @@ class InfoBAXWorkflow:
                     "baseline_fit", "verification_fit", "confirmed", "status", "error",
                     "restoration_status", "elapsed_seconds"):
             setattr(obj, key, data[key])
+        obj.scan_results = data.get("scan_results", {})
         obj.candidates = tuple(data["candidates"])
         if obj.status in {"awaiting_approval", "baseline", "initialization", "active", "selecting", "verification"}:
             obj.status = "paused" if obj.restoration_status == "succeeded" else "recovery_required"
