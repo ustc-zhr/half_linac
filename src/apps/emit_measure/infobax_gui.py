@@ -19,7 +19,6 @@ import numpy as np
 
 from half_linac.src.shared.machine_profile import load_app_context, get_emit_preset
 from .infobax_launcher import build_workflow
-from .infobax_machine import camera_contract
 
 
 class WorkflowWorker(QThread):
@@ -217,13 +216,10 @@ class InfoBAXWindow(QMainWindow):
         busy=self.busy()
         available=True
         if self.backend.currentText()=="real":
-            try:
-                camera_contract(self.context,get_emit_preset(self.context,self.preset.currentText()).flag)
-                note="真机逐条确认；完整基线/复核各确认一次；等待时保持当前状态。"
-            except Exception as exc:
-                available=False; note=f"真机启动未就绪：{exc}"
+            available=False
+            note="真机操作统一从主应用的发射度优化 / InfoBAX 标签页进入；可使用 --backend real 打开。"
         else:
-            note="Fake：合成束矩用于验证流程；固定 5 个电流候选，RMS 入模，Gaussian 旁路记录。"
+            note="Fake：合成束矩观测用于验证流程，不进行相机采集；真机从主应用共享测量。"
         self.note.setText(note)
         resumable=self.workflow is not None and self.workflow.status=="paused"
         self.settings.setEnabled(not busy and self.workflow is None)

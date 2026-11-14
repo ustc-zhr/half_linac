@@ -26,7 +26,7 @@ profile 时看平台与机器，需要 app 细节时进入应用目录，历史�
 
 ## 应用说明
 
-- [apps/EMIT_INFOBAX.md](apps/EMIT_INFOBAX.md): 独立 InfoBAX 发射度优化、离线验证和真机准备
+- [apps/EMIT_INFOBAX.md](apps/EMIT_INFOBAX.md): InfoBAX 标签页、共享测量流程与离线验证
 
 - [apps/JOINT_SOLENOID_CENTERING.md](apps/JOINT_SOLENOID_CENTERING.md): 联立螺线管 Centering 的 HALF 试验流程、配置和结果边界
 - [apps/BEAM_DYNAMICS_OPERATION_NOTES.md](apps/BEAM_DYNAMICS_OPERATION_NOTES.md): BBA、Twiss 等束流动力学计算的操作边界说明

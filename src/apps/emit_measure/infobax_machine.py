@@ -7,7 +7,7 @@ import time
 
 import numpy as np
 
-from .infobax_camera import CameraPointAcquirer, CameraSettings, fingerprint
+from .measurement_service import fingerprint
 from .infobax_session import PointMeasurement
 
 

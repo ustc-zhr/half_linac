@@ -144,9 +144,9 @@ tar -xzf /path/to/benchmark-evidence.tar.gz -C "$HALF_LINAC_ROOT"
 
 InfoBAX unit tests can run from a source checkout without restoring that archive.
 Historical P2 findings below retain their original context and acceptance limits.
-The standalone prototype checkpoint is documented in
-`docs/apps/EMIT_INFOBAX.md`; integrating its workflow into an optimization tab
-and the common measurement service is subsequent work.
+The framework InfoBAX tab and shared acquisition service are documented in
+`docs/apps/EMIT_INFOBAX.md`. Production runs use the main-window method and timed
+sampling; older prototype archives remain read-only in the integrated UI.
 
 ## P2-B2: isolated IOC and matched-budget benchmark
 

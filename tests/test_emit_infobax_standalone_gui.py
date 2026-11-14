@@ -39,13 +39,13 @@ class WindowTests(unittest.TestCase):
             self.window.stop_run(False); self.pump(lambda:not self.window.busy())
         self.window.close()
 
-    def test_open_is_passive_and_real_missing_metadata_disables_start(self):
+    def test_open_is_passive_and_real_uses_the_framework(self):
         self.assertEqual(self.window.backend.currentText(),"fake")
         self.assertTrue(self.window.start_button.isEnabled())
         self.assertFalse(self.window.approve_button.isEnabled())
         self.window.backend.setCurrentText("real")
         self.assertFalse(self.window.start_button.isEnabled())
-        self.assertIn("frame_id",self.window.note.text())
+        self.assertIn("标签页",self.window.note.text())
 
     def test_pause_pending_then_resume_requires_new_approval(self):
         self.window.start_run()
