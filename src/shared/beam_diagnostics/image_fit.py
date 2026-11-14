@@ -147,6 +147,7 @@ def fit_beam_image(
     xlim: Sequence[float] | None = None,
     ylim: Sequence[float] | None = None,
     method: str = "Gaussian fit",
+    pixel_centers: bool = False,
 ) -> BeamImageFitResult:
     normalized_method = str(method).strip().lower()
     if normalized_method in {"gaussian", "gaussian fit", "gauss", "gauss fit"}:
@@ -173,8 +174,12 @@ def fit_beam_image(
     x_bounds = tuple(float(value) for value in (xlim or (xmin, xmax)))
     y_bounds = tuple(float(value) for value in (ylim or (ymin, ymax)))
 
-    x_axis_full = np.linspace(xmin, xmax, image_array.shape[1])
-    y_axis_full = np.linspace(ymin, ymax, image_array.shape[0])
+    if pixel_centers:
+        x_axis_full = xmin + (np.arange(image_array.shape[1]) + 0.5) * (xmax - xmin) / image_array.shape[1]
+        y_axis_full = ymin + (np.arange(image_array.shape[0]) + 0.5) * (ymax - ymin) / image_array.shape[0]
+    else:
+        x_axis_full = np.linspace(xmin, xmax, image_array.shape[1])
+        y_axis_full = np.linspace(ymin, ymax, image_array.shape[0])
     x_mask = np.logical_and(x_axis_full > x_bounds[0], x_axis_full < x_bounds[1])
     y_mask = np.logical_and(y_axis_full > y_bounds[0], y_axis_full < y_bounds[1])
 

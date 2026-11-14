@@ -1268,6 +1268,12 @@ class OptimizationDialog(QDialog):
                 return
             from .main import scanThread
             paras = deepcopy(self.paras)
+            paras.control_lease = getattr(self.session, 'control_lease', None)
+            # Capture live scan state only under the outer hardware lease.
+            from half_linac.src.shared.machine_profile.control_lock import MachineControlLock
+            if isinstance(paras.control_lease, MachineControlLock):
+                from .optimization import VerifiedQuadRestore
+                paras.restore_quad = VerifiedQuadRestore(self.host.app_context, paras.quad_name)
             paras.scan_latest_dir = request['path'] / 'latest'
             paras.scan_archive_dir = request['path'] / 'runs'
             # Reuse the ordinary main-window presentation while keeping the

@@ -6205,6 +6205,7 @@ class scanThread(QThread):
         self.adaptive_config = getattr(paras, "adaptive_config", None)
         self.model_line = paras.model_line
         self.app_context = paras.app_context
+        self.control_lease = getattr(paras, "control_lease", None)
         self.model_snapshot_metadata = getattr(paras, "model_snapshot_metadata", None)
         self.model_lattice_overrides = getattr(paras, "model_lattice_overrides", None)
         self.quad_length = None
@@ -6763,6 +6764,18 @@ class scanThread(QThread):
         self.x_quality_usable, self.y_quality_usable = restore_scan_quality(self.k1l, entries)
 
     def run(self):
+        from contextlib import nullcontext
+        from half_linac.src.apps.emit_measure.control import emittance_lease
+        lease = (nullcontext() if self.recal else
+                 emittance_lease(self.app_context, self.control_lease))
+        try:
+            with lease:
+                self._run_scan_locked()
+        except Exception as exc:
+            self.terminal_result.update(error=str(exc), fatal=True)
+            self.trigger.emit({"error": str(exc)})
+
+    def _run_scan_locked(self):
         tmp = {"method": None}
         iniK1 = None
         try:
