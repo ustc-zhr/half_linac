@@ -13,7 +13,7 @@ from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractButton, QAbstractItemView, QCheckBox, QComboBox, QDialog, QDoubleSpinBox,
     QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton,
-    QProgressBar, QScrollArea, QSizePolicy, QSplitter,
+    QProgressBar, QScrollArea, QSizePolicy, QSplitter, QTabWidget,
     QSpinBox, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
 from matplotlib.figure import Figure
@@ -50,6 +50,13 @@ class OptimizationWorker(QThread):
         self.session, self.action = session, action
         self.session.measure = self.measure
         self.session.progress = self.progress.emit
+        self.paras = getattr(parent, "paras", None)
+        if getattr(self.paras, "defer_measurement_prepare", False) is True:
+            from .measurement_service import prepare_measurement
+            def prepare():
+                prepare_measurement(self.paras)
+                self.session.summary["measurement"].update(self.paras.scan_metadata)
+            self.session.prepare = prepare
 
     def measure(self, path, checkpoint):
         request = {'path': path, 'done': Event(), 'result': None}
@@ -593,12 +600,18 @@ class OptimizationDialog(QDialog):
             ('Max. scans', self.count), ('Time budget (min)', self.minutes),
             ('Main-window energy (MeV)', self.energy), ('Solenoid settle time (s)', self.solenoid_settle),
         )
+        self._bo_option_widgets = []
+        self._option_fields = []
+        self.options_grid = options_grid
         for index, (text, control) in enumerate(fields):
             row, column = divmod(index, 2)
             label = QLabel(text, self.settings)
             label.setProperty('role', 'caption')
             label.setBuddy(control)
             label.setWordWrap(True)
+            if control in (self.algorithm, self.other_limit_enabled, self.other_limit, self.count):
+                self._bo_option_widgets.extend((label, control))
+            self._option_fields.append((label, control))
             options_grid.addWidget(label, row * 2, column, alignment=Qt.AlignBottom)
             control.setMinimumWidth(0)
             control.setFixedHeight(32)
@@ -852,12 +865,34 @@ class OptimizationDialog(QDialog):
                 widget.currentIndexChanged.connect(self.measurement_changed)
             elif isinstance(widget, QAbstractButton) and widget.isCheckable():
                 widget.toggled.connect(self.measurement_changed)
+        from .infobax_page import InfoBAXPage
+        self._active_tab = 0
+        self.tabs = QTabWidget(self)
+        conventional = QWidget(self.tabs)
+        conventional_layout = QVBoxLayout(conventional)
+        layout.removeWidget(self.algorithm_settings)
+        layout.removeWidget(results_card)
+        conventional_layout.addWidget(self.algorithm_settings)
+        conventional_layout.addWidget(results_card, 1)
+        self.tabs.addTab(conventional, "Conventional · RCDS / BO / CBO")
+        self.infobax_page = InfoBAXPage(self)
+        self.tabs.addTab(self.infobax_page, "InfoBAX")
+        layout.addWidget(self.tabs, 1)
+        layout.removeWidget(run_card)
+        outer_layout.addWidget(run_card)
+        self.open_run_button.setParent(run_card)
+        buttons.insertWidget(3, self.open_run_button)
+        self.pause_button = QPushButton("Pause and Restore", self)
+        self.pause_button.setVisible(False)
+        buttons.insertWidget(2, self.pause_button)
+        self.pause_button.clicked.connect(lambda: self.infobax_page.stop(pause=True))
+        self.tabs.currentChanged.connect(self.optimization_tab_changed)
         self.refresh_note()
         self.update_algorithm_settings()
         self.update_budget_note()
         self.update_buttons()
         layout.activate()
-        self.scroll_content.setMinimumHeight(max(880, layout.minimumSize().height()))
+        self.scroll_content.setMinimumHeight(max(680, layout.minimumSize().height()))
 
     def make_card(self, title):
         card = QFrame(self)
@@ -870,8 +905,53 @@ class OptimizationDialog(QDialog):
         box.addWidget(heading)
         return card, box
 
+    def info_active(self):
+        return hasattr(self, "tabs") and self.tabs.currentIndex() == 1
+
+    def optimization_tab_changed(self, index):
+        if (self.busy() or self.fault) and index != self._active_tab:
+            blocked=self.tabs.blockSignals(True)
+            self.tabs.setCurrentIndex(self._active_tab)
+            self.tabs.blockSignals(blocked)
+            return
+        self._active_tab=index
+        while self.options_grid.count():
+            self.options_grid.takeAt(0)
+        visible=[]
+        for label,control in self._option_fields:
+            is_visible=index==0 or control not in (self.algorithm,self.other_limit_enabled,self.other_limit,self.count)
+            label.setVisible(is_visible);control.setVisible(is_visible)
+            if is_visible: visible.append((label,control))
+        for i,(label,control) in enumerate(visible):
+            row,column=divmod(i,2)
+            self.options_grid.addWidget(label,row*2,column,alignment=Qt.AlignBottom)
+            self.options_grid.addWidget(control,row*2+1,column,alignment=Qt.AlignTop)
+        self.options_grid.setAlignment(Qt.AlignTop)
+        for widget in self._bo_option_widgets:
+            widget.setVisible(index == 0)
+        self.budget_note.setVisible(index == 0)
+        self.pause_button.setVisible(index == 1)
+        if index == 1:
+            self.infobax_page.refresh_note()
+            self.infobax_page.render()
+            if self.infobax_page.state() is None:
+                self.status.setText("InfoBAX ready. Configure the main-window measurement and confirm the upstream solenoid.")
+                self.progress_bar.setRange(0,1);self.progress_bar.setValue(0)
+                self.progress_bar.setFormat("0 point observations")
+        else:
+            self.refresh_note()
+            self.progress_bar.setRange(0,self.count.value())
+            self.progress_bar.setValue(len(self.session.records) if self.session else 0)
+            self.progress_bar.setFormat("%v / %m scans")
+            if self.session:
+                self.show_results()
+                self.status.setText(f"Conventional optimization · {self.session.summary.get('status','ready')}")
+            else:
+                self.status.setText("Ready. Start a conventional optimization run.")
+        self.update_buttons()
+
     def busy(self):
-        return bool((self.worker is not None and self.worker.isRunning()) or
+        return bool((hasattr(self, "infobax_page") and self.infobax_page.busy()) or (self.worker is not None and self.worker.isRunning()) or
                     (self.reader is not None and self.reader.isRunning()))
 
     def settings_changed(self, *_args):
@@ -884,6 +964,8 @@ class OptimizationDialog(QDialog):
         if self.session and self.session.confirmed and not self.busy():
             self.session.confirmed = False
             self.status.setText('Settings changed. Run optimization again before applying a best point. Restore Initial remains available.')
+        if hasattr(self, "infobax_page"):
+            self.infobax_page.settings_changed()
         self.update_buttons()
 
     def algorithm_changed(self, *_args):
@@ -1043,6 +1125,8 @@ class OptimizationDialog(QDialog):
     def measurement_changed(self, *_args):
         if not self.busy() and not self.fault:
             self.refresh_note()
+            if hasattr(self, "infobax_page"):
+                self.infobax_page.refresh_note()
             self.settings_changed()
 
     def refresh_note(self):
@@ -1086,6 +1170,30 @@ class OptimizationDialog(QDialog):
 
     def update_buttons(self):
         busy = self.busy()
+        if hasattr(self, "tabs"):
+            self.tabs.tabBar().setEnabled(not busy and not self.fault)
+        if self.info_active():
+            page = self.infobax_page
+            state = page.state()
+            self.settings.setEnabled(not busy and not self.fault)
+            page.model.setEnabled(not busy and not self.fault)
+            page.active.setEnabled(not busy and not self.fault)
+            page.upstream.setEnabled(not busy and not self.fault)
+            recovery_needed=bool(state and state.get("restoration_status") in {"failed","pending"})
+            runnable = not busy and not self.fault and self.host.machine_type == "real" and not page.read_only and not recovery_needed
+            page.clear_button.setEnabled(not busy and not self.fault)
+            self.start_button.setEnabled(runnable)
+            self.start_button.setText("Continue InfoBAX" if state and state["status"] == "paused" else "Start InfoBAX")
+            self.stop_button.setEnabled(bool(page.busy() and page.worker.action == "run"))
+            self.pause_button.setEnabled(self.stop_button.isEnabled())
+            self.apply_button.setEnabled(bool(not busy and not self.fault and page.workflow and page.workflow.confirmed
+                                              and page.workflow.restoration_status == "succeeded"))
+            self.restore_button.setEnabled(bool(not busy and state and state.get("initial") and not page.read_only))
+            self.open_run_button.setEnabled(not busy and not self.fault)
+            self.read_button.setEnabled(not busy and not self.fault and self.host.machine_type == "real")
+            self.range_button.setEnabled(not busy and not self.fault)
+            return
+        self.start_button.setText("Start Optimization")
         self.settings.setEnabled(not busy and not self.fault)
         self.algorithm_settings.setEnabled(not busy and not self.fault)
         self.start_button.setEnabled(not busy and not self.fault and self.host.machine_type == 'real')
@@ -1169,6 +1277,8 @@ class OptimizationDialog(QDialog):
     def start(self):
         if self.busy() or self.fault:
             return
+        if self.info_active():
+            return self.infobax_page.start()
         try:
             self.check_idle()
             other_limit = None
@@ -1198,7 +1308,7 @@ class OptimizationDialog(QDialog):
                 bo_random_seed=self.bo_seed.value(),
                 charge_constraint=charge_constraint)
             config.validate()
-            self.paras = self.host.optimization_parameters(config.variables)
+            self.paras = self.host.optimization_parameters(config.variables, defer_io=True)
             if charge_constraint is not None:
                 backend = self.host.app_context.control_backend.name
                 ct_context = load_app_context(
@@ -1270,10 +1380,6 @@ class OptimizationDialog(QDialog):
             paras = deepcopy(self.paras)
             paras.control_lease = getattr(self.session, 'control_lease', None)
             # Capture live scan state only under the outer hardware lease.
-            from half_linac.src.shared.machine_profile.control_lock import MachineControlLock
-            if isinstance(paras.control_lease, MachineControlLock):
-                from .optimization import VerifiedQuadRestore
-                paras.restore_quad = VerifiedQuadRestore(self.host.app_context, paras.quad_name)
             paras.scan_latest_dir = request['path'] / 'latest'
             paras.scan_archive_dir = request['path'] / 'runs'
             # Reuse the ordinary main-window presentation while keeping the
@@ -1332,6 +1438,8 @@ class OptimizationDialog(QDialog):
             self.scan.stop()
 
     def stop(self):
+        if self.info_active():
+            return self.infobax_page.stop()
         if self.session and self.busy():
             self.session.cancelled.set()
             self.cancel_measurement()
@@ -1401,6 +1509,8 @@ class OptimizationDialog(QDialog):
             self.error(exc)
 
     def open_run_archive(self):
+        if self.info_active():
+            return self.infobax_page.load_run()
         root = resolve_app_runtime_paths(Path(__file__).parent, self.host.app_context)['runs_dir']
         path, _selected_filter = QFileDialog.getOpenFileName(
             self,
@@ -1463,6 +1573,8 @@ class OptimizationDialog(QDialog):
     def manual(self, action):
         if self.busy():
             return
+        if self.info_active():
+            return self.infobax_page.manual(action)
         try:
             self.check_idle()
             if self.session.device.context is not self.host.app_context:

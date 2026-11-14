@@ -412,6 +412,8 @@ class OptimizationSession:
                 import numpy as np
                 np.save(self.run_dir / 'background.npy', self.background, allow_pickle=False)
                 self.summary['measurement']['background_snapshot'] = 'background.npy'
+            if getattr(self, "prepare", None) is not None:
+                self.prepare()
             self.device.validate()
             self.initial = self.config.point(self.device.initial(), bounded=False)
             self.config.point(self.initial)  # All bounds must contain the actual initial setpoints.
