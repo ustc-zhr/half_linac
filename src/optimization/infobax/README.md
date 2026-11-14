@@ -57,6 +57,14 @@ Paused sessions can be loaded with `InfoBAXSession.from_run_dir(...)`; finite
 pool and machine/workpoint fingerprints must still match, and resume is refused
 if the restored VM state has drifted.
 
+The same session object can also continue with `run()` after a pause or a
+recoverable failure; every continuation verifies the restored snapshot before
+writing. The session consumes its own pause request. A caller-owned cancellation
+Event must be cleared by its owner. Existing checkpoints cannot be overwritten
+by a new session, concurrent writers are refused, and an older loaded session
+must be reloaded if another writer has advanced the checkpoint. Loading a
+checkpoint alone does not modify it.
+
 `src/apps/emit_measure/infobax_vm.py` provides the corresponding HALF-only VM
 adapter and finite-pool builder. Physical workpoints are mapped through the
 machine profile, the scan design matrix comes from the configured elegant
@@ -64,7 +72,42 @@ quad-to-screen transport model, and a single screen image fit is converted to
 beam-size variance in mm². The adapter rejects every backend except `vm` and
 does not import EPICS, Qt, GOTAcc, or research code on module import.
 
-P2-B1 still does not add a GUI, authorize the real backend, or constitute
-machine commissioning. It also does not add Mphi, PSD, Laplace, HMC, or any
-physics-informed recommendation path. The existing RCDS/BO/cBO workflows are
-unchanged.
+Build the pool with `build_half_vm_infobax_pool(...)` using the same workpoint
+table, scan quadrupole, screen and plane as the adapter. The session calls
+`machine.validate_pool(pool)` before execution; an unbound offline pool or a
+different physical/measurement contract is refused. Workpoint variables must
+be upstream of the scan quadrupole so all candidates share one transport
+design matrix. Execution accepts only K1 values in the bound finite pool.
+
+Each query waits for the IOC values to reach the VM input, then for matching
+input/result hashes, VM session and calculation number. An uncached image read
+is bracketed by these checks and records the VM identifiers in measurement
+metadata. `measurement_timeout` defaults to 120 seconds. Missing/stale results,
+failed calculations, failed publication and input changes cannot be committed.
+The VM publishes one frame for each changed input, so `image_samples` must be 1;
+repeated reads of a deterministic frame do not count as independent samples.
+
+**Restart the updated VM before using this adapter.** The VM runner now waits
+for image-put completion and records `screens_acknowledged` plus the acknowledged
+`screen_image_pvs` in its existing status file. Older VM status files are refused.
+PV names and IOC DB generation are unchanged. Adapter v2 and bound-pool
+fingerprints intentionally refuse checkpoints created by the older VM adapter;
+unbound numerical-only M0 checkpoints and golden results remain compatible.
+
+Run the focused offline checks with:
+
+```bash
+python3 -m unittest tests.test_infobax_core tests.test_emit_infobax_session tests.test_emit_infobax_vm
+python3 scripts/check_emit_infobax_vm.py --output-dir /tmp/emit-infobax-smoke
+bash scripts/check.sh
+```
+
+The smoke script requires elegant and legacy Python SDDS. It runs in a temporary
+workspace with compact linear optics, real model maps/tracking/screen fitting,
+and in-memory PV I/O. It checks six initial observations, one active query,
+pause/load/resume, input-version accounting and restoration. It never contacts
+an IOC and refuses an existing output directory. Its summary, log and session
+checkpoint remain in the output directory. This is an engineering check;
+linear upstream focusing preserves emittance, so this lattice cannot establish
+an optimization gain. Channel Access testing with an isolated VM IOC and a
+matched-budget optimization benchmark remain required before GUI acceptance.

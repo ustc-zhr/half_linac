@@ -8,11 +8,13 @@ checkpointing, and restoration of the pre-run machine state.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import Event
 from typing import Any, Protocol
 import json
+import fcntl
 import math
 import os
 import time
@@ -114,6 +116,8 @@ class InfoBAXMachine(Protocol):
     @property
     def candidate_ids(self) -> tuple[str, ...]: ...
 
+    def validate_pool(self, pool) -> None: ...
+
     def snapshot(self) -> Mapping[str, float]: ...
 
     def verify_snapshot(self, snapshot: Mapping[str, float]) -> None: ...
@@ -140,6 +144,7 @@ class InfoBAXSession:
         cancelled: Event | None = None,
         progress: Callable[[Mapping[str, Any]], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        _load_existing: bool = False,
     ) -> None:
         if not isinstance(core, InfoBAXCore):
             raise TypeError("core must be an InfoBAXCore")
@@ -150,6 +155,7 @@ class InfoBAXSession:
             raise ValueError(
                 "machine workpoint candidate IDs do not match the finite pool"
             )
+        machine.validate_pool(core.pool)
         selected_config = config or InfoBAXSessionConfig()
         if selected_config.max_observations < core.config.initial_actions:
             raise ValueError(
@@ -158,12 +164,16 @@ class InfoBAXSession:
         self.core = core
         self.machine = machine
         self.run_dir = Path(run_dir)
+        if not _load_existing and self.checkpoint_path.exists():
+            raise SessionCompatibilityError(
+                "run directory already has a checkpoint; use from_run_dir to resume"
+            )
         self.config = selected_config
         self.cancelled = cancelled or Event()
         self._pause_requested = Event()
         self._progress = progress
         self._clock = clock
-        self._restored_run = False
+        self._checkpoint_content: bytes | None = None
 
         self.status = "ready"
         self.error: str | None = None
@@ -186,11 +196,36 @@ class InfoBAXSession:
     def run(self) -> RecommendationResult | None:
         """Run until a budget, pause, failure, or reliability gate stops it."""
 
+        with self._exclusive_run():
+            return self._run()
+
+    @contextmanager
+    def _exclusive_run(self):
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        with (self.run_dir / ".infobax_session.lock").open("a+") as handle:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise InfoBAXSessionError("another session is using this run directory") from error
+            try:
+                current = (
+                    self.checkpoint_path.read_bytes()
+                    if self.checkpoint_path.exists() else None
+                )
+                if current != self._checkpoint_content:
+                    raise SessionCompatibilityError(
+                        "checkpoint changed; reload with from_run_dir before continuing"
+                    )
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _run(self) -> RecommendationResult | None:
         if self.status == "completed":
             return self.recommendation
         if self.initial_snapshot is None:
             self.initial_snapshot = _validated_snapshot(self.machine.snapshot())
-        elif self._restored_run:
+        else:
             try:
                 self.machine.verify_snapshot(self.initial_snapshot)
             except Exception as error:
@@ -200,7 +235,6 @@ class InfoBAXSession:
                 raise SessionDriftError(
                     "machine state drifted after the prior run was restored"
                 ) from error
-            self._restored_run = False
 
         self.status = "running"
         self.error = None
@@ -298,6 +332,9 @@ class InfoBAXSession:
                 self.status = "failed"
                 self.error = str(error)
         finally:
+            # Consume our pause request. A caller-owned cancellation Event must
+            # be cleared by its owner before continuing the same object.
+            self._pause_requested.clear()
             self.elapsed_seconds = self._elapsed(started)
             try:
                 self.machine.restore(self.initial_snapshot)
@@ -367,6 +404,7 @@ class InfoBAXSession:
             handle.flush()
             os.fsync(handle.fileno())
         temporary.replace(self.checkpoint_path)
+        self._checkpoint_content = self.checkpoint_path.read_bytes()
 
     @classmethod
     def from_run_dir(
@@ -383,7 +421,8 @@ class InfoBAXSession:
 
         path = Path(run_dir) / SESSION_FILENAME
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            checkpoint_content = path.read_bytes()
+            payload = json.loads(checkpoint_content)
         except (OSError, json.JSONDecodeError) as error:
             raise SessionCompatibilityError(
                 f"cannot read InfoBAX session checkpoint: {error}"
@@ -422,6 +461,7 @@ class InfoBAXSession:
             cancelled=cancelled,
             progress=progress,
             clock=clock,
+            _load_existing=True,
         )
         snapshot = payload["initial_snapshot"]
         if snapshot is None:
@@ -456,8 +496,7 @@ class InfoBAXSession:
             raise SessionCompatibilityError("invalid elapsed time") from error
         if not math.isfinite(session.elapsed_seconds) or session.elapsed_seconds < 0.0:
             raise SessionCompatibilityError("invalid elapsed time")
-        session._restored_run = True
-        session._save()
+        session._checkpoint_content = checkpoint_content
         return session
 
 

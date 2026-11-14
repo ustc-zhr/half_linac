@@ -66,6 +66,7 @@ class FinitePoolSpec:
     design_matrix: np.ndarray
     energy_mev: float
     observation_noise_std_mm2: float | np.ndarray
+    measurement_contract_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         ids = tuple(self.candidate_ids)
@@ -132,6 +133,13 @@ class FinitePoolSpec:
         object.__setattr__(self, "design_matrix", design)
         object.__setattr__(self, "energy_mev", energy)
         object.__setattr__(self, "observation_noise_std_mm2", noise)
+        contract = self.measurement_contract_fingerprint
+        if contract is not None and (
+            not isinstance(contract, str)
+            or len(contract) != 64
+            or any(character not in "0123456789abcdef" for character in contract)
+        ):
+            raise ValueError("measurement_contract_fingerprint must be a SHA-256 hex digest")
 
     @property
     def candidate_count(self) -> int:
@@ -174,6 +182,9 @@ class FinitePoolSpec:
             "energy_mev": self.energy_mev,
             "observation_noise_std_mm2": self.observation_noise_std_mm2.tolist(),
         }
+        # Keep unbound offline pools compatible with the frozen M0 evidence.
+        if self.measurement_contract_fingerprint is not None:
+            payload["measurement_contract_fingerprint"] = self.measurement_contract_fingerprint
         canonical = json.dumps(
             payload, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode("utf-8")

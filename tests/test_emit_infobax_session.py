@@ -95,6 +95,9 @@ class FakeMachine:
     def snapshot(self):
         return dict(self.state)
 
+    def validate_pool(self, pool):
+        pass
+
     def verify_snapshot(self, snapshot):
         if self.drifted or self.state != dict(snapshot):
             raise RuntimeError("machine drift")
@@ -133,6 +136,85 @@ class SequenceClock:
 
 
 class InfoBAXSessionTests(unittest.TestCase):
+    def test_same_object_pause_can_continue(self):
+        machine = FakeMachine()
+        with TemporaryDirectory() as directory:
+            session = InfoBAXSession(make_core(), machine, directory,
+                                    InfoBAXSessionConfig(max_observations=6))
+            session.request_pause()
+            session.run()
+            self.assertEqual(session.status, "paused")
+            session.run()
+            self.assertEqual(session.status, "completed")
+            self.assertEqual(len(session.core.observations), 6)
+
+    def test_same_object_retry_checks_drift_before_any_write(self):
+        machine = FakeMachine()
+        machine.fail_measure = True
+        with TemporaryDirectory() as directory:
+            session = InfoBAXSession(make_core(), machine, directory,
+                                    InfoBAXSessionConfig(max_observations=6))
+            with self.assertRaises(SessionRunFailure):
+                session.run()
+            machine.fail_measure = False
+            machine.state["WORK:K1"] = 99.0
+            applied = list(machine.applied)
+            restores = machine.restore_count
+            with self.assertRaises(SessionDriftError):
+                session.run()
+            self.assertEqual(machine.applied, applied)
+            self.assertEqual(machine.restore_count, restores)
+            self.assertEqual(machine.state["WORK:K1"], 99.0)
+
+    def test_existing_checkpoint_is_preserved_for_new_sessions(self):
+        machine = FakeMachine()
+        with TemporaryDirectory() as directory:
+            first = InfoBAXSession(make_core(), machine, directory,
+                                  InfoBAXSessionConfig(max_observations=6))
+            # A second object created before the first save must also refuse
+            # to overwrite the checkpoint at run time.
+            second = InfoBAXSession(make_core(), machine, directory,
+                                   InfoBAXSessionConfig(max_observations=6))
+            first.run()
+            original = first.checkpoint_path.read_bytes()
+            with self.assertRaises(SessionCompatibilityError):
+                InfoBAXSession(make_core(), machine, directory)
+            with self.assertRaises(SessionCompatibilityError):
+                second.run()
+            self.assertEqual(first.checkpoint_path.read_bytes(), original)
+
+    def test_stale_loaded_session_cannot_overwrite_new_observations(self):
+        machine = FakeMachine()
+        with TemporaryDirectory() as directory:
+            first = InfoBAXSession(make_core(), machine, directory,
+                                  InfoBAXSessionConfig(max_observations=6))
+            first.request_pause()
+            first.run()
+            stale = InfoBAXSession.from_run_dir(first.core.pool, machine, directory)
+            first.run()
+            original = first.checkpoint_path.read_bytes()
+            with self.assertRaises(SessionCompatibilityError):
+                stale.run()
+            self.assertEqual(first.checkpoint_path.read_bytes(), original)
+
+    def test_active_session_rejects_another_writer(self):
+        machine = FakeMachine()
+        failures = []
+        with TemporaryDirectory() as directory:
+            def progress(payload):
+                if payload["record"] is not None:
+                    return
+                other = InfoBAXSession.from_run_dir(core.pool, machine, directory)
+                try:
+                    other.run()
+                except RuntimeError as error:
+                    failures.append(str(error))
+            core = make_core()
+            first = InfoBAXSession(core, machine, directory,
+                                  InfoBAXSessionConfig(max_observations=6), progress=progress)
+            first.run()
+            self.assertTrue(any("another session" in error for error in failures))
+
     def test_complete_initial_and_active_query_loop(self):
         core = make_core()
         machine = FakeMachine()
