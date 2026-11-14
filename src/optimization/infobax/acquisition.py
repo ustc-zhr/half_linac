@@ -198,14 +198,19 @@ class InfoBAXEstimator:
         )
 
     def select(
-        self, available_indices: Sequence[int]
+        self, available_indices: Sequence[int], *, check=None
     ) -> tuple[EIGDiagnostic, tuple[EIGDiagnostic, ...]]:
         available = np.asarray(available_indices, dtype=int)
         if available.ndim != 1 or len(available) == 0:
             raise ValueError("no available query")
         if len(np.unique(available)) != len(available):
             raise ValueError("available queries must be unique")
-        results = tuple(self.estimate(int(index)) for index in np.sort(available))
+        evaluated = []
+        for index in np.sort(available):
+            if check is not None:
+                check()
+            evaluated.append(self.estimate(int(index)))
+        results = tuple(evaluated)
         selected = max(results, key=lambda result: result.raw_eig_nats)
         return selected, results
 

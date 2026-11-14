@@ -27,6 +27,9 @@ from .types import (
 )
 
 
+MODEL_IMPLEMENTATION_VERSION = "finite-pool-models-v2"
+
+
 def stable_seed(*values: object) -> int:
     """Derive the same cross-process seed used by the frozen research baseline."""
 
@@ -35,7 +38,7 @@ def stable_seed(*values: object) -> int:
 
 
 class InfoBAXCore:
-    """Pure numerical finite-pool M0 InfoBAX kernel.
+    """Pure numerical finite-pool InfoBAX kernel (M0 remains the default).
 
     This class owns no machine I/O.  A caller executes the returned query and
     submits only its scalar beam-size variance through :meth:`observe`.
@@ -45,6 +48,9 @@ class InfoBAXCore:
         self,
         pool: FinitePoolSpec,
         config: InfoBAXConfig | None = None,
+        *,
+        model: str = "M0",
+        initial_queries: tuple[int, ...] | None = None,
     ) -> None:
         if not isinstance(pool, FinitePoolSpec):
             raise TypeError("pool must be a FinitePoolSpec")
@@ -54,9 +60,20 @@ class InfoBAXCore:
             raise TypeError("config must be an InfoBAXConfig")
         if self.config.initial_actions > pool.query_count:
             raise ValueError("initial_actions exceeds the finite query pool")
+        if model not in {"M0", "transport_moments"}:
+            raise ValueError("unsupported posterior model")
+        self.model = model
+        self._explicit_initial = initial_queries is not None
+        if initial_queries is not None:
+            initial_queries = tuple(initial_queries)
+            if (len(initial_queries) != self.config.initial_actions
+                    or len(set(initial_queries)) != len(initial_queries)
+                    or any(type(i) is not int or not 0 <= i < pool.query_count
+                           for i in initial_queries)):
+                raise ValueError("initial_queries must be unique valid indices matching initial_actions")
         self._observations: list[PointObservation] = []
         self._observed_indices: set[int] = set()
-        self._initial_design = self._make_initial_design()
+        self._initial_design = (self._make_initial_design() if initial_queries is None else initial_queries)
 
     @property
     def observations(self) -> tuple[PointObservation, ...]:
@@ -125,7 +142,15 @@ class InfoBAXCore:
             diagnostics=diagnostics,
         )
 
-    def propose(self) -> QuerySuggestion:
+    def _posterior(self):
+        if self.model == "M0":
+            factory = FinitePoolM0
+        else:
+            from .transport_posterior import TransportMomentGP
+            factory = TransportMomentGP
+        return factory(self.pool, self.config).fit(self._observations)
+
+    def propose(self, *, check=None) -> QuerySuggestion:
         """Return the next unique initial-design or InfoBAX query."""
 
         if not self.available_indices:
@@ -134,15 +159,15 @@ class InfoBAXCore:
             if index not in self._observed_indices:
                 return self._suggestion(index, phase="initial", status="ready")
 
-        posterior = FinitePoolM0(self.pool, self.config).fit(self._observations)
+        posterior = self._posterior()
         algorithm = BeamEmittanceAlgorithm(self.pool)
         active_step = len(self._observations) - self.config.initial_actions + 1
         seed = stable_seed(
-            "acquisition", self.config.seed, "M0", "infobax", active_step
+            "acquisition", self.config.seed, self.model, "infobax", active_step
         )
-        selected, diagnostics = InfoBAXEstimator(
-            posterior, algorithm, self.config, seed=seed
-        ).select(self.available_indices)
+        estimator = InfoBAXEstimator(posterior, algorithm, self.config, seed=seed)
+        selected, diagnostics = (estimator.select(self.available_indices) if check is None
+                                 else estimator.select(self.available_indices, check=check))
         negative_fraction = float(
             np.mean([item.negative_estimate for item in diagnostics])
         )
@@ -192,12 +217,12 @@ class InfoBAXCore:
         """Summarize posterior optimum probabilities without performing I/O."""
 
         self._require_initial_design()
-        posterior = FinitePoolM0(self.pool, self.config).fit(self._observations)
+        posterior = self._posterior()
         algorithm = BeamEmittanceAlgorithm(self.pool)
         active_step = len(self._observations) - self.config.initial_actions
         samples = posterior.sample(
             self.config.summary_samples,
-            stable_seed("summary", self.config.seed, "M0", active_step),
+            stable_seed("summary", self.config.seed, self.model, active_step),
         )
         summary = algorithm.summarize(
             samples,
@@ -231,13 +256,19 @@ class InfoBAXCore:
     def to_checkpoint(self) -> dict[str, Any]:
         """Return a versioned, JSON-compatible state without derived matrices."""
 
-        return {
+        payload = {
             "schema": CHECKPOINT_SCHEMA,
             "implementation": IMPLEMENTATION_VERSION,
             "pool_fingerprint": self.pool.fingerprint,
             "config": self.config.to_dict(),
             "observations": [item.to_dict() for item in self._observations],
         }
+
+        if self.model != "M0" or self._explicit_initial:
+            payload.update(schema="half_infobax_checkpoint_v2",
+                           implementation=MODEL_IMPLEMENTATION_VERSION,
+                           model=self.model, initial_queries=list(self.initial_design))
+        return payload
 
     @classmethod
     def from_checkpoint(
@@ -256,11 +287,15 @@ class InfoBAXCore:
             "config",
             "observations",
         }
+        extended = checkpoint.get("schema") == "half_infobax_checkpoint_v2"
+        if extended:
+            expected_fields |= {"model", "initial_queries"}
         if set(checkpoint) != expected_fields:
             raise CheckpointError("checkpoint fields do not match this version")
-        if checkpoint["schema"] != CHECKPOINT_SCHEMA:
+        if not extended and checkpoint["schema"] != CHECKPOINT_SCHEMA:
             raise CheckpointError("checkpoint schema is not supported")
-        if checkpoint["implementation"] != IMPLEMENTATION_VERSION:
+        implementation = MODEL_IMPLEMENTATION_VERSION if extended else IMPLEMENTATION_VERSION
+        if checkpoint["implementation"] != implementation:
             raise CheckpointError("checkpoint implementation is not supported")
         if checkpoint["pool_fingerprint"] != pool.fingerprint:
             raise CheckpointError("checkpoint finite-pool fingerprint does not match")
@@ -268,7 +303,11 @@ class InfoBAXCore:
         observations = checkpoint["observations"]
         if not isinstance(observations, list):
             raise CheckpointError("checkpoint observations must be a list")
-        core = cls(pool, config)
+        try:
+            core = cls(pool, config, **({"model": checkpoint["model"],
+                       "initial_queries": checkpoint["initial_queries"]} if extended else {}))
+        except (TypeError, ValueError) as error:
+            raise CheckpointError(f"invalid model or initialization: {error}") from error
         for row in observations:
             if not isinstance(row, Mapping) or set(row) != {
                 "query_index",

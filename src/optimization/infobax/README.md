@@ -111,3 +111,14 @@ checkpoint remain in the output directory. This is an engineering check;
 linear upstream focusing preserves emittance, so this lattice cannot establish
 an optimization gain. Channel Access testing with an isolated VM IOC and a
 matched-budget optimization benchmark remain required before GUI acceptance.
+
+## Selectable posterior and initialization
+
+`InfoBAXCore(pool, config, model="transport_moments", initial_queries=(...))`
+opts into the transport-consistent moment GP and an explicit ordered initial
+query list. Its length must equal `config.initial_actions`. M0 and the existing
+farthest-point initial design remain the numerical defaults, with unchanged
+legacy checkpoint/golden behavior. New models and explicit designs use v2
+checkpoints binding model, implementation and initialization identities.
+`propose(check=...)` checks cancellation or a deadline between acquisition
+candidate evaluations; it does not own machine I/O.
