@@ -104,6 +104,11 @@ coverage.xml
 .python-version
 .envrc
 
+# Agent / Codex local configuration
+AGENTS.md
+.agents/
+.codex
+
 # =========================
 # EPICS / local machine config
 # =========================

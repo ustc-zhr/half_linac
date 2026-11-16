@@ -89,6 +89,9 @@ gotacc-gui
 The current GUI opens in a compact control-room style with dark mode enabled by
 default. Use the top-right theme button to switch between dark and light modes,
 and use the adjacent `Log` button to show or hide the bottom log panel.
+Variable trajectory plots in Run and Results offer `Raw`, `Bounds %`, and
+`Δ Initial %` display modes; the last shows change from the configured initial
+value as a percentage of the variable span.
 The persistent status strip shows the current task, mode, algorithm, run phase,
 and machine/backend state. Overview focuses on task readiness, the planned
 evaluation budget, backend readiness, the latest run outcome, and recent

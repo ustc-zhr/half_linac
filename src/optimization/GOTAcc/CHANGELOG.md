@@ -2,6 +2,11 @@
 
 ## 1.3.0 - 2026-08-27
 
+- Corrected HALF XCA23/YCA23 setpoint and readback PV aliases to XC23A/YC23A.
+- Kept agent/Codex configuration local by ignoring `AGENTS.md`, `.agents/`,
+  and `.codex` and removing them from Git tracking.
+- Compacted the bottom Log, fixed clipped tab text, and exposed Raw, Bounds %,
+  and initial-relative variable trajectory display controls.
 - Kept menu hover text aligned with each theme foreground color and preserved
   muted styling for disabled menu entries.
 - Redesigned GOTAcc Studio around a compact half_linac-style control-room
