@@ -65,6 +65,29 @@ def _load_watch_image_from_sdds(
     return np.reshape(hist.transpose(), (np.size(hist),))
 
 
+def _load_watch_rms_from_sdds(watch_output_path: Path) -> tuple[float, float]:
+    """Population RMS about the centroid, in mm, from the last particle page."""
+    dataset = _new_legacy_sdds_dataset()
+    dataset.load(str(watch_output_path))
+    coordinates = []
+    for name in ("x", "y"):
+        if name not in dataset.columnName:
+            raise RuntimeError(f"WATCH output is missing {name!r}")
+        pages = dataset.columnData[dataset.columnName.index(name)]
+        if not len(pages):
+            raise RuntimeError("WATCH output contains no particle pages")
+        values = np.asarray(pages[-1], dtype=float)
+        if values.ndim != 1 or len(values) < 2 or not np.all(np.isfinite(values)):
+            raise RuntimeError("WATCH RMS requires at least two finite particle coordinates")
+        coordinates.append(values)
+    if len(coordinates[0]) != len(coordinates[1]):
+        raise RuntimeError("WATCH coordinate lengths differ")
+    widths = tuple(float(values.std(ddof=0) * 1000) for values in coordinates)
+    if not all(np.isfinite(width) and width > 0 for width in widths):
+        raise RuntimeError("WATCH RMS must be positive and finite")
+    return widths
+
+
 def _load_watch_scalar_from_sdds(
     watch_output_path: Path,
     column_name: str,

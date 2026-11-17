@@ -1,6 +1,6 @@
-# HALF 数字影子离线 PoC
+# HALF 数字影子 PoC
 
-本阶段实现保存快照驱动现有 ELEGANT 的局部横向预测与诊断比较。命令行只有合成输入生成和离线重放，不提供现场采集或 PV 写入入口。
+本阶段实现保存快照驱动现有 ELEGANT 的局部横向预测与诊断比较，以及 VM 专用的一次只读采集。命令行支持合成输入、离线重放和 `run-vm`；不提供 real 采集或 PV 写入入口。
 
 真实快照中的 `K1_total` 是四极铁归一化强度回读，映射到模型 `K1`，单位均为 `1/m^2`。`K1` 设置值保留在原始快照中用于追溯，不作为回读缺失时的替代。VM 快照使用其 `K1` 通道。该选择仅作用于数字影子，不改变其他应用。
 
@@ -79,7 +79,7 @@ example 命令生成可编辑的请求文件，其结构如下。数值仅示意
 - `digital_shadow.comparison.compare_diagnostics()`：按身份、单位、定义与时间对齐。
 - `digital_shadow.session.run_once()`：连接离线步骤并归档。
 
-现场 capture_once 和通用多引擎调度尚未实现；本次没有增加新的机器状态管理器、改变 GUI 状态机或 EPICS 写入保护。
+VM 的 `capture_vm_once()` 已实现；real 采集和通用多引擎调度尚未实现。本次没有增加新的机器状态管理器、改变 GUI 状态机或 EPICS 写入保护。
 
 ## 5 运行产物与追溯
 
@@ -114,4 +114,68 @@ example 命令生成可编辑的请求文件，其结构如下。数值仅示意
 
 已有失败为 `tests/test_elegant_backend.py::ElegantBackendTests::test_full_twiss_profile_shoots_once_from_line_start`：测试要求返回对象与 mock 对象身份相同，而现有实现包装为含入口能量的 TwissProfileResult。该失败在未改动的 main 基线 `0b5051e` 上也已复现，本次没有修改该测试或对应全线 Twiss 方法。这不是完整测试集全部通过的声明。
 
-下一步需要真实入口束流资料和单位、RMS 定义、时间质量已确认的诊断快照，然后增加明确授权的只读采集入口。本阶段的合成数值不用于实际调束。
+真实机器验证仍需要入口束流资料和单位、RMS 定义、时间质量已确认的诊断快照，以及明确的 real 采集授权。本阶段的合成数值不用于实际调束。
+
+## 7 VM 一次采集与比较
+
+先用已有 profile 生成 `QT02 entrance → PRF06` 的示例请求。`--vm` 生成的快照仍是合成数据；`run-vm` 只使用其中的请求文件，重新从运行中的 VM 读取状态和诊断。
+
+```bash
+python3 scripts/run_digital_shadow.py example --vm --output-dir /tmp/half-shadow-vm-example
+python3 scripts/run_digital_shadow.py run-vm \
+  --machine half \
+  --request /tmp/half-shadow-vm-example/request.json \
+  --output-root /tmp/half-shadow-vm-runs
+```
+
+采集固定使用 `vm` 映射，忽略环境中的 real 默认选择，也没有 backend 参数可切换为 real。若任一所需 VM PV 同时出现在 real 映射中，连接前拒绝。采集器只复用 `sample_capture_points()` 的主动读取，每个不同 PV 读取一次，没有设值、恢复、重试采样或自动回退。
+
+运行前，需有与选定 machine 对应的虚拟 softIOC 和更新后的 VM 计算进程。原 VM 发布器只发布图像；本次将原粒子坐标中关于质心的总体标准差 `std(ddof=0)` 转为 mm，写入 profile 已有的 sigx/sigy 虚拟通道。无有效粒子或 WATCH 被禁用时发布 NaN，避免保留上一轮有效值。PV 名称、IOC DB 和替换文件生成方式保持不变；IOC 无需为此重建。VM 计算进程需重启以加载新发布逻辑。
+
+RMS 发布等待写入完成，VM 的 Ready 状态记录 `publication.rms`。采集读取 `.vm-workbench/status.json`、`result.json` 与 runtime JSON，核对同一 session、calculation、input_version 和 result_version；采集后再核对，期间变化即拒绝计算。采到的 K1 必须与该输入格架一致，sigx/sigy 必须与该结果中的粒子 RMS 一致，且诊断源时间处于该 VM 计算的发布窗口内。IOCs 未声明 EGU 时，用已知 VM 合约补充 `1/m^2` 和 mm 并在条目 detail 中记录；EGU 与合约冲突则拒绝，不覆盖。
+
+VM 状态不变时，旧的诊断源时间仍可能有效。程序保留原时间戳，只有通过上述版本和值校验的证据，才按 VM 计算的时间窗口比较。没有证据的普通 replay 仍使用原来的诊断年龄限制。该一致性标记是 `vm_result_matched`，不是原子采样承诺。
+
+若 VM 运行在另一个工作区，可以指定其 runtime JSON：
+
+```bash
+python3 scripts/run_digital_shadow.py run-vm \
+  --machine half \
+  --request /tmp/half-shadow-vm-example/request.json \
+  --vm-runtime-json /path/to/running-vm/halflinac.json \
+  --output-root /tmp/half-shadow-vm-runs \
+  --ready-timeout 10 --capture-timeout 5
+```
+
+此路径必须对应所连接的虚拟 IOC/VM 实例。CLI 不自动启动或重启服务；VM 正在计算时有界等待 Ready，缺少 RMS 发布记录时提示更新 VM。采样中变化或不匹配时失败，不混合工作点，也不偷偷再次采样。完整采集成功后交给原有 `run_once()`，仅在新运行目录执行独立 ELEGANT 计算。
+
+每次成功采集额外归档 `vm_capture_evidence.json`，包含被绑定快照的哈希、VM 输入、状态、所选 RMS、结果摘要哈希和 runtime 路径。该证据和原始快照可以在 VM 停止后重放：
+
+```bash
+python3 scripts/run_digital_shadow.py replay \
+  --snapshot /path/to/shadow_run/machine_snapshot.json \
+  --request /path/to/shadow_run/request.json \
+  --vm-evidence /path/to/shadow_run/vm_capture_evidence.json \
+  --output-root /tmp/half-shadow-vm-replay
+```
+
+示例请求的入口束流是假设值，与真实 VM 束流未必相同。complete 表示链路与数据对应关系通过，不要求残差为零。要验证物理精度，应使用独立入口束流资料；RMS 发布值是原粒子分布统计量，不是裁剪图像的高斯拟合宽度。
+
+## 8 VM 联调验证记录
+
+2026-11-17 新增 VM 采集、版本和值匹配、real/混用映射拒绝、单位冲突、老诊断的证据校验、RMS 发布及 worktree 导入回归测试。发现某些 PYTHONPATH 排列会将 sibling main 放在当前 worktree 前面，已修正 bootstrap 的路径优先级，保留拒绝已导入不同 checkout 的检查。
+
+| 检查 | 结果 |
+| --- | --- |
+| 数字影子、VM 采集、采样与 VM workbench 测试 | 56 项通过 |
+| 发布与 worktree 导入定向回归 | 10 项通过 |
+| 隔离 Channel Access 与 ELEGANT 集成 | 1 项通过；临时 softIOC/caRepeater、独立 loopback 端口，完成后清理 |
+
+隔离集成先运行 ELEGANT 分段粒子跟踪，使用实际入口宏粒子的协方差作为独立输入，通过 VmPublisher 发布目标屏幕的 RMS；然后由 `run-vm` 经真实 CA 读取，驱动独立矩阵计算并比较，两平面残差均小于 `1e-6 mm`。特意等待 6 秒再采集，验证稳定 VM 的老时间戳通过版本证据匹配，归档后离线重放也通过。测试没有操作已有 VM、没有连接 real PV，也没有启动完整 GUI。
+
+默认测试不会启动服务。需要本地复验时，确保 PATH 中有 ELEGANT、softIoc、caRepeater，并显式运行：
+
+```bash
+source scripts/setup.sh
+HALF_VM_SHADOW_INTEGRATION=1 python3 -m pytest -q tests/test_digital_shadow_vm_integration.py
+```

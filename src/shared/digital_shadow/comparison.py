@@ -7,7 +7,7 @@ from half_linac.src.shared.machine_state import SampleQuality
 from .models import timestamp
 
 
-def compare_diagnostics(context, snapshot, request, predictions_m):
+def compare_diagnostics(context, snapshot, request, predictions_m, *, diagnostic_window=None):
     entries = {entry.key: entry for entry in snapshot.entries}
     started = timestamp(snapshot.capture_started_at)
     finished = timestamp(snapshot.capture_finished_at)
@@ -35,7 +35,8 @@ def compare_diagnostics(context, snapshot, request, predictions_m):
                 raise ValueError("RMS width must be positive and finite")
             if entry.source_timestamp is None or not math.isfinite(entry.source_timestamp):
                 raise ValueError("Diagnostic source timestamp is missing")
-            if not started - request.diagnostic_max_age_s <= entry.source_timestamp <= finished:
+            window = diagnostic_window or (started - request.diagnostic_max_age_s, finished)
+            if not window[0] <= entry.source_timestamp <= window[1]:
                 raise ValueError("Diagnostic timestamp lies outside the capture age window")
             if entry.received_at is None or not started <= timestamp(entry.received_at) <= finished:
                 raise ValueError("Diagnostic receipt timestamp lies outside the capture window")

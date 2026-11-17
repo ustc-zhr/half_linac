@@ -23,6 +23,7 @@ from .parser import (
     _load_bpm_centroids_from_sdds,
     _load_watch_image_from_sdds,
     _load_watch_scalar_from_sdds,
+    _load_watch_rms_from_sdds,
 )
 
 
@@ -57,10 +58,18 @@ class VmWatchScalarPublishSpec:
 
 
 @dataclass(frozen=True)
+class VmWatchRmsPublishSpec:
+    source_watch_id: str
+    x_pv: str | None
+    y_pv: str | None
+
+
+@dataclass(frozen=True)
 class VmPublishPlan:
     bpm_specs: tuple[VmBpmPublishSpec, ...] = ()
     watch_image_specs: tuple[VmWatchImagePublishSpec, ...] = ()
     watch_scalar_specs: tuple[VmWatchScalarPublishSpec, ...] = field(default_factory=tuple)
+    watch_rms_specs: tuple[VmWatchRmsPublishSpec, ...] = ()
 
 
 def build_vm_publish_plan(profile: MachineProfile) -> VmPublishPlan:
@@ -98,10 +107,22 @@ def build_vm_publish_plan(profile: MachineProfile) -> VmPublishPlan:
         )
     ]
 
+    rms_specs = []
+    for element in list_elements(profile, kind="flag"):
+        channels = []
+        for channel in ("sigx", "sigy"):
+            try:
+                channels.append(resolve_channel(profile, element.id, channel, "vm"))
+            except MachineProfileError:
+                channels.append(None)
+        if any(channels):
+            rms_specs.append(VmWatchRmsPublishSpec(element.id, *channels))
+
     return VmPublishPlan(
         bpm_specs=tuple(bpm_specs),
         watch_image_specs=tuple(watch_specs),
         watch_scalar_specs=tuple(scalar_specs),
+        watch_rms_specs=tuple(rms_specs),
     )
 
 
@@ -253,6 +274,32 @@ class VmPublisher:
 
         return all_ok
 
+    def publish_watch_rms(self, plan, *, lattice, usedline, elegant_dir) -> bool:
+        """Refresh existing VM width channels; invalidate unusable output."""
+        all_ok = True
+        for spec in plan.watch_rms_specs:
+            if spec.source_watch_id not in usedline:
+                continue
+            widths = (float("nan"), float("nan"))
+            try:
+                element = lattice[spec.source_watch_id]
+                mode = str(element.get("MODE", "")).strip("\"'").lower()
+                if element.get("TYPE") != "WATCH" or mode not in {"coord", "coordinate", "coordinates"}:
+                    raise RuntimeError("RMS source is not a coordinate WATCH")
+                if float(element.get("DISABLE", 0)) != 0:
+                    raise RuntimeError("RMS source WATCH is disabled")
+                widths = _load_watch_rms_from_sdds(_resolve_watch_output_path(
+                    Path(elegant_dir), spec.source_watch_id, element))
+            except Exception as exc:
+                print(f"RMS publication invalidated for {spec.source_watch_id}: {exc}")
+                all_ok = False
+            for pv_name, value in zip((spec.x_pv, spec.y_pv), widths):
+                if pv_name and not self._publish_one_best_effort(
+                    label=f"RMS {spec.source_watch_id}", pv_name=pv_name, value=value, wait=True,
+                ):
+                    all_ok = False
+        return all_ok
+
     def publish_watch_scalars(
         self,
         plan: VmPublishPlan,
@@ -342,12 +389,12 @@ class VmPublisher:
 
         return True
 
-    def _publish_one_best_effort(self, *, label: str, pv_name: str, value) -> bool:
+    def _publish_one_best_effort(self, *, label: str, pv_name: str, value, wait: bool = False) -> bool:
         try:
             result = caput(
                 pv_name,
                 value,
-                wait=False,
+                wait=wait,
                 connection_timeout=EPICS_CONNECTION_TIMEOUT_S,
                 timeout=EPICS_PUT_TIMEOUT_S,
             )
@@ -441,6 +488,7 @@ __all__ = [
     "VmPublishPlan",
     "VmWatchImagePublishSpec",
     "VmWatchScalarPublishSpec",
+    "VmWatchRmsPublishSpec",
     "build_vm_publish_plan",
     "reconcile_watch_scalar_sources",
 ]

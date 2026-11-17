@@ -26,8 +26,11 @@ def ensure_repo_import_path(entry_file: str) -> Path:
 
     # Entry points must never import a sibling checkout named half_linac.
     import_root = str(repo_root / "scripts" / "python_imports")
-    if import_root not in sys.path:
-        sys.path.insert(0, import_root)
+    # Keep the proxy first even when PYTHONPATH already contains it. Adding a
+    # missing repo_parent above must not put a sibling half_linac ahead of it.
+    if import_root in sys.path:
+        sys.path.remove(import_root)
+    sys.path.insert(0, import_root)
     package = importlib.import_module("half_linac")
     if Path(next(iter(package.__path__))).resolve() != repo_root:
         raise RuntimeError("A different HALF checkout is already imported; start a fresh process.")

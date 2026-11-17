@@ -133,6 +133,12 @@ def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
                 f"({_format_device_count(image_count)})."
             )
 
+    if publish_plan.watch_rms_specs:
+        publication["rms"] = publish(
+            publisher.publish_watch_rms, publish_plan,
+            lattice=parser.lattice, usedline=usedline, elegant_dir=elegant_dir,
+        )
+
     scalar_count = len(publish_plan.watch_scalar_specs)
     if scalar_count:
         publication["charge"] = publish(publisher.publish_watch_scalars,

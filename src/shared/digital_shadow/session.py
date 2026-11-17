@@ -29,7 +29,7 @@ def file_digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def run_once(context, snapshot, request, output_root):
+def run_once(context, snapshot, request, output_root, *, vm_evidence=None):
     """Replay saved inputs. This entry point performs no EPICS reads or writes."""
     directory = Path(output_root).resolve() / f"shadow_{uuid.uuid4().hex}"
     directory.mkdir(parents=True, exist_ok=False)
@@ -45,6 +45,13 @@ def run_once(context, snapshot, request, output_root):
         raw = snapshot_to_dict(snapshot)
         write_runtime_state(directory / "machine_snapshot.json", raw)
         write_runtime_state(directory / "request.json", request.as_metadata())
+        diagnostic_window = None
+        if vm_evidence is not None:
+            from .vm_capture import verify_vm_evidence
+            write_runtime_state(directory / "vm_capture_evidence.json", vm_evidence)
+            diagnostic_window = verify_vm_evidence(context, snapshot, request, vm_evidence)
+            manifest["mode"] = "vm_capture_replay"
+            manifest["vm_input_version"] = vm_evidence["status"]["input_version"]
         started, finished = timestamp(snapshot.capture_started_at), timestamp(snapshot.capture_finished_at)
         if not 0 <= finished - started <= request.max_capture_duration_s:
             raise ValueError("Capture duration exceeds the declared working-point window")
@@ -74,13 +81,13 @@ def run_once(context, snapshot, request, output_root):
         manifest["input_hash"] = digest({"capture": raw, "request": request.as_metadata(),
                                          "model": state, "engine": manifest["engine"],
                                          "implementation": manifest["implementation"], "dependencies": manifest["dependencies"],
-                                         "model_snapshot": model_snapshot.as_metadata()})
+                                         "model_snapshot": model_snapshot.as_metadata(), "vm_evidence": vm_evidence})
         save_model_snapshot(model_snapshot, directory / "model_snapshot.json", extra_metadata={
             "machine_snapshot_id": snapshot.snapshot_id, "machine_snapshot_hash": manifest["snapshot_hash"],
             "strength_basis": "real K1_total readback; VM K1; units 1/m^2",
         })
         predictions, matrices = predict(context, request, state, model_snapshot, directory)
-        comparisons = compare_diagnostics(context, snapshot, request, predictions)
+        comparisons = compare_diagnostics(context, snapshot, request, predictions, diagnostic_window=diagnostic_window)
         status = "complete" if all(row["status"] == "compared" for row in comparisons) else "partial"
         result = {"run_id": directory.name, "input_hash": manifest["input_hash"], "status": status,
                   "beam_basis": request.beam_basis, "beam_provenance": request.beam_provenance,
