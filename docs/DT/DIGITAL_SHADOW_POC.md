@@ -188,6 +188,6 @@ HALF_VM_SHADOW_INTEGRATION=1 python3 -m pytest -q tests/test_digital_shadow_vm_i
 
 ## 10 实机离线准备
 
-2026-11-17 已离线盘点原工作区的历史 real 扫描、多屏测量和五个粒子文件。首选候选为 QT01 entrance → PRF08，参考入口可研究既有 PRF07 扫描；PRF07 不能同时作为独立验证目标。现有资料缺少合格 real MachineStateSnapshot、K1_total 原始元数据及已确认的 RMS 诊断定义，因此没有生成真实重放结果。
+2026-11-17 已离线盘点原工作区的历史 real 扫描、多屏测量和五个粒子文件。用户确认 PRF06/08 SIZE 是 mm 单位的高斯拟合 σ，且无独立 QT01 入口资料，因此暂缓 QT01 入口方案。当前建议 PRF06/07/08 统一图像 RMS 重建 PRF06 exit，PRF09 留出验证。现有候选档案没有可重算的原始束流帧，也缺合格 real MachineStateSnapshot 和 K1_total 元数据，因此没有生成真实重放结果。
 
-资料、六个采集通道、`m^-2` 单位别名兼容性及后续最小修改见 [实机离线准备](REAL_POC_PREPARATION.md) 和 [输入准备表](REAL_POC_INPUTS.json)。准备表不是可执行请求，未确认的入口与诊断字段保留 null。本轮未接触 real PV，也未增加 real 采集入口。
+资料、新候选段的状态和图像需求、`m^-2` 单位别名兼容性及后续最小修改见 [实机离线准备](REAL_POC_PREPARATION.md) 和 [输入准备表](REAL_POC_INPUTS.json)。准备表不是可执行请求，入口协方差仍为 null；已确认的高斯 σ 不改标为 RMS。本轮未接触 real PV，也未增加 real 采集入口。

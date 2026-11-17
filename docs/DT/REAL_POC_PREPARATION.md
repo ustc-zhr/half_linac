@@ -2,9 +2,9 @@
 
 检查基线为专用 worktree 的 `feature/digital-shadow-poc` 分支 `58cf829`；原工作区历史资料只读。本轮只更新准备文档与清单，没有修改产品代码。
 
-2026-11-17，基于 `feature/digital-shadow-poc` 的 `58cf829`，完成现有资料、真实 PV 映射、模型段落和保存快照的离线检查。建议首个候选为 **QT01 entrance → PRF08**，使用已有 `EMIT_QT01_PRF08`，独立验证目标先限定 PRF08。该选择依据现有入口拟合资料和支持的模型路径，不固定沿用 VM 示例中的 QT02。
+2026-11-17 完成资料盘点后，用户确认此前询问的 PRF06、PRF08 SIZE PV 为 **mm 单位的高斯拟合 σ**，且没有独立的 QT01 入口束流测量资料。因此暂缓 QT01 entrance → PRF08 作为首个实机比较段，改为准备 **PRF06 exit → PRF09**：用 PRF06/07/08 的统一图像 RMS 重建参考束流，PRF09 留出验证。该方案尚待输入资料与实现审阅，不代表已经取得相应测量。
 
-当前状态为 **输入未齐备，尚不能报告真实工作点重放或实机物理验收通过**。可检索资料中没有满足数字影子契约的 real MachineStateSnapshot；历史束宽全部采用 Gaussian fit，真实 SIZE PV 的 RMS 定义与单位仍待核实。本轮仅更新准备记录，未连接 real PV、运行 ELEGANT、修改采集/调束逻辑或写入机制。
+当前状态为 **输入未齐备，尚不能报告真实工作点重放或实机物理验收通过**。已确认的高斯 σ 不能直接充当线性二阶矩模型所需的总体 RMS，也没有统一换算系数。本次候选档案中没有合格 real MachineStateSnapshot 或本方案所需的原始束流图像。本轮仅更新准备记录，未连接 real PV、运行 ELEGANT、修改采集/调束逻辑或写入机制。
 
 [输入准备表](REAL_POC_INPUTS.json) 是供审阅的清单，**不是 CLI 请求文件或已经实现的配置接口**。其中未确认的数值保持 null，不能直接交给 `replay`。
 
@@ -24,13 +24,13 @@
 
 档案统计覆盖原工作区 `runs/`、`src/apps/machine_snapshot/runtime/`、`src/apps/emit_measure/runtime/`、`runtime/` 中的 JSON 文件。文件数量和不同内容数量均不是独立物理测量次数；latest 副本、重算和重复归档需要区分。
 
-### 1.1 可复用的入口资料
+### 1.1 历史入口拟合资料
 
 原工作区 `runs/0929/scan_20260929_171835_QT01_PRF07/metadata.json`，以及同日 `172537`、`172954`、`173441` 四个 QT01/PRF07 扫描，在 `fit_summary.leastSquares` 中两平面均标为 valid。现有 [matching_import.import_measurement()](../../src/apps/emit_measure/matching_import.py) 已能导入到 QT01 entrance，并转换几何发射度至 SI。无需另写一套历史拟合单位转换。
 
-这些记录只是入口候选：束宽方法为 Gaussian fit，部分 Twiss 为显示精度值，扫描中四极铁快照来源为 K1 设置值，未提供同期 K1_total 的原始元数据。valid 表示现有拟合算法给出的状态，不能代替 RMS 定义、工作点稳定性、统计不确定度和上游状态的确认。
+这些记录是高斯测宽反演资料，不是用户已确认存在的独立 QT01 入口测量。部分 Twiss 为显示精度值，扫描中四极铁快照来源为 K1 设置值，未提供同期 K1_total 元数据。valid 表示现有拟合算法给出的状态，不能代替总体 RMS、工作点稳定性和统计不确定度的确认。本轮不将其提升为首个实机 PoC 的已知入口。
 
-若使用 PRF07 扫描得到入口，必须把 `PRF07/sigx`、`PRF07/sigy` 列入 `fitted_diagnostics`，不再用它们作为独立验收目标。PRF08 需要独立、同期且未参与入口拟合的数据；不能直接把另一个时刻的多屏记录拼接成同一次机器快照。PRF06 可作为后续额外验证屏，但首个请求先只比较一个实际具有新鲜诊断的 PRF08。
+今后若重新评估 PRF07 扫描入口，仍需把 `PRF07/sigx`、`PRF07/sigy` 列入 `fitted_diagnostics`，不能再作为独立验证。当前推荐方案将 PRF06/07/08 的六个尺寸通道列为拟合来源，只验证未参与重建的 PRF09。
 
 若首个 real PoC 需要重新测量入口，应由现有经过授权的发射度流程完成；数字影子只消费经确认的结果。本轮不执行扫描、磁铁调节、屏幕插拔或改变采集流程。
 
@@ -42,7 +42,15 @@
 
 `quality.pv_sigx_mm/pv_sigy_mm` 是界面保存的交叉检查值。[MultiScreenWorkspace._read_optional_size_channel()](../../src/apps/emit_measure/multi_screen_workspace.py) 仅取数值，未读取 EGU、源时间与报警；字段名中的 mm 不构成部署端单位证明。
 
-### 1.3 六维文件的来源和能量
+用户现已确认 PRF06/08 的单位和高斯 σ 定义；PRF07/09 的 SIZE 定义尚未逐项确认。上述旧读取方式仍不能提供源时间或质量证明。
+
+### 1.3 原始图像和可复用的处理
+
+对本次候选档案所在 `runs/0929/`、`runs/1003/` 及 `src/apps/emit_measure/runtime/` 的检查，没有找到可重算的原始束流帧；仅发现一张界面截图及保存的宽度/质量记录。现有扫描导出 `scanResults.txt/metadata.json`，多屏档案保存尺寸和处理设置，不保存本组原始粒子或原始束流图像。背景文件也不能替代束流帧。
+
+现有 [fit_beam_image()](../../src/shared/beam_diagnostics/image_fit.py) 支持 Gaussian fit、RMS moments 和 Robust RMS moments，GUI 已有 Projection RMS 选择。重算时应明确背景、ROI、阈值、裁剪、饱和及方法版本，评估相机展宽与有限窗口偏差；不能把 Robust RMS 或 ROI 内 RMS 自动标为全分布 RMS。Gaussian σ 与 RMS 仅在满足相应分布和观测条件时一致，不能由现有标量单独恢复总体二阶矩。现有扫描元数据校验也明确拒绝在没有原图时切换宽度方法。
+
+### 1.4 六维文件的来源和能量
 
 | 文件 | 最后一页粒子数 | 文件中的位置线索 | 由 p 推导的平均动能 MeV |
 | --- | ---: | --- | ---: |
@@ -62,42 +70,47 @@ SDDS 的 CCC/DMTB 是格架标识，尚未绑定为已确认的 L01B 出口或�
 
 | 候选 | 当前结构检查 | 选择依据 |
 | --- | --- | --- |
-| QT01 entrance → PRF08 | 支持；模型需 QT01、QT02 的 K1 | 有双平面有效的 PRF07 扫描入口候选，可留出 PRF08；优先准备 |
+| PRF06 exit → PRF09 | 支持；需 QT03、QT04 的 K1 | 当前首选：PRF06/07/08 图像 RMS 重建入口，PRF09 留出；原图和同期状态待补 |
+| QT01 entrance → PRF08 | 支持；模型需 QT01、QT02 的 K1 | 无独立 QT01 入口资料；历史高斯拟合不直接代替，暂缓 |
 | QT02 entrance → PRF08 | 支持；仅需 QT02 的 K1 | VM 已验证，但找到的 real QT02 扫描至少一个平面 non_physical，暂不作为首选入口来源 |
 | QL09 entrance → PRF03 | 支持；需 QL09、QL10 | 可复用现有示例结构；本次未找到合格 real 双平面入口与独立验证组合 |
 | QL13 → PRF04 | 当前 `EMIT_QL13_PRF04` 不存在 | 历史 real 数据较多，但不能将旧模型线路名直接用于当前格架 |
 | QL27 → PRF06 | 当前 PoC 拒绝 RFCW | 涉及 RF，加速段超出已验证的局部线性范围 |
-| PRF06 exit → PRF09 | 支持；需 QT03、QT04 | 可作为后续多屏留出方案；现有档案欠缺必要机器状态，不能直接作本轮独立输入 |
 
 首选路径实际展开为：
 
 ```text
-QT01 → BPM20 → XC21 → YC21 → DMTB → QT02
-     → DMTC1 → PRF06 → DMTC2 → PRF07 → DMTC3 → PRF08
+PRF06 → DMTC2 → PRF07 → DMTC3 → PRF08 → DMTC4
+      → QT03 → DMTD → QT04 → BPM21 → XC22 → YC22
+      → DMTE → ICT02 → DMTE1 → PRF09
 ```
+
+使用已有 `ALL_MAIN` 路径，参考面为 PRF06 exit。设计格架中 PRF06/07/08 之间只有两个 5.5 m 漂移；已有 `diagnose_measurement_matrix()` 对距离 0、5.5、11 m 的测量矩阵返回 rank=3、condition_number≈12.34。三屏原则上可确定每个平面三个二阶矩，但自由度为零，不能用其自身拟合残差验收；需重复样本、不确定度、正定性和留出屏验证。这只是结构可辨识检查，没有使用假造的实测束宽。
 
 检查复用 [prepare_model()](../../src/shared/digital_shadow/pipeline.py)，没有执行预测或启动 ELEGANT。当前范围为无耦合、无色散的横向线性二阶矩，不能由此认证轨道、空间电荷、非线性、RF、损失或图像测宽精度。
 
 ## 3 首个工作点的采集清单
 
-下表 PV 来自当前 [real profile](../../configs/machines/half/control_backends/real.json)。映射存在不表示已连接或现场确认。
+下表为新候选段所需的四极铁状态，来自当前 [real profile](../../configs/machines/half/control_backends/real.json)。映射存在不表示已连接或现场确认。
 
 | 逻辑通道 | 真实 PV | 用途 |
 | --- | --- | --- |
-| QT01/K1 | `IN:MG:L002:QUAD:QT01:K1` | 保存设置值追溯 |
-| QT01/K1_total | `IN:MG:L002:QUAD:QT01:K1:TOTAL` | 输入模型 QT01.K1 |
-| QT02/K1 | `IN:MG:L002:QUAD:QT02:K1` | 保存设置值追溯 |
-| QT02/K1_total | `IN:MG:L002:QUAD:QT02:K1:TOTAL` | 输入模型 QT02.K1 |
-| PRF08/sigx | `IN:BD:PRF08:H:SIZE` | 独立水平 RMS，单位待确认 |
-| PRF08/sigy | `IN:BD:PRF08:V:SIZE` | 独立垂直 RMS，单位待确认 |
+| QT03/K1 | `IN:MG:L002:QUAD:QT03:K1` | 保存设置值追溯 |
+| QT03/K1_total | `IN:MG:L002:QUAD:QT03:K1:TOTAL` | 输入模型 QT03.K1 |
+| QT04/K1 | `IN:MG:L002:QUAD:QT04:K1` | 保存设置值追溯 |
+| QT04/K1_total | `IN:MG:L002:QUAD:QT04:K1:TOTAL` | 输入模型 QT04.K1 |
+
+另需 PRF06/07/08/09 的原始图像，PV 按现有 profile 为 `IN:BD:<屏幕>:image1:ArrayData`。前三屏用于入口重建，PRF09 只用于独立比较；需保存原始帧、图像源时间、采集时间、像素标定、背景、ROI 和处理版本。图像应作为单独产物保存，不改变既有 MachineStateSnapshot 排除数组的契约。
+
+派生的图像 RMS 必须记录实际 image PV、帧哈希和处理来源，不能冒用原高斯 SIZE PV 的来源身份，或把原始快照里的高斯 σ 改标为 rms。当前 comparison 只识别 profile 的 sigx/sigy 标量 PV，接入图像 RMS 需要小规模扩展诊断来源接口，尚未实现。
 
 K1 是设置、K1_total 是归一化强度回读、单位 `1/m^2` 的物理含义已经用户确认，继续沿用；不再用设置值替代缺失回读。找到的历史扫描模型字段共 755 条，来源 PV 均以 `:K1` 结束，没有 `:K1:TOTAL`，因此不满足这一输入要求。
 
 每个实际采集通道需保留源 PV、原始 EGU、标量类型/count、源时间、带时区的 received_at、alarm status/severity、质量和失败原因；MachineStateSnapshot 还需正确的 machine/backend、profile signature、采集起止和一致性说明。模型只使用该次快照，不在计算中补读 PV。
 
-PRF08 的 profile 图像标定为 1440×1080、0.0217 mm/pixel、flip_y=true，默认 ROI 为 x=250、y=40、900×1000。这些是现有配置值，需要确认对当时图像适用。它们不能证明 `H:SIZE/V:SIZE` 是 mm、总体 RMS 或高斯 σ。
+PRF08 的 profile 图像标定为 1440×1080、0.0217 mm/pixel、flip_y=true，默认 ROI 为 x=250、y=40、900×1000。这些是现有配置值，需要确认对当时图像适用。用户已确认该 SIZE 值是 mm 单位的高斯 σ，图像标定不消除其与总体 RMS 的定义差异。
 
-本地 `references/control_system/` 的 2026-05-15 束测 PV 列表只描述水平/垂直“尺寸”和图像通道，没有给出 SIZE 的 RMS/FWHM 定义、单位或时间语义；位置和像素分辨率资料中 PRF08 的 0.0217 与当前配置一致。已查阅这些来源，仍不足以完成诊断定义确认，原始 Office 文件保持本地且不入库。
+本地 `references/control_system/` 的 2026-05-15 束测 PV 列表只描述水平/垂直“尺寸”和图像通道；PRF06/08 的单位和定义现以用户确认作为来源，时间语义等仍需核实。原始 Office 文件保持本地且不入库。
 
 首个目标采用具有新鲜有效值的单屏，需确认屏幕状态、是否存在截断/饱和，以及其他屏是否影响传输。不要默认多块截束屏能同时给出同一时刻束流。若只能顺序测量，需独立的工作点稳定证据；原有秒级采集窗口不应为容纳历史多屏记录而直接放宽到数分钟。
 
@@ -105,12 +118,13 @@ PRF08 的 profile 图像标定为 1440×1080、0.0217 mm/pixel、flip_y=true，�
 
 | 项目 | 当前状态 | 下一步需要的事实或小改动 |
 | --- | --- | --- |
-| 模型段与所需强度 | 已确认 QT01/02 | 复用路径推导，不另建设备列表体系 |
-| 原始 real 快照 | 缺失 | 提供合格保存快照；或在单独授权后读取一次上述通道 |
-| 入口 RMS 协方差 | 有 Gaussian 拟合候选，未核实 | 确认可用于总体 RMS 的独立入口资料、参考面、单位与不确定度 |
+| 模型段与所需强度 | 新候选需 QT03/04 | 复用路径推导，不另建设备列表体系 |
+| 原始 real 快照 | 缺失 | 提供合格保存快照；或在单独授权后读取一次必要通道 |
+| 入口 RMS 协方差 | 无独立 QT01 测量 | 改在 PRF06 exit 重建；需 PRF06/07/08 原图、状态及不确定度 |
 | 入口能量 | 历史记录 2200 MeV，当前未确认 | 给出来源、动能约定与有效工作点，不自动沿用默认值 |
-| real SIZE 诊断 | PV 映射存在，物理定义未确认 | 确认总体 RMS/高斯 σ/FWHM、单位、ROI、背景、有效性与更新语义 |
-| 训练/拟合与验证独立性 | 可明确划分 | 若入口取自 PRF07，验证用未参与拟合的 PRF08；填 fitted_diagnostics |
+| real SIZE 诊断 | PRF06/08 已确认 mm、高斯 σ | 不再追问这两项；当前 RMS pipeline 不直接减法比较 |
+| 独立图像 RMS 诊断 | 处理能力存在，档案原图缺失 | 复用现有图像处理，新增明确的派生诊断来源接口 |
+| 训练/拟合与验证独立性 | 可明确划分 | PRF06/07/08 仅用于重建，PRF09 不参与拟合；填 fitted_diagnostics |
 | 工作点稳定性 | 历史档案不足 | 入口测量到独立诊断期间的上游状态、能量及强度一致依据 |
 | 单位别名 | 当前会拒绝 | 在派生映射中显式支持等价单位，并保留原始 EGU |
 | real 一次采集入口 | 尚未实现 | 在审阅后增加显式只读入口，保持 vm 专用采集拒绝 real |
@@ -125,10 +139,12 @@ PRF08 的 profile 图像标定为 1440×1080、0.0217 mm/pixel、flip_y=true，�
 
 先补齐输入确认表，再审阅以下小改动：
 
+原始图像与入口先复用 `image_fit.py` 的 RMS 处理、`multi_screen.py` 的 optics/重建和 `beam_matrix.py` 的 rank/正定性检查，保存原始帧与派生 RMS 的来源。不另写测宽或重建算法。取得入口后再调用现有 shadow pipeline。
+
 1. 单次 real 采集：新增独立 `src/shared/digital_shadow/real_capture.py`，复用 CapturePoint、sample_capture_points 和 MachineStateSnapshot；仅按已选择段落采样，保存原始元数据，不设置、恢复或重复采样。
 2. 单位处理：只在数字影子的快照派生路径加入明确的等价单位处理，保留原始单位及转换来源。覆盖 `m^-2 ↔ 1/m^2`，不接受 A 等非等价单位，不改变其他应用的 live K1 映射。
 3. CLI：给 `scripts/run_digital_shadow.py` 增加显式 real 只读子命令，禁止从环境默认值自动切换；实际调用另行明确授权。现有 run-vm 的连接前隔离校验保持不变。
-4. 入口资料适配：准备工具可复用现有 `import_measurement()` 的单位换算；共享数字影子运行层不反向依赖 GUI 应用。先确认来源与 RMS 定义，再生成可执行 ShadowRequest。
+4. 诊断适配：小改 `digital_shadow/comparison.py` 与 session 的诊断输入，显式区分原始 Gaussian SIZE 与有来源的图像 RMS；不能只增加 gaussian 标签后沿用 RMS 数值作预测。若改用高斯测宽模型，应另建可验证的观测处理流程，当前二阶矩不足以确定非高斯束流的拟合 σ。
 5. 定向验证：必要回读缺失、单位非等价、质量/时间/来源不符即失败；诊断不可比较不伪造残差。验证原始快照不变、无 PV 写入和离线重放不连接控制系统。
 
 不新增通用 MachineStateManager、不改现有状态机、图像流程或写 PV 安全机制，不在本阶段引入 IMPACT-T/NN 或持续校准。
@@ -145,3 +161,5 @@ PRF08 的 profile 图像标定为 1440×1080、0.0217 mm/pixel、flip_y=true，�
 - 强度单位 `m^-2` 与当前 `1/m^2` 字符串差异会被拒绝，保留待修正记录。
 
 这些是准备与接口检查，不是新增一轮 ELEGANT 精度测试。已有 VM 验收保持见 [VM 验收记录](VM_ACCEPTANCE_20261117.md)。后续满足输入条件后才生成正式请求与真实快照重放结果；真实机器的一次只读连接仍等待明确授权。
+
+用户确认后，已更新输入表的 mm/gaussian_sigma 定义和“无独立 QT01 入口”状态，并完成新参考段的纯结构 rank 检查。原始 `input_inventory.json` 保留当次盘点结果，不改写历史证据；本次方案调整以本文与准备表为准。

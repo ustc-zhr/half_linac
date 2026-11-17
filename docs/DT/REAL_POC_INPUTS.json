@@ -8,11 +8,11 @@
     "machine": "half",
     "control_backend": "real",
     "model_backend": "simulation",
-    "model_line": "EMIT_QT01_PRF08",
-    "reference_element": "QT01",
-    "reference_edge": "entrance",
-    "primary_validation_screen": "PRF08",
-    "selection_reason": "Existing QT01/PRF07 two-plane fit archives and a supported non-RF model path permit an independent PRF08 target",
+    "model_line": "ALL_MAIN",
+    "reference_element": "PRF06",
+    "reference_edge": "exit",
+    "primary_validation_screen": "PRF09",
+    "selection_reason": "No independent QT01 entrance measurement; propose PRF06/07/08 image RMS reconstruction at PRF06 exit and hold out PRF09",
     "selection_final": false
   },
   "entrance_beam": {
@@ -26,19 +26,35 @@
     "rms_definition_confirmed": false,
     "working_point_consistency_confirmed": false,
     "uncertainty": null,
-    "candidate_archive_original_repo_relative": "runs/0929/scan_20260929_171835_QT01_PRF07/metadata.json",
-    "candidate_archive_width_method": "Gaussian fit",
-    "candidate_archive_is_approved_input": false,
-    "fitted_diagnostics_if_candidate_used": ["PRF07/sigx", "PRF07/sigy"]
+    "independent_qt01_entrance_measurement_available": false,
+    "qt01_availability_source": "User confirmation 2026-11-17",
+    "reconstruction_screens_proposed": ["PRF06", "PRF07", "PRF08"],
+    "fitted_diagnostics_if_reconstructed": ["PRF06/sigx", "PRF06/sigy", "PRF07/sigx", "PRF07/sigy", "PRF08/sigx", "PRF08/sigy"],
+    "approved_input_available": false
   },
   "capture_channels": [
-    {"element": "QT01", "channel": "K1", "pv": "IN:MG:L002:QUAD:QT01:K1", "role": "provenance", "physical_unit": "1/m^2"},
-    {"element": "QT01", "channel": "K1_total", "pv": "IN:MG:L002:QUAD:QT01:K1:TOTAL", "role": "model_input", "model_field": "K1", "physical_unit": "1/m^2"},
-    {"element": "QT02", "channel": "K1", "pv": "IN:MG:L002:QUAD:QT02:K1", "role": "provenance", "physical_unit": "1/m^2"},
-    {"element": "QT02", "channel": "K1_total", "pv": "IN:MG:L002:QUAD:QT02:K1:TOTAL", "role": "model_input", "model_field": "K1", "physical_unit": "1/m^2"},
-    {"element": "PRF08", "channel": "sigx", "pv": "IN:BD:PRF08:H:SIZE", "role": "validation", "unit": null, "width_definition": null},
-    {"element": "PRF08", "channel": "sigy", "pv": "IN:BD:PRF08:V:SIZE", "role": "validation", "unit": null, "width_definition": null}
+    {"element": "QT03", "channel": "K1", "pv": "IN:MG:L002:QUAD:QT03:K1", "role": "provenance", "physical_unit": "1/m^2"},
+    {"element": "QT03", "channel": "K1_total", "pv": "IN:MG:L002:QUAD:QT03:K1:TOTAL", "role": "model_input", "model_field": "K1", "physical_unit": "1/m^2"},
+    {"element": "QT04", "channel": "K1", "pv": "IN:MG:L002:QUAD:QT04:K1", "role": "provenance", "physical_unit": "1/m^2"},
+    {"element": "QT04", "channel": "K1_total", "pv": "IN:MG:L002:QUAD:QT04:K1:TOTAL", "role": "model_input", "model_field": "K1", "physical_unit": "1/m^2"}
   ],
+  "confirmed_scalar_definitions": [
+    {"element": "PRF06", "channels": ["sigx", "sigy"], "unit": "mm", "width_definition": "gaussian_sigma", "source": "User confirmation 2026-11-17", "compatible_with_current_rms_comparison": false},
+    {"element": "PRF08", "channels": ["sigx", "sigy"], "unit": "mm", "width_definition": "gaussian_sigma", "source": "User confirmation 2026-11-17", "compatible_with_current_rms_comparison": false}
+  ],
+  "image_artifacts_required": [
+    {"element": "PRF06", "image_pv": "IN:BD:PRF06:image1:ArrayData", "role": "entrance_reconstruction", "saved_frame_path": null},
+    {"element": "PRF07", "image_pv": "IN:BD:PRF07:image1:ArrayData", "role": "entrance_reconstruction", "saved_frame_path": null},
+    {"element": "PRF08", "image_pv": "IN:BD:PRF08:image1:ArrayData", "role": "entrance_reconstruction", "saved_frame_path": null},
+    {"element": "PRF09", "image_pv": "IN:BD:PRF09:image1:ArrayData", "role": "independent_validation", "saved_frame_path": null}
+  ],
+  "reconstruction_structure": {
+    "design_drift_lengths_m": [0, 5.5, 11],
+    "measurement_matrix_rank": 3,
+    "degrees_of_freedom": 0,
+    "normalized_condition_number": 12.342109776645366,
+    "status": "Design topology check only; no measured RMS input and no accepted reconstruction"
+  },
   "snapshot": {
     "path": null,
     "schema": "MachineStateSnapshot schema_version 1",
@@ -47,8 +63,10 @@
     "current_supported_age_policy": "Use the recorded capture window; do not substitute VM evidence or widen the window to cover old multi-screen measurements"
   },
   "diagnostic_definition": {
-    "size_pv_definition_confirmed": false,
-    "unit_confirmed": false,
+    "size_pv_definition_confirmed_for": ["PRF06", "PRF08"],
+    "unit_confirmed_for": ["PRF06", "PRF08"],
+    "scalar_rms_compatibility_confirmed": false,
+    "target_source_proposed": "RMS derived from saved PRF09 raw image, with image PV, frame hash and processing provenance; not the Gaussian SIZE PV",
     "roi_and_background_confirmed": false,
     "source_timestamp_semantics_confirmed": false,
     "screen_state_and_beam_path_confirmed": false,
@@ -57,6 +75,7 @@
   },
   "known_implementation_gap": {
     "unit_alias": "Local IOC reference uses m^-2; current snapshot conversion requires exact 1/m^2. Preserve raw EGU and add explicit equivalence handling before any affected real replay",
+    "diagnostic_source": "Current comparison only accepts mapped sigx/sigy PVs as declared RMS. Image-derived RMS requires an explicit source adapter; do not relabel Gaussian snapshots or forge a SIZE PV origin",
     "real_capture": "No real capture CLI exists; retain run-vm isolation"
   },
   "ready_for_real_snapshot_replay": false,
