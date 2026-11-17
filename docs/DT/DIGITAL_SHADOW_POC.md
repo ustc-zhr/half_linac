@@ -185,3 +185,9 @@ HALF_VM_SHADOW_INTEGRATION=1 python3 -m pytest -q tests/test_digital_shadow_vm_i
 2026-11-17 已由代理按用户授权完成完整 VM worker 的隔离验收：QT02 三个强度工作点，以及 QT01 到 PRF06/07/08 的多屏比较，12 个束宽全部通过；另验证未就绪、工作点不符、单位冲突拒绝，以及停止服务后的四次无 PV 访问重放。入口使用测试 VM 的实际输入宏粒子协方差，三个 QT02 点保持入口条件相同。
 
 具体数值、复验命令、产物位置和验收边界见 [VM 工程验收记录](VM_ACCEPTANCE_20261117.md)。新增测试默认跳过，仅在显式启用 `HALF_VM_SHADOW_INTEGRATION=1` 时启动独立临时服务。该结论适用于受支持局部段的工程与线性数值一致性；真实入口束流、生产 PV→JSON 回调、完整 GUI 操作与实机模型精度另行验证。
+
+## 10 实机离线准备
+
+2026-11-17 已离线盘点原工作区的历史 real 扫描、多屏测量和五个粒子文件。首选候选为 QT01 entrance → PRF08，参考入口可研究既有 PRF07 扫描；PRF07 不能同时作为独立验证目标。现有资料缺少合格 real MachineStateSnapshot、K1_total 原始元数据及已确认的 RMS 诊断定义，因此没有生成真实重放结果。
+
+资料、六个采集通道、`m^-2` 单位别名兼容性及后续最小修改见 [实机离线准备](REAL_POC_PREPARATION.md) 和 [输入准备表](REAL_POC_INPUTS.json)。准备表不是可执行请求，未确认的入口与诊断字段保留 null。本轮未接触 real PV，也未增加 real 采集入口。

@@ -1,0 +1,64 @@
+{
+  "schema": "digital_shadow_preparation_checklist_v1",
+  "purpose": "Review checklist only; not accepted by the digital shadow CLI",
+  "status": "inputs_incomplete",
+  "review_date": "2026-11-17",
+  "live_real_capture_authorized": false,
+  "candidate": {
+    "machine": "half",
+    "control_backend": "real",
+    "model_backend": "simulation",
+    "model_line": "EMIT_QT01_PRF08",
+    "reference_element": "QT01",
+    "reference_edge": "entrance",
+    "primary_validation_screen": "PRF08",
+    "selection_reason": "Existing QT01/PRF07 two-plane fit archives and a supported non-RF model path permit an independent PRF08 target",
+    "selection_final": false
+  },
+  "entrance_beam": {
+    "energy_mev_kinetic": null,
+    "energy_provenance": null,
+    "x_moments_si": null,
+    "y_moments_si": null,
+    "basis": null,
+    "provenance": null,
+    "measurement_time": null,
+    "rms_definition_confirmed": false,
+    "working_point_consistency_confirmed": false,
+    "uncertainty": null,
+    "candidate_archive_original_repo_relative": "runs/0929/scan_20260929_171835_QT01_PRF07/metadata.json",
+    "candidate_archive_width_method": "Gaussian fit",
+    "candidate_archive_is_approved_input": false,
+    "fitted_diagnostics_if_candidate_used": ["PRF07/sigx", "PRF07/sigy"]
+  },
+  "capture_channels": [
+    {"element": "QT01", "channel": "K1", "pv": "IN:MG:L002:QUAD:QT01:K1", "role": "provenance", "physical_unit": "1/m^2"},
+    {"element": "QT01", "channel": "K1_total", "pv": "IN:MG:L002:QUAD:QT01:K1:TOTAL", "role": "model_input", "model_field": "K1", "physical_unit": "1/m^2"},
+    {"element": "QT02", "channel": "K1", "pv": "IN:MG:L002:QUAD:QT02:K1", "role": "provenance", "physical_unit": "1/m^2"},
+    {"element": "QT02", "channel": "K1_total", "pv": "IN:MG:L002:QUAD:QT02:K1:TOTAL", "role": "model_input", "model_field": "K1", "physical_unit": "1/m^2"},
+    {"element": "PRF08", "channel": "sigx", "pv": "IN:BD:PRF08:H:SIZE", "role": "validation", "unit": null, "width_definition": null},
+    {"element": "PRF08", "channel": "sigy", "pv": "IN:BD:PRF08:V:SIZE", "role": "validation", "unit": null, "width_definition": null}
+  ],
+  "snapshot": {
+    "path": null,
+    "schema": "MachineStateSnapshot schema_version 1",
+    "required_metadata": ["machine.control_backend", "machine.profile_signature", "capture.started_at", "capture.finished_at", "entries[].pv_name", "entries[].unit", "entries[].source_timestamp", "entries[].received_at", "entries[].quality", "entries[].alarm_status", "entries[].alarm_severity", "entries[].native_count", "entries[].value_type"],
+    "unit_note": "Use existing entry.unit to preserve the source EGU; there is currently no separate raw_egu field",
+    "current_supported_age_policy": "Use the recorded capture window; do not substitute VM evidence or widen the window to cover old multi-screen measurements"
+  },
+  "diagnostic_definition": {
+    "size_pv_definition_confirmed": false,
+    "unit_confirmed": false,
+    "roi_and_background_confirmed": false,
+    "source_timestamp_semantics_confirmed": false,
+    "screen_state_and_beam_path_confirmed": false,
+    "independent_target_confirmed": false,
+    "physical_acceptance_tolerance_mm": null
+  },
+  "known_implementation_gap": {
+    "unit_alias": "Local IOC reference uses m^-2; current snapshot conversion requires exact 1/m^2. Preserve raw EGU and add explicit equivalence handling before any affected real replay",
+    "real_capture": "No real capture CLI exists; retain run-vm isolation"
+  },
+  "ready_for_real_snapshot_replay": false,
+  "ready_for_live_capture": false
+}
