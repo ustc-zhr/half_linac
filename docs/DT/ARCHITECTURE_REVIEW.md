@@ -432,7 +432,7 @@ ModelRunResult
 | 诊断处理不一致 | 固化单位、方法、位置、坐标和校准 |
 | 模型资源运行中改变 | 保存资源版本及哈希；变化使结果无效 |
 
-已有 `tests/test_machine_profile.py`、`tests/test_machine_state.py`、`tests/test_pv_sampling.py`、`tests/test_elegant_backend.py`、`tests/test_emit_multi_screen.py`、`tests/test_vm_workbench.py` 可作为回归基础。本次未执行测试；现场 PV 语义、ELEGANT 数值精度、SDDS 并发和 L01B 物理边界仍待验证。
+已有 `tests/test_machine_profile.py`、`tests/test_machine_state.py`、`tests/test_pv_sampling.py`、`tests/test_elegant_backend.py`、`tests/test_emit_multi_screen.py`、`tests/test_vm_workbench.py` 可作为回归基础。静态审查时未执行测试；后续离线 PoC 和 VM 验证见 [PoC 说明](DIGITAL_SHADOW_POC.md)。现场 PV 语义、模型的实机精度、SDDS 并发和 L01B 物理边界仍待验证。
 
 ## 10 评审决定与待确认事项
 
@@ -447,6 +447,7 @@ ModelRunResult
 | 2026-11-17 | 四极铁强度语义 | 用户确认 K1 为设置值、K1_total 为回读值，单位均为 1/m^2；real 数字影子使用回读值 |
 | 2026-11-17 | 第一阶段离线 PoC | 已完成保存快照重放、独立 ELEGANT 计算、诊断比较与追溯；验证和限制见 PoC 说明 |
 | 2026-11-17 | VM 只读采集与比较 | 用户授权继续；已补齐现有虚拟 RMS 发布、一次采集、版本校验和归档重放；通过隔离 softIOC/ELEGANT 集成验证 |
+| 2026-11-17 | VM 工程验收 | 用户授权代理执行；完整 VM worker 四个静态工作点、12 个束宽、三项故障拒绝与四次无 PV 重放通过；详见 [验收记录](VM_ACCEPTANCE_20261117.md) |
 | 待定 | 真实机器只读采集 | 尚未授权；本轮只进行 VM 隔离测试，没有连接真实机器 |
 
 原工作区 `docs/DT/` 中的物理输入、压缩包、PDF 和其他附件未纳入本次文档提交。迁移到本分支的交接说明保留原文，不能将其中历史“已确定”表述当作本次架构方案获批。

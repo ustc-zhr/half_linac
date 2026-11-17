@@ -179,3 +179,9 @@ python3 scripts/run_digital_shadow.py replay \
 source scripts/setup.sh
 HALF_VM_SHADOW_INTEGRATION=1 python3 -m pytest -q tests/test_digital_shadow_vm_integration.py
 ```
+
+## 9 VM 工程验收
+
+2026-11-17 已由代理按用户授权完成完整 VM worker 的隔离验收：QT02 三个强度工作点，以及 QT01 到 PRF06/07/08 的多屏比较，12 个束宽全部通过；另验证未就绪、工作点不符、单位冲突拒绝，以及停止服务后的四次无 PV 访问重放。入口使用测试 VM 的实际输入宏粒子协方差，三个 QT02 点保持入口条件相同。
+
+具体数值、复验命令、产物位置和验收边界见 [VM 工程验收记录](VM_ACCEPTANCE_20261117.md)。新增测试默认跳过，仅在显式启用 `HALF_VM_SHADOW_INTEGRATION=1` 时启动独立临时服务。该结论适用于受支持局部段的工程与线性数值一致性；真实入口束流、生产 PV→JSON 回调、完整 GUI 操作与实机模型精度另行验证。
