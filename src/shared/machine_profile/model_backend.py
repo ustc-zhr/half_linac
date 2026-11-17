@@ -707,6 +707,7 @@ class ElegantModelBackend:
             self.optics_ele.name,
             self.optics_log,
             workdir=self.working_dir,
+            **({"timeout_s": self.config["timeout_s"]} if "timeout_s" in self.config else {}),
         )
 
         return _load_matrix(self.optics_mat)

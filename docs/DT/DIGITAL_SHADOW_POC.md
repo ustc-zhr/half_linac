@@ -1,0 +1,117 @@
+# HALF 数字影子离线 PoC
+
+本阶段实现保存快照驱动现有 ELEGANT 的局部横向预测与诊断比较。命令行只有合成输入生成和离线重放，不提供现场采集或 PV 写入入口。
+
+真实快照中的 `K1_total` 是四极铁归一化强度回读，映射到模型 `K1`，单位均为 `1/m^2`。`K1` 设置值保留在原始快照中用于追溯，不作为回读缺失时的替代。VM 快照使用其 `K1` 通道。该选择仅作用于数字影子，不改变其他应用。
+
+现有 Machine Snapshot GUI 的默认计划不包含 K1_total 和诊断 observations；旧快照不能假定满足输入要求。首版要求必要回读具有正确来源 PV、单位、标量类型与 OK 质量，且接收时间在采集窗口内。缺少必要回读时停止计算；诊断不可用时保留预测并将比较标为 unavailable。
+
+## 1 离线演示
+
+在专用 worktree 根目录执行。Python 环境需能导入项目现有依赖，并能找到 ELEGANT。每个 example 目录必须是新目录。
+
+```bash
+python3 scripts/run_digital_shadow.py example --output-dir /tmp/half-shadow-example
+python3 scripts/run_digital_shadow.py replay \
+  --snapshot /tmp/half-shadow-example/machine_snapshot.json \
+  --request /tmp/half-shadow-example/request.json \
+  --output-root /tmp/half-shadow-runs
+```
+
+示例使用既有 `EMIT_QL09_PRF03` 格架，入口为 QL09 entrance。所有设备和诊断数值均为合成数据，入口束流为假设，输出保留 `SYNTHETIC` 来源和 `beam_basis="assumed"`。快照的 real 标签仅选择保存数据的 PV 映射；不会连接机器。示例残差没有实机精度验证意义。
+
+`replay` 每次创建新的 `shadow_<uuid>` 目录，不覆盖旧结果。运行成功且全部诊断可比较时退出 0，部分诊断不可比较时退出 2，输入或计算失败时退出 1。命令行参数用法错误也由 argparse 返回 2。
+
+## 2 已有快照输入
+
+原始输入使用现有 `MachineStateSnapshot` JSON 格式，包含 machine/backend、profile signature、采集起止时间、逐通道时间、单位、质量和数值。原有快照的默认采集范围不保证含有 K1_total 或诊断，缺失时必须补充采集方案，不能在重放时重新读取 PV。
+
+必要四极铁回读必须为质量合格的有限标量，PV、单位和 profile 签名需与当前模型装配一致。整个快照中额外通道失败可以保留，但必要回读缺失、报警或不合格时计算失败。回读的 received_at 必须在采集窗口内；设备源时间戳可以代表长期未变化的值，不按当前墙钟判断历史快照过期。
+
+诊断当前只支持 profile flag 上的 sigx/sigy，需明确声明为 RMS、单位 m 或 mm。其源时间须处于相对历史采集窗口的诊断有效期内，received_at 在窗口内。单位、映射、时间或质量不符合要求时，保存 unavailable 及原因，残差留空。
+
+本阶段不采集图像，不推断未知 PV 的束宽定义，不修改既有快照比较器。
+
+## 3 请求格式与入口束流
+
+example 命令生成可编辑的请求文件，其结构如下。数值仅示意，不代表实际入口束流。
+
+```json
+{
+  "schema": "digital_shadow_request_v1",
+  "model_backend": "simulation",
+  "model_line": "EMIT_QL09_PRF03",
+  "reference_element": "QL09",
+  "reference_edge": "entrance",
+  "beam": {
+    "energy_mev": 114.15,
+    "x_moments": [0.000004, 0, 0.00000001],
+    "y_moments": [0.000003, 0, 0.00000002],
+    "basis": "assumed",
+    "provenance": "示意入口束流，需替换为有来源的数据",
+    "fitted_diagnostics": []
+  },
+  "diagnostics": [
+    {"element": "PRF03", "channel": "sigx", "unit": "mm", "width_definition": "rms"},
+    {"element": "PRF03", "channel": "sigy", "unit": "mm", "width_definition": "rms"}
+  ],
+  "max_capture_duration_s": 5,
+  "diagnostic_max_age_s": 5,
+  "model_timeout_s": 30
+}
+```
+
+每个 moments 为 `(A, B, C)`，表示 `[[A, B], [B, C]]`，即位置方差、位置与斜率协方差、斜率方差；使用几何束流矩，SI 单位分别为 m²、m·rad、rad²，不是归一化发射度。两平面需正定。energy_mev 是该 reference 的电子动能，按 `sqrt(T(T+2mc²))/(mc²)` 转为 ELEGANT 的 p_central；冻结模板中不依赖原来的默认能量。
+
+`basis` 为 assumed 或 independent_measurement，必须保存非空 provenance。使用某诊断拟合过入口束流时，将其 key 写入 fitted_diagnostics；程序拒绝把这些诊断作为独立预测比较。已有发射度归档的入口位置、能量、单位和数据时效需核实后转换，程序不自动声称不同测量属于同一工作点。
+
+## 4 计算边界与接口
+
+首版支持局部 DRIF、QUAD、MONI、WATCH、MARK、HKICK、VKICK；拒绝 RF、弯铁和其他未支持元件。reference 与观测端点必须是唯一 occurrence，所需四极铁也需唯一。矩阵出现横向耦合或纵向到横向的项时，拒绝用二维入口束流计算。
+
+计算使用现有 ElegantModelBackend 和 transport_beam_moments，光学模式会清零部分误差并关闭 tracking。结果只表示无耦合线性横向预测，不包括完整轨道、空间电荷、wake、束流损失或完整六维 tracking。候选段落的 ELEGANT 矩阵计算不等于对实际机器模型的物理验证。
+
+主要入口：
+
+- `machine_profile.model_snapshot.build_model_snapshot_from_machine_state()`：验证并转换保存数据，不调用 EPICS；通道覆盖是会话局部参数。
+- `digital_shadow.pipeline.prepare_model()`：推导所需四极铁并检查段落。
+- `digital_shadow.pipeline.predict()`：冻结模型、隔离工作目录、计算矩阵和预测。
+- `digital_shadow.comparison.compare_diagnostics()`：按身份、单位、定义与时间对齐。
+- `digital_shadow.session.run_once()`：连接离线步骤并归档。
+
+现场 capture_once 和通用多引擎调度尚未实现；本次没有增加新的机器状态管理器、改变 GUI 状态机或 EPICS 写入保护。
+
+## 5 运行产物与追溯
+
+每次运行保存：
+
+| 文件 | 含义 |
+| --- | --- |
+| machine_snapshot.json | 完整原始快照，保留设置、回读和诊断 |
+| request.json | 计算范围、独立入口束流和比较要求 |
+| model_snapshot.json | 从本次快照派生的模型 K1、来源 PV 与转换 |
+| inputs/evaluated_state.json | 求值后的设计格架和显式参考动量 |
+| inputs/design.lte 与 template.ele | 本次独立模型输入 |
+| model/ 下各目标目录 | ELEGANT 输入、输出和日志 |
+| result.json | 传输矩阵、预测、实测、measured - predicted 残差与比较状态 |
+| manifest.json | run、snapshot、输入哈希、引擎二进制哈希、实现文件哈希、产物哈希和失败原因 |
+
+失败运行保留 failed manifest，不生成成功 result。每个目标只计算一次矩阵，两平面共用；相同输入可以重复运行，但不启用通用缓存。complete 只表示计算完成且诊断通过工程对齐条件，不表示模型精度达标。
+
+## 6 验证与下一步
+
+针对性测试检查回读选择、禁止 PV 访问、坏输入不回退、身份与质量校验、输入绑定、目录隔离、诊断不可比较、失败记录和超时。另使用合成输入完成既有 ELEGANT 的离线计算，并以独立硬边四极铁及漂移矩阵核对两平面结果。
+
+2026-11-17 验证记录：
+
+| 检查 | 结果 |
+| --- | --- |
+| `tests/test_digital_shadow.py` | 24 项通过；测试中禁止 EPICS PV 读写 |
+| 模型、快照、采样相关定向回归 | 36 项通过，另有 2 个 subtest 通过；1 项已有失败 |
+| `bash scripts/check.sh` | 通过，未启动 GUI、IOC 或仿真进程 |
+| 合成输入 ELEGANT 冒烟计算 | complete，两平面预测及残差成功归档 |
+| 独立解析矩阵核对 | 以 `rtol=atol=1e-10` 核对四极铁与漂移链，两平面通过 |
+
+已有失败为 `tests/test_elegant_backend.py::ElegantBackendTests::test_full_twiss_profile_shoots_once_from_line_start`：测试要求返回对象与 mock 对象身份相同，而现有实现包装为含入口能量的 TwissProfileResult。该失败在未改动的 main 基线 `0b5051e` 上也已复现，本次没有修改该测试或对应全线 Twiss 方法。这不是完整测试集全部通过的声明。
+
+下一步需要真实入口束流资料和单位、RMS 定义、时间质量已确认的诊断快照，然后增加明确授权的只读采集入口。本阶段的合成数值不用于实际调束。

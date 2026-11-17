@@ -6,12 +6,15 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from half_linac.src.shared.elegant_backend import ElegantParser
 
 from .models import AppContext, MachineProfileError, normalize_mode
 from .resolver import resolve_channel
+
+if TYPE_CHECKING:
+    from half_linac.src.shared.machine_state import MachineStateSnapshot
 
 
 MODEL_SNAPSHOT_SOURCE_DESIGN = "design"
@@ -130,6 +133,75 @@ def build_model_snapshot(
         control_backend=app_context.control_backend.name,
         created_at=created_at,
         fields=tuple(fields),
+    )
+
+
+def build_model_snapshot_from_machine_state(
+    app_context: AppContext,
+    snapshot: MachineStateSnapshot,
+    requested_fields: Sequence[ModelFieldRequest],
+    *,
+    logical_channels: Mapping[ModelFieldRequest, str] | None = None,
+) -> ModelSnapshot:
+    """Convert a recorded capture without reading PVs or substituting design values.
+
+    Channel overrides are explicit and local to this conversion. In particular,
+    a shadow run can use real K1_total readbacks without changing the live K1
+    setpoint mapping used by existing applications.
+    """
+    from half_linac.src.shared.machine_state import (
+        SampleQuality, build_profile_signature, snapshot_to_dict,
+    )
+
+    if app_context.model_backend is None:
+        raise MachineProfileError("A model backend is required to convert a machine-state snapshot.")
+    snapshot_to_dict(snapshot)  # Validate keys and scalar values even for in-memory input.
+    if snapshot.machine_id != app_context.machine.id:
+        raise MachineProfileError("Machine-state snapshot machine mismatch.")
+    if snapshot.backend != app_context.control_backend.name:
+        raise MachineProfileError("Machine-state snapshot control backend mismatch.")
+    if snapshot.profile_signature != build_profile_signature(app_context.profile, snapshot.backend):
+        raise MachineProfileError("Machine-state snapshot profile signature mismatch.")
+    if snapshot.capture_status not in {"complete", "partial"}:
+        raise MachineProfileError(f"Cannot model a {snapshot.capture_status!r} capture.")
+    if len(set(requested_fields)) != len(requested_fields):
+        raise MachineProfileError("Duplicate requested model fields.")
+    if set(logical_channels or {}) - set(requested_fields):
+        raise MachineProfileError("Channel overrides reference unrequested model fields.")
+    entries = {entry.key: entry for entry in snapshot.entries}
+    fields = []
+    for element_id, field_name in requested_fields:
+        spec = resolve_model_snapshot_field_spec(app_context, element_id, field_name)
+        channel = (logical_channels or {}).get((element_id, field_name), spec.get("logical_channel"))
+        channel = _required_string(channel, f"{element_id}.{field_name}.logical_channel")
+        key = f"{element_id}/{channel}"
+        entry = entries.get(key)
+        if entry is None:
+            raise MachineProfileError(f"Machine-state snapshot is missing {key}.")
+        pv_name = resolve_channel(app_context, element_id, channel)
+        if entry.pv_name != pv_name:
+            raise MachineProfileError(f"PV mapping mismatch for {key}.")
+        if entry.quality != SampleQuality.OK or (entry.alarm_severity or 0) > 0:
+            raise MachineProfileError(f"Unusable model input {key}: {entry.quality.value}.")
+        if entry.native_count != 1 or isinstance(entry.value, bool) or entry.value_type != "number":
+            raise MachineProfileError(f"Model input {key} must be a scalar number.")
+        expected_unit = _optional_string(spec.get("source_unit"))
+        if not expected_unit or entry.unit != expected_unit:
+            raise MachineProfileError(f"Unit mismatch for {key}: {entry.unit!r}, expected {expected_unit!r}.")
+        conversion = _conversion_mapping(spec)
+        value = _finite_float(entry.value, key)
+        fields.append(ModelSnapshotField(
+            element_id=element_id, field_name=field_name,
+            value=apply_snapshot_conversion(value, conversion),
+            source=MODEL_SNAPSHOT_SOURCE_SAVED, source_pv=pv_name,
+            source_value=value, source_unit=entry.unit,
+            model_unit=_optional_string(spec.get("model_unit")), conversion=dict(conversion),
+        ))
+    return ModelSnapshot(
+        source=MODEL_SNAPSHOT_SOURCE_SAVED,
+        origin_source=_resolve_snapshot_source(None, snapshot.backend),
+        machine_id=snapshot.machine_id, control_backend=snapshot.backend,
+        created_at=snapshot.capture_finished_at, fields=tuple(fields),
     )
 
 
