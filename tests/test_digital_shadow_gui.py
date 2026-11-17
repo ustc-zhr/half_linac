@@ -78,13 +78,30 @@ def test_request_round_trip_preserves_precision_units_and_advanced_fields(window
 
 
 def test_example_is_synthetic_and_no_task_starts(window):
-    window.load_example()
+    window.example_button.click()
     request = window.form.request()
     assert request.beam_basis == "assumed"
     assert "SYNTHETIC" in request.beam_provenance
     assert "SYNTHETIC" in window.status_label.text()
     assert not window.controller.busy
     assert read_runtime_state(window.snapshot_edit.text())["machine"]["control_backend"] == "vm"
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_missing_source_points_to_visible_field_and_example_action(window, app, blank):
+    window.show()
+    app.processEvents()
+    window.example_button.click()
+    window.form.provenance.setText(blank)
+    window.run_button.click()
+    app.processEvents()
+    assert "Fill Source in Entrance beam" in window.status_label.text()
+    assert "Load VM example" in window.status_label.text()
+    assert window.form.provenance.hasFocus()
+    assert not window.controller.busy
+    assert not list(Path(window.output_edit.text()).glob("job_*"))
+    window.example_button.click()
+    assert window.form.request().beam_provenance.startswith("SYNTHETIC")
 
 
 def test_real_snapshot_is_view_only_in_window_and_controller(window, tmp_path):

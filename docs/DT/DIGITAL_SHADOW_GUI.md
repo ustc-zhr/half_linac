@@ -30,6 +30,8 @@ python3 src/apps/digital_shadow/main.py --machine half
 
 示例入口为 assumed，测量值为合成数据，界面保留 SYNTHETIC 提示。complete 表示计算和比较条件满足，不表示物理精度通过；本版没有设置物理精度验收阈值。
 
+若出现 `beam_provenance is required`，表示 Entrance beam 的 Source 为空。离线演示先点击 **Load VM example**，Source 会自动填入 SYNTHETIC 来源，再点击 Run replay；不需要先启动 VM。手动填写入口参数时，Source 应说明参数的实际来源。当前 GUI 已将空来源提示改为明确的字段名称和示例按钮指引，并自动定位到 Source；后台仍要求有效来源，不自动补造测量依据。
+
 表单能量为动能 MeV，发射度为**几何 mm·mrad**，不是归一化发射度。以 `A=εβ`、`B=−εα`、`C=ε(1+α²)/β` 转为 SI 协方差，现有 ShadowRequest JSON 格式保持不变。未编辑的导入协方差保持原精度；编辑一个平面不重算另一个平面。诊断单位、来源、fitted_diagnostics 和高级超时参数保留。
 
 线路、参考元件和 VM 诊断由模型与 profile 推导。部分线路包含 RF/弯转，仍由现有 prepare_model 检查所选局部段，不代表整条线路均可用于首版预测。

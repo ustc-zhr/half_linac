@@ -61,7 +61,7 @@ def gui(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     window = DigitalShadowWindow(output_root=tmp_path / "runs")
     window.show()
-    window.load_example()
+    window.example_button.click()
     try:
         yield app, window
     finally:

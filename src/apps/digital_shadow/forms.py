@@ -78,10 +78,11 @@ class RequestForm(QWidget):
         self.basis.addItem("Assumed", "assumed")
         self.basis.addItem("Independent measurement", "independent_measurement")
         self.provenance = QLineEdit(beam)
-        self.provenance.setPlaceholderText("Required: source, reference and applicability")
+        self.provenance.setPlaceholderText("Required: describe where the entrance beam values came from")
+        self.provenance.setToolTip("For an offline demonstration, Load VM example fills this source automatically.")
         grid.addWidget(QLabel("Basis"), 3, 0)
         grid.addWidget(self.basis, 3, 1, 1, 3)
-        grid.addWidget(QLabel("Source"), 4, 0)
+        grid.addWidget(QLabel("Source *"), 4, 0)
         grid.addWidget(self.provenance, 4, 1, 1, 3)
         layout.addWidget(beam)
 
@@ -210,6 +211,9 @@ class RequestForm(QWidget):
         return tuple(edit.text() for plane in ("x", "y") for edit in self.beam_fields[plane])
 
     def request(self):
+        if not self.provenance.text().strip():
+            self.provenance.setFocus(Qt.OtherFocusReason)
+            raise ValueError("Fill Source in Entrance beam. For an offline demo, click Load VM example first.")
         def number(edit, name):
             try:
                 return float(edit.text())
