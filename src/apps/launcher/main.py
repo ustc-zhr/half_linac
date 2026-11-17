@@ -1024,6 +1024,18 @@ APP_DEFINITIONS = {
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/machine_snapshot",
     },
+    "digital_shadow": {
+        "button_name": "digital_shadow_button",
+        "category": "simulation",
+        "access": "read",
+        "button_text": "Digital Shadow",
+        "label": "Digital Shadow",
+        "window_title_patterns": ("HALF · Digital Shadow",),
+        "description": "Run one VM prediction or replay a VM snapshot; view saved diagnostics and results. Real archives are view-only.",
+        "machine_ids": ("half",),
+        "cmd": [sys.executable, "main.py", "--machine", "half"],
+        "cwd": ROOT / "src/apps/digital_shadow",
+    },
     "optimization": {
         "button_name": "online_opt",
         "category": "simulation",

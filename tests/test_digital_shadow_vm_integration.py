@@ -20,7 +20,48 @@ def test_private_vm_capture_and_model_comparison(tmp_path):
     assert max(abs(row["residual"]) for row in result["comparisons"]) < 1e-6
 
 
-def _run_private_vm(directory):
+@pytest.mark.skipif(os.environ.get("HALF_VM_SHADOW_INTEGRATION") != "1",
+                    reason="Set HALF_VM_SHADOW_INTEGRATION=1 for isolated EPICS/Elegant verification")
+def test_private_vm_gui_capture_and_model_comparison(tmp_path):
+    completed = subprocess.run([sys.executable, "-B", __file__, str(tmp_path), "--gui"],
+                               capture_output=True, text=True, timeout=45)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    result = json.loads((tmp_path / "cli_result.json").read_text())
+    assert result["status"] == "complete"
+    assert max(abs(row["residual"]) for row in result["comparisons"]) < 1e-6
+
+
+def _gui_capture(root, directory, request_path, runtime):
+    import time
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    from PyQt5.QtWidgets import QApplication
+    from half_linac.src.apps.digital_shadow.main import DigitalShadowWindow
+    app = QApplication.instance() or QApplication([])
+    window = DigitalShadowWindow(output_root=directory / "runs")
+    try:
+        window.show()
+        window.load_request_file(request_path)
+        window.mode.setCurrentIndex(1)
+        window.runtime_edit.setText(str(runtime))
+        window.run_button.click()
+        deadline = time.monotonic() + 15
+        while window.controller.busy:
+            assert time.monotonic() < deadline, window.log.toPlainText()
+            app.processEvents()
+            time.sleep(0.01)
+        app.processEvents()
+        assert window.controller.record["status"] == "complete", window.log.toPlainText()
+        assert window.results.rowCount() == 2
+        archive = window.current_archive
+        window.grab().save(str(directory / "gui_vm_complete.png"))
+        return {**archive["result"], "run_dir": archive["run_dir"]}
+    finally:
+        window.controller.shutdown_now()
+        window.close()
+        app.processEvents()
+
+
+def _run_private_vm(directory, *, gui=False):
     from datetime import datetime, timezone
     from dataclasses import replace
     import math
@@ -109,15 +150,19 @@ def _run_private_vm(directory):
             write_runtime_state(observation_dir(runtime) / "result.json", result)
             write_runtime_state(observation_dir(runtime) / "status.json", status)
             time.sleep(6)  # Unchanged VM diagnostics remain valid beyond the normal replay age window.
-            completed = subprocess.run([
-                sys.executable, "-B", str(root / "scripts/run_digital_shadow.py"), "run-vm", "--machine", "half",
-                "--request", str(request_path), "--output-root", str(directory / "runs"),
-                "--vm-runtime-json", str(runtime), "--ready-timeout", "2",
-            ], capture_output=True, text=True, timeout=15)
-            if completed.returncode:
-                raise RuntimeError(completed.stdout + completed.stderr)
-            (directory / "cli_result.json").write_text(completed.stdout)
-            payload = json.loads(completed.stdout)
+            if gui:
+                payload = _gui_capture(root, directory, request_path, runtime)
+                (directory / "cli_result.json").write_text(json.dumps(payload))
+            else:
+                completed = subprocess.run([
+                    sys.executable, "-B", str(root / "scripts/run_digital_shadow.py"), "run-vm", "--machine", "half",
+                    "--request", str(request_path), "--output-root", str(directory / "runs"),
+                    "--vm-runtime-json", str(runtime), "--ready-timeout", "2",
+                ], capture_output=True, text=True, timeout=15)
+                if completed.returncode:
+                    raise RuntimeError(completed.stdout + completed.stderr)
+                (directory / "cli_result.json").write_text(completed.stdout)
+                payload = json.loads(completed.stdout)
             replay_root = Path(payload["run_dir"])
             # Confirm the archived result can be replayed with no live reads.
             replay = subprocess.run([
@@ -141,4 +186,4 @@ def _run_private_vm(directory):
 if __name__ == "__main__":
     target = Path(sys.argv[1])
     target.mkdir(parents=True, exist_ok=True)
-    _run_private_vm(target)
+    _run_private_vm(target, gui="--gui" in sys.argv[2:])

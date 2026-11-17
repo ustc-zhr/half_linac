@@ -193,3 +193,9 @@ HALF_VM_SHADOW_INTEGRATION=1 python3 -m pytest -q tests/test_digital_shadow_vm_i
 下一步建议先准备未来测量的数据归档流程，在 VM 验证机器状态、原始图像、逐帧时间和诊断处理来源的完整保存。该开发不要求已有实机数据；PRF06 出口重建、PRF09 留出仅保留为未来测量候选。既有 VM 验收继续有效，新增归档能力尚未实现，真实采集未获授权。
 
 资料、新候选段的状态和图像需求、`m^-2` 单位别名兼容性及后续最小修改见 [实机离线准备](REAL_POC_PREPARATION.md) 和 [输入准备表](REAL_POC_INPUTS.json)。准备表不是可执行请求，入口协方差仍为 null；已确认的高斯 σ 不改标为 RMS。本轮未接触 real PV，也未增加 real 采集入口。
+
+## 11 GUI 首版
+
+用户审阅后已实现独立 Digital Shadow GUI，并接入 Control Room 的 VA & Optimization 分类。支持 Twiss/几何发射度表单和请求 JSON、VM 一次采集、VM 快照重放、结果对照及历史查看。默认离线，real 归档只读，任务在独立进程组执行，Stop/关闭/启动器停止会清理计算后代。
+
+使用方式和验证见 [GUI 说明](DIGITAL_SHADOW_GUI.md)。78 项定向及相关回归通过，隔离 GUI/VM 和进程清理集成通过；已在 WSLg 桌面从 Control Room 启动并完成合成输入重放。没有实现图像归档、真实采集或新的物理模型。

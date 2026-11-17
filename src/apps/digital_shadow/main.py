@@ -1,0 +1,510 @@
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import signal
+import sys
+import uuid
+
+ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file())
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from repo_bootstrap import ensure_repo_import_path
+ensure_repo_import_path(__file__)
+
+from PyQt5.QtCore import Qt, QTimer, QUrl
+from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtWidgets import (
+    QApplication, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
+    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit,
+    QPushButton, QScrollArea, QSplitter, QTableWidget, QTableWidgetItem,
+    QTabWidget, QToolButton, QVBoxLayout, QWidget,
+)
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+
+from half_linac.src.apps.digital_shadow.forms import RequestForm
+from half_linac.src.apps.digital_shadow.jobs import read_archive, read_object, ShadowJobController
+from half_linac.src.shared.app_theme import resolve_initial_theme
+from half_linac.src.shared.digital_shadow.example import write_example
+from half_linac.src.shared.digital_shadow.models import ShadowRequest
+from half_linac.src.shared.digital_shadow.pipeline import prepare_model
+from half_linac.src.shared.digital_shadow.vm_capture import build_vm_capture_plan
+from half_linac.src.shared.machine_profile.loader import load_model_context
+from half_linac.src.shared.machine_state import load_snapshot
+from half_linac.src.shared.runtime_state import read_runtime_state, write_runtime_state
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
+
+
+class DigitalShadowWindow(QMainWindow):
+    def __init__(self, *, output_root=None, parent=None):
+        super().__init__(parent)
+        self.context = load_model_context("half")  # Model-only; never inherits a live real connection.
+        self.current_archive = None
+        self._close_pending = False
+        self._imported_archives = set()
+        self._dark = resolve_initial_theme() == "dark"
+        self.setWindowTitle("HALF · Digital Shadow")
+        self.resize(1360, 900)
+        self.setMinimumSize(1020, 740)
+        self.controller = ShadowJobController(ROOT, self)
+        self.controller.message.connect(self._append_log)
+        self.controller.state_changed.connect(self._job_state)
+        self.controller.completed.connect(self._job_completed)
+
+        central = QWidget(self)
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        header = QHBoxLayout()
+        title = QLabel("Digital Shadow", central)
+        title.setObjectName("title")
+        self.context_label = QLabel("HALF · ELEGANT · VM / Offline · READ ONLY", central)
+        header.addWidget(title)
+        header.addStretch()
+        header.addWidget(self.context_label)
+        layout.addLayout(header)
+        self.tabs = QTabWidget(central)
+        layout.addWidget(self.tabs, 1)
+        self._build_run_page(output_root or ROOT / "runs/digital_shadow_gui/half")
+        self._build_history_page()
+        footer = QHBoxLayout()
+        self.status_label = QLabel("Ready · no PV reads until VM capture is explicitly started", central)
+        self.status_label.setWordWrap(True)
+        self.log_toggle = QToolButton(central)
+        self.log_toggle.setText("Show log")
+        self.log_toggle.setCheckable(True)
+        footer.addWidget(self.status_label, 1)
+        footer.addWidget(self.log_toggle)
+        layout.addLayout(footer)
+        self.log = QPlainTextEdit(central)
+        self.log.setReadOnly(True)
+        self.log.document().setMaximumBlockCount(1500)
+        self.log.setMaximumHeight(160)
+        self.log.hide()
+        self.log_toggle.toggled.connect(self.log.setVisible)
+        layout.addWidget(self.log)
+        self._apply_theme()
+        self._mode_changed()
+        self.refresh_history()
+
+    def _build_run_page(self, output_root):
+        page = QWidget(self)
+        page_layout = QVBoxLayout(page)
+        toolbar = QHBoxLayout()
+        self.mode = QComboBox(page)
+        self.mode.addItem("Offline VM replay", "replay")
+        self.mode.addItem("VM · capture once and predict", "run-vm")
+        self.import_button = QPushButton("Import request…", page)
+        self.export_button = QPushButton("Export request…", page)
+        self.example_button = QPushButton("Load VM example", page)
+        self.run_button = QPushButton("Run replay", page)
+        self.stop_button = QPushButton("Stop", page)
+        self.stop_button.setEnabled(False)
+        for widget in (self.mode, self.import_button, self.export_button, self.example_button):
+            toolbar.addWidget(widget)
+        toolbar.addStretch()
+        toolbar.addWidget(self.run_button)
+        toolbar.addWidget(self.stop_button)
+        page_layout.addLayout(toolbar)
+        paths = QFormLayout()
+        self.snapshot_edit = QLineEdit(page)
+        self.evidence_edit = QLineEdit(page)
+        self.runtime_edit = QLineEdit(page)
+        self.runtime_edit.setPlaceholderText("Default: this checkout's VM runtime; browse for another VM instance")
+        self.output_edit = QLineEdit(str(Path(output_root)), page)
+        self.snapshot_row = self._path_row(self.snapshot_edit, lambda: self._choose_file(self.snapshot_edit))
+        self.evidence_row = self._path_row(self.evidence_edit, lambda: self._choose_file(self.evidence_edit))
+        self.runtime_row = self._path_row(self.runtime_edit, lambda: self._choose_file(self.runtime_edit))
+        self.snapshot_label = QLabel("VM snapshot JSON", page)
+        self.evidence_label = QLabel("VM evidence JSON · optional", page)
+        self.runtime_label = QLabel("VM runtime JSON", page)
+        paths.addRow(self.snapshot_label, self.snapshot_row)
+        paths.addRow(self.evidence_label, self.evidence_row)
+        paths.addRow(self.runtime_label, self.runtime_row)
+        paths.addRow("Output directory", self._path_row(self.output_edit, self._choose_output))
+        self.path_panel = QWidget(page)
+        self.path_panel.setLayout(paths)
+        page_layout.addWidget(self.path_panel)
+        splitter = QSplitter(Qt.Horizontal, page)
+        scroll = QScrollArea(splitter)
+        scroll.setWidgetResizable(True)
+        self.form = RequestForm(self.context)
+        scroll.setWidget(self.form)
+        result_panel = QWidget(splitter)
+        result_layout = QVBoxLayout(result_panel)
+        self.result_title = QLabel("No result loaded", result_panel)
+        self.result_title.setWordWrap(True)
+        result_layout.addWidget(self.result_title)
+        self.result_banner = QLabel("Local uncoupled transverse optics · RMS diagnostics only. Completion is not a physics accuracy certificate.", result_panel)
+        self.result_banner.setWordWrap(True)
+        result_layout.addWidget(self.result_banner)
+        self.results = QTableWidget(0, 7, result_panel)
+        self.results.setHorizontalHeaderLabels(["Diagnostic", "Predicted", "Measured", "Residual", "Unit", "Status", "Reason"])
+        self.results.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.results.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.results.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
+        self.results.verticalHeader().hide()
+        self.results.setMinimumHeight(160)
+        result_layout.addWidget(self.results, 1)
+        self.figure = Figure(figsize=(6, 3), tight_layout=True)
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        self.canvas.setMinimumHeight(190)
+        result_layout.addWidget(self.canvas, 1)
+        self.details_toggle = QToolButton(result_panel)
+        self.details_toggle.setText("Snapshot, request and result details")
+        self.details_toggle.setCheckable(True)
+        self.details = QPlainTextEdit(result_panel)
+        self.details.setReadOnly(True)
+        self.details.setMaximumHeight(190)
+        self.details.hide()
+        self.details_toggle.toggled.connect(self.details.setVisible)
+        result_layout.addWidget(self.details_toggle)
+        result_layout.addWidget(self.details)
+        splitter.setSizes([500, 800])
+        page_layout.addWidget(splitter, 1)
+        self.tabs.addTab(page, "Run & Compare")
+        self.mode.currentIndexChanged.connect(self._mode_changed)
+        self.import_button.clicked.connect(self._import_request_dialog)
+        self.export_button.clicked.connect(self._export_request_dialog)
+        self.example_button.clicked.connect(self.load_example)
+        self.run_button.clicked.connect(self.run_task)
+        self.stop_button.clicked.connect(self.controller.stop)
+
+    def _build_history_page(self):
+        page = QWidget(self)
+        layout = QVBoxLayout(page)
+        toolbar = QHBoxLayout()
+        for label, action in (("Refresh", self.refresh_history), ("Open archive…", self._open_archive_dialog),
+                              ("Open snapshot…", self._open_snapshot_dialog), ("Open directory", self.open_directory)):
+            button = QPushButton(label, page)
+            button.clicked.connect(action)
+            toolbar.addWidget(button)
+        toolbar.addStretch()
+        self.use_inputs_button = QPushButton("Use VM inputs for replay", page)
+        self.use_inputs_button.setEnabled(False)
+        self.use_inputs_button.clicked.connect(self._use_archive_inputs)
+        toolbar.addWidget(self.use_inputs_button)
+        layout.addLayout(toolbar)
+        splitter = QSplitter(page)
+        self.history = QListWidget(splitter)
+        self.history_details = QPlainTextEdit(splitter)
+        self.history_details.setReadOnly(True)
+        self.history.currentItemChanged.connect(self._history_selected)
+        splitter.setSizes([380, 820])
+        layout.addWidget(splitter)
+        self.tabs.addTab(page, "History")
+
+    def _path_row(self, edit, action):
+        widget = QWidget(self)
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        button = QToolButton(widget)
+        button.setText("…")
+        button.clicked.connect(action)
+        layout.addWidget(edit, 1)
+        layout.addWidget(button)
+        return widget
+
+    def _apply_theme(self):
+        background, panel, text, muted, border, accent = (
+            ("#0f1519", "#172027", "#e6edf2", "#91a2ad", "#31424d", "#45d0bc") if self._dark else
+            ("#f4f1eb", "#fffdf9", "#293740", "#746f68", "#d6cec3", "#287866"))
+        self.setStyleSheet(f"""
+            QWidget {{ background:{background}; color:{text}; font-size:12px; }}
+            QLabel#title {{ font-size:23px; font-weight:600; }}
+            QLineEdit,QComboBox,QPlainTextEdit,QTableWidget,QListWidget {{ background:{panel}; border:1px solid {border}; padding:3px; }}
+            QGroupBox {{ border:1px solid {border}; border-radius:6px; margin-top:9px; padding-top:10px; }}
+            QGroupBox::title {{ subcontrol-origin:margin; left:8px; }}
+            QPushButton,QToolButton {{ background:{panel}; border:1px solid {border}; border-radius:5px; padding:6px 9px; }}
+            QPushButton:hover,QToolButton:hover {{ border-color:{accent}; }}
+            QPushButton:disabled,QToolButton:disabled {{ color:{muted}; }}
+            QHeaderView::section {{ background:{panel}; padding:5px; border:1px solid {border}; }}
+            QTabBar::tab {{ padding:7px 12px; }}
+        """)
+        self._plot([])
+
+    def _mode_changed(self, *args):
+        capture = self.mode.currentData() == "run-vm"
+        for widget in (self.snapshot_label, self.snapshot_row, self.evidence_label, self.evidence_row):
+            widget.setVisible(not capture)
+        self.runtime_label.setVisible(capture)
+        self.runtime_row.setVisible(capture)
+        self.run_button.setText("Capture VM & predict" if capture else "Run replay")
+        self.context_label.setText("HALF · ELEGANT · " + ("VM capture" if capture else "Offline VM replay") + " · READ ONLY")
+
+    def _choose_file(self, edit):
+        path, _ = QFileDialog.getOpenFileName(self, "Select JSON", edit.text(), "JSON files (*.json)")
+        if path:
+            edit.setText(path)
+
+    def _choose_output(self):
+        path = QFileDialog.getExistingDirectory(self, "Output directory", self.output_edit.text())
+        if path:
+            self.output_edit.setText(path)
+            self.refresh_history()
+
+    def _error(self, error):
+        self.status_label.setText(f"Error: {error}")
+        self._append_log(f"Error: {error}\n")
+
+    def _append_log(self, text):
+        self.log.moveCursor(self.log.textCursor().End)
+        self.log.insertPlainText(text)
+        self.log.moveCursor(self.log.textCursor().End)
+
+    def load_request_file(self, path):
+        request = ShadowRequest.from_dict(read_object(path))
+        self.form.load_request(request)
+        self.status_label.setText(f"Request loaded · {request.beam_basis} · {request.beam_provenance}")
+
+    def _import_request_dialog(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Import shadow request", "", "JSON files (*.json)")
+        if path:
+            try:
+                self.load_request_file(path)
+            except (ValueError, KeyError, TypeError, OSError) as error:
+                self._error(error)
+
+    def _export_request_dialog(self):
+        try:
+            request = self.form.request()
+            path, _ = QFileDialog.getSaveFileName(self, "Export shadow request", "request.json", "JSON files (*.json)")
+            if path:
+                write_runtime_state(path, request.as_metadata())
+                self.status_label.setText("Request exported")
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self._error(error)
+
+    def load_example(self):
+        try:
+            directory = Path(self.output_edit.text()).expanduser().resolve() / "examples" / f"example_{uuid.uuid4().hex}"
+            write_example(directory, vm=True)
+            self.load_request_file(directory / "request.json")
+            self.snapshot_edit.setText(str(directory / "machine_snapshot.json"))
+            self.evidence_edit.clear()
+            self.mode.setCurrentIndex(0)
+            self.status_label.setText("SYNTHETIC VM example loaded · assumed beam · no PV access")
+            self.result_banner.setText("SYNTHETIC inputs and assumed entrance beam. Example residuals do not measure real-machine accuracy.")
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self._error(error)
+
+    def run_task(self):
+        if self.controller.busy:
+            return
+        try:
+            request = self.form.request()
+            prepare_model(self.context, request)
+            mode = self.mode.currentData()
+            if mode == "run-vm":
+                build_vm_capture_plan(self.context, request)
+            else:
+                snapshot = load_snapshot(self.snapshot_edit.text())
+                if snapshot.machine_id != "half" or snapshot.backend != "vm":
+                    raise ValueError("Real or non-HALF snapshots are view-only; no model replay is started")
+            if not self.output_edit.text().strip():
+                raise ValueError("Select an output directory")
+            self.log.clear()
+            self.results.setRowCount(0)
+            self._plot([])
+            self.details.clear()
+            self.current_archive = None
+            self.result_title.setText("Running · result pending")
+            self.result_banner.setText(f"{request.beam_basis} entrance beam · {request.beam_provenance}\nCompletion describes calculation and data alignment, not physical accuracy.")
+            self.controller.start(request, Path(self.output_edit.text()).expanduser(), mode=mode,
+                snapshot_path=self.snapshot_edit.text(), evidence_path=self.evidence_edit.text().strip() or None,
+                runtime_json=self.runtime_edit.text().strip() or None)
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self._error(error)
+
+    def _job_state(self, state):
+        busy = self.controller.busy
+        for widget in (self.form, self.path_panel, self.mode, self.import_button, self.export_button, self.example_button, self.run_button):
+            widget.setEnabled(not busy)
+        self.stop_button.setEnabled(busy and state != "Stopping")
+        if busy:
+            self.use_inputs_button.setEnabled(False)
+        self.status_label.setText(state)
+
+    def _job_completed(self, record):
+        self._job_state(record["status"].title())
+        self.refresh_history()
+        try:
+            self.show_archive(record["job_dir"])
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self._error(error)
+        if record.get("error") and record["status"] == "failed":
+            self._error(record["error"])
+        if self._close_pending:
+            self.close()
+
+    @staticmethod
+    def _format(value):
+        return format(value, ".8g") if isinstance(value, (int, float)) and math.isfinite(value) else ""
+
+    def show_archive(self, directory):
+        archive = read_archive(directory)
+        self.current_archive = archive
+        result, snapshot = archive.get("result") or {}, archive.get("snapshot") or {}
+        backend = archive["backend"]
+        self.result_title.setText(f"{backend.upper()} · {archive['status']} · {Path(directory).name} · archived result")
+        beam = result.get("beam_basis", (archive.get("request") or {}).get("beam", {}).get("basis", "unknown"))
+        provenance = result.get("beam_provenance", (archive.get("request") or {}).get("beam", {}).get("provenance", ""))
+        synthetic = snapshot.get("snapshot_id", "").startswith("synthetic_")
+        self.result_banner.setText(("SYNTHETIC · " if synthetic else "") + f"{beam} entrance beam · {provenance}\n" +
+                                  ("Real archive: view only. Gaussian SIZE values are not certified RMS." if backend == "real" else "Completion is not a physics accuracy certificate."))
+        rows = result.get("comparisons", []) if archive["status"] in {"complete", "partial"} else []
+        self.results.setRowCount(len(rows))
+        for row, data in enumerate(rows):
+            if not isinstance(data, dict):
+                raise ValueError("Malformed diagnostic comparison")
+            values = [data.get("key", ""), self._format(data.get("predicted")), self._format(data.get("measured")),
+                      self._format(data.get("residual")) if data.get("status") == "compared" else "",
+                      data.get("unit", ""), data.get("status", ""), data.get("detail", "")]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                item.setToolTip(json.dumps(data, indent=2))
+                self.results.setItem(row, column, item)
+        self._plot(rows)
+        self.details.setPlainText(json.dumps(archive, indent=2, ensure_ascii=False))
+        self.status_label.setText("Archive loaded · " + archive["status"])
+        return archive
+
+    def _plot(self, rows):
+        self.figure.clear()
+        color = "#e6edf2" if self._dark else "#293740"
+        background = "#172027" if self._dark else "#fffdf9"
+        self.figure.set_facecolor(background)
+        axes = self.figure.subplots(1, 2)
+        for axis, plane in zip(axes, ("sigx", "sigy")):
+            axis.set_facecolor(background)
+            data = [row for row in rows if isinstance(row, dict) and str(row.get("key", "")).endswith("/" + plane)]
+            for index, row in enumerate(data):
+                scale = 1000 if row.get("unit") == "m" else 1
+                for key, marker, label in (("predicted", "o", "Predicted"), ("measured", "x", "Measured")):
+                    value = row.get(key)
+                    if isinstance(value, (int, float)) and math.isfinite(value) and (key == "predicted" or row.get("status") == "compared"):
+                        axis.plot(index, value * scale, marker, color="#45bcb0" if key == "predicted" else "#e7ad65", label=label)
+            axis.set_xticks(range(len(data)))
+            axis.set_xticklabels([str(row.get("key", "")).split("/")[0] for row in data], rotation=25)
+            axis.set_title("X" if plane == "sigx" else "Y", color=color)
+            axis.set_ylabel("RMS [mm]", color=color)
+            axis.tick_params(colors=color)
+            for spine in axis.spines.values():
+                spine.set_color(color)
+            handles, labels = axis.get_legend_handles_labels()
+            if handles:
+                unique = dict(zip(labels, handles))
+                axis.legend(unique.values(), unique.keys(), facecolor=background, labelcolor=color, fontsize=8)
+        self.canvas.draw_idle()
+
+    def refresh_history(self):
+        if not hasattr(self, "history"):
+            return
+        root = Path(self.output_edit.text()).expanduser()
+        paths = set(root.glob("job_*/job.json")) | set(root.glob("shadow_*/manifest.json")) if root.is_dir() else set()
+        directories = {path.parent for path in paths} | self._imported_archives
+        self.history.clear()
+        for directory in sorted(directories, key=lambda path: str(path), reverse=True):
+            try:
+                archive = read_archive(directory)
+                label = f"{archive['status']} · {archive['backend']}\n{directory.name}"
+            except (ValueError, KeyError, TypeError, OSError) as error:
+                label = f"Unreadable · {directory.name}\n{error}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, str(directory))
+            self.history.addItem(item)
+
+    def _history_selected(self, item, previous=None):
+        self.use_inputs_button.setEnabled(False)
+        if not item:
+            return
+        try:
+            archive = self.show_archive(item.data(Qt.UserRole))
+            self.history_details.setPlainText(json.dumps(archive, indent=2, ensure_ascii=False))
+            self.use_inputs_button.setEnabled(not self.controller.busy and archive["backend"] == "vm" and bool(archive.get("request")) and bool(archive.get("snapshot_path")))
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self.history_details.setPlainText(f"Cannot read archive: {error}")
+            self._error(error)
+
+    def _open_archive_dialog(self):
+        directory = QFileDialog.getExistingDirectory(self, "Open shadow archive", self.output_edit.text())
+        if directory:
+            self._open_saved(directory)
+
+    def _open_snapshot_dialog(self):
+        filename, _ = QFileDialog.getOpenFileName(self, "View machine snapshot", "", "JSON files (*.json)")
+        if filename:
+            try:
+                snapshot = load_snapshot(filename)
+                self.history_details.setPlainText(json.dumps(read_runtime_state(filename), indent=2))
+                self.use_inputs_button.setEnabled(False)
+                self.current_archive = {"directory": str(Path(filename).parent), "snapshot_path": filename, "backend": snapshot.backend}
+                self.status_label.setText(f"{snapshot.backend.upper()} snapshot · view only · {snapshot.name}")
+            except (ValueError, KeyError, TypeError, OSError) as error:
+                self._error(error)
+
+    def _open_saved(self, directory):
+        try:
+            self.show_archive(directory)
+            self._imported_archives.add(Path(directory).resolve())
+            self.refresh_history()
+            for row in range(self.history.count()):
+                if Path(self.history.item(row).data(Qt.UserRole)) == Path(directory).resolve():
+                    self.history.setCurrentRow(row)
+                    break
+            self.tabs.setCurrentIndex(1)
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self._error(error)
+
+    def _use_archive_inputs(self):
+        archive = self.current_archive
+        if not archive or archive["backend"] != "vm" or not archive.get("request") or self.controller.busy:
+            return
+        try:
+            self.form.load_request(ShadowRequest.from_dict(archive["request"]))
+            self.snapshot_edit.setText(archive["snapshot_path"])
+            evidence = Path(archive["snapshot_path"]).parent / "vm_capture_evidence.json"
+            self.evidence_edit.setText(str(evidence) if evidence.exists() else "")
+            self.mode.setCurrentIndex(0)
+            self.tabs.setCurrentIndex(0)
+            self.status_label.setText("Archived VM inputs loaded; run explicitly to create a new result")
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self._error(error)
+
+    def open_directory(self):
+        path = (self.current_archive or {}).get("directory", self.output_edit.text())
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).resolve())))
+
+    def closeEvent(self, event):
+        if self.controller.busy:
+            self._close_pending = True
+            self.controller.stop()
+            event.ignore()
+        else:
+            event.accept()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="HALF digital shadow GUI · VM and offline only")
+    parser.add_argument("--machine", choices=("half",), default=os.environ.get("HALF_LINAC_MACHINE_ID") or os.environ.get("HALF_MACHINE_ID") or "half")
+    args = parser.parse_args(argv)
+    if args.machine != "half":
+        parser.error("Digital Shadow v1 supports HALF only")
+    app = QApplication(sys.argv[:1])
+    window = DigitalShadowWindow()
+    install_qt_window_raise_handler(window)
+    app.aboutToQuit.connect(window.controller.shutdown_now)
+    for number in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(number, lambda signum, frame: window.close())
+    heartbeat = QTimer(window)
+    heartbeat.timeout.connect(lambda: None)  # Keep Python signal handling responsive in Qt's event loop.
+    heartbeat.start(100)
+    window.show()
+    return app.exec_()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
