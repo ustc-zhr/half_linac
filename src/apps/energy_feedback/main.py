@@ -2672,21 +2672,6 @@ class EnergyFeedbackWindow(QMainWindow):
                 if groups
                 else 0.0
             )
-            if deadband > 0:
-                self.error_axis.axhspan(
-                    -deadband,
-                    deadband,
-                    color=theme["deadband"],
-                    alpha=0.18,
-                    label="Deadband",
-                )
-            self.error_axis.axhline(
-                0.0,
-                color=theme["text"],
-                linewidth=0.8,
-                alpha=0.8,
-                label="Zero",
-            )
         timestamps = list(self._history.get("time", ()))
         if timestamps:
             duration_s = PLOT_RANGE_SECONDS.get(
@@ -2830,6 +2815,23 @@ class EnergyFeedbackWindow(QMainWindow):
                         markersize=5,
                     )
         if self.error_axis is not None:
+            # Plot data first so reference artists cannot seed numeric X limits
+            # before Matplotlib establishes the Clock axis's date coordinates.
+            if deadband > 0:
+                self.error_axis.axhspan(
+                    -deadband,
+                    deadband,
+                    color=theme["deadband"],
+                    alpha=0.18,
+                    label="Deadband",
+                )
+            self.error_axis.axhline(
+                0.0,
+                color=theme["text"],
+                linewidth=0.8,
+                alpha=0.8,
+                label="Zero",
+            )
             usable_action_window = (
                 action_window
                 if action_window_ready

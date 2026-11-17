@@ -1620,6 +1620,52 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
         finally:
             window.close()
 
+    def test_plot_axis_switch_keeps_time_range_and_y_limits(self):
+        from matplotlib import dates as mdates
+        from datetime import datetime
+
+        context = load_app_context(
+            "energy_feedback", machine_id="half", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            timestamps = [1794888000.0 + index for index in range(3)]
+            window._history["time"].extend(timestamps)
+            window._history["energy"].extend((100.0, 100.02, 100.01))
+            window._history["target"].extend((100.0, 100.0, 100.0))
+            window._history["error"].extend((0.0, 0.02, 0.01))
+            for actuator in window.config["control_groups"][0].actuators:
+                window._history[f"actuator.{actuator.id}.readback_delta"].extend(
+                    (0.0, 0.1, 0.2)
+                )
+            for view in ("Feedback", "Full Detail", "Error Focus"):
+                window.plot_view_combo.setCurrentText(view)
+                window.plot_axis_combo.setCurrentText("Index")
+                window._draw_plot()
+                y_limits = [axis.get_ylim() for axis in window._plot_axes()]
+                for mode in ("Clock", "Index", "Elapsed", "Clock"):
+                    window.plot_axis_combo.setCurrentText(mode)
+                    # Also check the next acquisition refresh in the same mode.
+                    for _ in range(2):
+                        window._draw_plot()
+                        window.canvas.draw()
+                        if mode == "Clock":
+                            x_start, x_end = mdates.date2num(
+                                [datetime.fromtimestamp(value) for value in timestamps[::2]]
+                            )
+                        else:
+                            x_start, x_end = 0.0, 2.0
+                        for axis, expected_y in zip(window._plot_axes(), y_limits):
+                            with self.subTest(view=view, mode=mode):
+                                lower, upper = axis.get_xlim()
+                                self.assertLessEqual(lower, x_start)
+                                self.assertGreaterEqual(upper, x_end)
+                                self.assertLess(upper - lower, 2 * (x_end - x_start))
+                                for actual, expected in zip(axis.get_ylim(), expected_y):
+                                    self.assertAlmostEqual(actual, expected)
+        finally:
+            window.close()
+
     def test_error_plot_detail_scale_and_action_window_modes(self):
         context = load_app_context(
             "energy_feedback", machine_id="half", control_backend="real"
