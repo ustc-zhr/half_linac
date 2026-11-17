@@ -1,7 +1,7 @@
 {
   "schema": "digital_shadow_preparation_checklist_v1",
   "purpose": "Review checklist only; not accepted by the digital shadow CLI",
-  "status": "inputs_incomplete",
+  "status": "historical_real_physics_validation_unavailable",
   "review_date": "2026-11-17",
   "live_real_capture_authorized": false,
   "candidate": {
@@ -13,7 +13,8 @@
     "reference_edge": "exit",
     "primary_validation_screen": "PRF09",
     "selection_reason": "No independent QT01 entrance measurement; propose PRF06/07/08 image RMS reconstruction at PRF06 exit and hold out PRF09",
-    "selection_final": false
+    "selection_final": false,
+    "execution_status": "Future measurement candidate only; historical reconstruction cannot be executed"
   },
   "entrance_beam": {
     "energy_mev_kinetic": null,
@@ -48,6 +49,13 @@
     {"element": "PRF08", "image_pv": "IN:BD:PRF08:image1:ArrayData", "role": "entrance_reconstruction", "saved_frame_path": null},
     {"element": "PRF09", "image_pv": "IN:BD:PRF09:image1:ArrayData", "role": "independent_validation", "saved_frame_path": null}
   ],
+  "historical_data_availability": {
+    "screens": ["PRF06", "PRF07", "PRF08", "PRF09"],
+    "raw_images_available": false,
+    "synchronized_machine_state_available": false,
+    "source": "User confirmation 2026-11-17",
+    "request_existing_historical_files": false
+  },
   "reconstruction_structure": {
     "design_drift_lengths_m": [0, 5.5, 11],
     "measurement_matrix_rank": 3,
@@ -79,5 +87,13 @@
     "real_capture": "No real capture CLI exists; retain run-vm isolation"
   },
   "ready_for_real_snapshot_replay": false,
-  "ready_for_live_capture": false
+  "ready_for_live_capture": false,
+  "next_stage_proposed": {
+    "scope": "Prepare a future data archival workflow and verify it in VM before new real measurements",
+    "existing_real_images_required_for_development": false,
+    "preserve_raw_images_as_separate_artifacts": true,
+    "preserve_per_frame_and_per_screen_state_provenance": true,
+    "live_real_operations_authorized": false,
+    "implementation_status": "Proposal for review; no new archival code implemented"
+  }
 }
