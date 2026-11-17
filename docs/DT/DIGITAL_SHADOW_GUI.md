@@ -84,3 +84,7 @@ HALF_VM_SHADOW_INTEGRATION=1 QT_QPA_PLATFORM=offscreen python3 -m pytest -q \
 ```
 
 本地截图和验收产物保存在 `runs/digital_shadow_gui_acceptance/20261117/`。模型适用范围、缺失的实机资料及已知基线失败继续见 [PoC 说明](DIGITAL_SHADOW_POC.md) 和 [实机准备记录](REAL_POC_PREPARATION.md)。本次不宣称完整测试集全部通过。
+
+## VM 工作点的入口束流对齐
+
+用户完成实际 GUI 的 VM 一次采集后，已从同次计算的跟踪二阶矩提取 QT02 入口参数，并用原采集快照离线重放。PRF06 的 X、Y 相对残差分别约为 0.0000489% 和 -0.001467%，GUI 归档打开与请求导入检查通过。新请求、原始来源和重放结果保存在 `runs/digital_shadow_vm_alignment/20261117_qt02/`；具体数值、模型适用边界及 GUI 打开步骤见 [入口对齐验收](VM_ENTRANCE_ALIGNMENT_20261117.md)。该请求仅适用于记录中的同一次 VM 计算。
