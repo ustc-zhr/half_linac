@@ -23,11 +23,15 @@ def test_private_vm_capture_and_model_comparison(tmp_path):
 @pytest.mark.skipif(os.environ.get("HALF_VM_SHADOW_INTEGRATION") != "1",
                     reason="Set HALF_VM_SHADOW_INTEGRATION=1 for isolated EPICS/Elegant verification")
 def test_private_vm_gui_capture_and_model_comparison(tmp_path):
-    completed = subprocess.run([sys.executable, "-B", __file__, str(tmp_path), "--gui"],
+    completed = subprocess.run([sys.executable, "-B", __file__, str(tmp_path), "--gui", "--four-screens"],
                                capture_output=True, text=True, timeout=45)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     result = json.loads((tmp_path / "cli_result.json").read_text())
     assert result["status"] == "complete"
+    assert {row["key"] for row in result["comparisons"]} == {
+        f"{screen}/{channel}" for screen in ("PRF06", "PRF07", "PRF08", "PRF09")
+        for channel in ("sigx", "sigy")
+    }
     assert max(abs(row["residual"]) for row in result["comparisons"]) < 1e-6
 
 
@@ -51,7 +55,8 @@ def _gui_capture(root, directory, request_path, runtime):
             time.sleep(0.01)
         app.processEvents()
         assert window.controller.record["status"] == "complete", window.log.toPlainText()
-        assert window.results.rowCount() == 2
+        expected_rows = len(json.loads(request_path.read_text())["diagnostics"])
+        assert window.results.rowCount() == expected_rows
         archive = window.current_archive
         window.grab().save(str(directory / "gui_vm_complete.png"))
         return {**archive["result"], "run_dir": archive["run_dir"]}
@@ -61,7 +66,7 @@ def _gui_capture(root, directory, request_path, runtime):
         app.processEvents()
 
 
-def _run_private_vm(directory, *, gui=False):
+def _run_private_vm(directory, *, gui=False, four_screens=False):
     from datetime import datetime, timezone
     from dataclasses import replace
     import math
@@ -87,20 +92,27 @@ def _run_private_vm(directory, *, gui=False):
     from half_linac.src.shared.elegant_backend import ElegantParser, VmPublisher, build_vm_publish_plan
     from half_linac.src.shared.elegant_runtime import run_elegant_input
     from half_linac.src.shared.machine_profile.loader import load_model_context
+    from half_linac.src.shared.machine_profile.models import ControlBackendConfig
     from half_linac.src.shared.machine_profile.resolver import resolve_channel
     from half_linac.src.shared.runtime_state import write_runtime_state
     from half_linac.src.virtual_machine.workbench_data import columns, collect_results, input_version, observation_dir
 
-    context = load_model_context("half")
+    context = replace(load_model_context("half"), control_backend=ControlBackendConfig("vm"))
+    screens = ("PRF06", "PRF07", "PRF08", "PRF09") if four_screens else ("PRF06",)
     request = ShadowRequest(
-        model_line="EMIT_QT02_PRF06", reference_element="QT02", reference_edge="entrance",
+        model_line="ALL_MAIN" if four_screens else "EMIT_QT02_PRF06",
+        reference_element="QT01" if four_screens else "QT02", reference_edge="entrance",
         energy_mev=2200, x_moments=(4e-6, 0, 1e-8), y_moments=(3e-6, 0, 1e-8),
         beam_basis="independent_measurement", beam_provenance="Entrance macroparticle moments from isolated VM tracking input, not target screen",
-        diagnostics=(Diagnostic("PRF06", "sigx", "mm", "rms"), Diagnostic("PRF06", "sigy", "mm", "rms")),
+        diagnostics=tuple(Diagnostic(screen, channel, "mm", "rms") for screen in screens for channel in ("sigx", "sigy")),
     )
-    state, _ = prepare_model(context, request)
+    state, fields = prepare_model(context, request)
+    if four_screens:
+        names = state["usedline"]
+        state["usedline"] = names[names.index("QT01"):names.index("PRF09") + 1]
     state["lattice"]["QT02"]["K1"] = str(float(state["lattice"]["QT02"]["K1"]) + 0.15)
-    state["lattice"]["PRF06"]["DISABLE"] = "0"
+    for screen in screens:
+        state["lattice"][screen]["DISABLE"] = "0"
     p0 = math.sqrt(request.energy_mev * (request.energy_mev + 2 * 0.51099895)) / 0.51099895
     control = state["control"]
     control["run_setup"].update(p_central=str(p0), default_order="1", random_number_seed="12345")
@@ -122,10 +134,26 @@ def _run_private_vm(directory, *, gui=False):
     request_path = directory / "request.json"
     write_runtime_state(request_path, request.as_metadata())
 
-    names = [resolve_channel(context, "QT02", "K1"),
-             resolve_channel(context, "PRF06", "sigx"), resolve_channel(context, "PRF06", "sigy")]
+    names = [resolve_channel(context, quad, "K1") for quad, _ in fields]
+    names += [resolve_channel(context, screen, channel) for screen in screens for channel in ("sigx", "sigy")]
     db = directory / "private.db"
-    db.write_text("\n".join(f'record(ao, "{name}") {{ field(PREC,"12") }}' for name in names))
+    templates = root / "src/softIOC/halflinac/db"
+    records = []
+    def record(template, **macros):
+        text = (templates / template).read_text()
+        for key, value in macros.items():
+            text = text.replace(f"$({key})", value)
+        assert "$(" not in text
+        records.append(text)
+    for quad, _ in fields:
+        record("quad.template", RECORD=f"VMIOC:QUAD:{quad}:K1", K1ALIAS=resolve_channel(context, quad, "K1"))
+    for screen in screens:
+        for channel in ("sigx", "sigy"):
+            record(f"flag_{channel}.template", **{
+                f"{channel.upper()}RECORD": f"VMIOC:FLAG:{screen}:{channel.upper()}",
+                f"{channel.upper()}ALIAS": resolve_channel(context, screen, channel),
+            })
+    db.write_text("\n".join(records))
     soft_ioc, repeater = shutil.which("softIoc"), shutil.which("caRepeater")
     if not soft_ioc or not repeater:
         raise RuntimeError("Integration requires softIoc and caRepeater in PATH")
@@ -139,7 +167,8 @@ def _run_private_vm(directory, *, gui=False):
             pvs = [epics.PV(name, auto_monitor=False) for name in names]
             for pv in pvs:
                 assert pv.wait_for_connection(timeout=max(0.01, deadline - time.monotonic()))
-            assert epics.caput(names[0], float(state["lattice"]["QT02"]["K1"]), wait=True) == 1
+            for quad, _ in fields:
+                assert epics.caput(resolve_channel(context, quad, "K1"), float(state["lattice"][quad]["K1"]), wait=True) == 1
             plan = build_vm_publish_plan(context.profile)
             assert VmPublisher().publish_watch_rms(plan, lattice=state["lattice"], usedline=state["usedline"], elegant_dir=directory)
             result = collect_results(state, directory)
@@ -186,4 +215,4 @@ def _run_private_vm(directory, *, gui=False):
 if __name__ == "__main__":
     target = Path(sys.argv[1])
     target.mkdir(parents=True, exist_ok=True)
-    _run_private_vm(target, gui="--gui" in sys.argv[2:])
+    _run_private_vm(target, gui="--gui" in sys.argv[2:], four_screens="--four-screens" in sys.argv[2:])

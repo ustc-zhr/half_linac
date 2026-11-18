@@ -209,12 +209,30 @@ def test_rms_publisher_waits_and_invalidates_disabled_output():
 def test_publish_plan_uses_only_existing_vm_width_channels():
     context = load_model_context("half")
     specs = {spec.source_watch_id: spec for spec in build_vm_publish_plan(context.profile).watch_rms_specs}
-    assert {"PRF06", "PRF07", "PRF08"}.issubset(specs)
+    assert {"PRF06", "PRF07", "PRF08", "PRF09"}.issubset(specs)
     assert "PRF03" not in specs  # Image-only VM screen must not acquire invented scalar PVs.
     assert specs["PRF06"].x_pv == context.profile.get_element("PRF06").channels["sigx"]["vm"]
     real = {mapping["real"] for element in context.profile.elements
             for mapping in element.channels.values() if "real" in mapping}
     assert all(name not in real for spec in specs.values() for name in (spec.x_pv, spec.y_pv) if name)
+
+
+def test_vm_width_publish_aliases_are_generated_by_the_ioc(tmp_path, monkeypatch):
+    from half_linac.src.softIOC.pv_server import pv_server
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Generating IOC configuration must not access PVs")
+
+    for name in ("PV", "caget", "caput", "caget_many", "caput_many"):
+        monkeypatch.setattr("epics." + name, forbidden)
+    server = pv_server(tmp_path / "unused.json", tmp_path / "ioc", machine_id="half")
+    server.substitutions_path = tmp_path / "db/runtime.substitutions"
+    server.gen_substitution_file()
+    text = server.substitutions_path.read_text()
+    specs = {spec.source_watch_id: spec for spec in build_vm_publish_plan(server.machine_profile).watch_rms_specs}
+    for screen in ("PRF06", "PRF07", "PRF08", "PRF09"):
+        for channel, alias in (("sigx", specs[screen].x_pv), ("sigy", specs[screen].y_pv)):
+            assert f'{{ "{screen}", "VMIOC:FLAG:{screen}:{channel.upper()}", "{alias}" }}' in text
 
 
 def test_vm_update_records_rms_publication_for_the_frozen_input(tmp_path):

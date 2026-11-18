@@ -724,7 +724,9 @@
     },
     "PRF09": {
       "image": "HALF:IN:FLAG:PRF09:image1:ArrayData:vm",
-      "exposure_time": "HALF:IN:FLAG:PRF09:cam1:AcquireTime:vm"
+      "exposure_time": "HALF:IN:FLAG:PRF09:cam1:AcquireTime:vm",
+      "sigx": "HALF:IN:FLAG:PRF09:sigx",
+      "sigy": "HALF:IN:FLAG:PRF09:sigy"
     },
     "PRF10": {
       "image": "HALF:IN:FLAG:PRF10:image1:ArrayData:vm",

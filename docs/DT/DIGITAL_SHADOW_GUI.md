@@ -90,3 +90,13 @@ HALF_VM_SHADOW_INTEGRATION=1 QT_QPA_PLATFORM=offscreen python3 -m pytest -q \
 用户完成实际 GUI 的 VM 一次采集后，已从同次计算的跟踪二阶矩提取 QT02 入口参数，并用原采集快照离线重放。PRF06 的 X、Y 相对残差分别约为 0.0000489% 和 -0.001467%，GUI 归档打开与请求导入检查通过。新请求、原始来源和重放结果保存在 `runs/digital_shadow_vm_alignment/20261117_qt02/`；具体数值、模型适用边界及 GUI 打开步骤见 [入口对齐验收](VM_ENTRANCE_ALIGNMENT_20261117.md)。该请求仅适用于记录中的同一次 VM 计算。
 
 后续[同阶对照验收](VM_ORDER_COMPARISON_20261118.md)已确认一阶矩阵与一阶粒子跟踪一致，原微小残差以动量散布参与的高阶效应为主。此次验收仅增加离线产物和文档，GUI 行为及原结果保持不变。
+
+## PRF09 VM 束宽接入
+
+2026-11-18 已补齐 PRF09 的 VM sigx/sigy 映射，PV 分别为 `HALF:IN:FLAG:PRF09:sigx`、`HALF:IN:FLAG:PRF09:sigy`。现有 IOC 生成器和 VM RMS 发布器按 profile 自动纳入，未修改发布器、IOC 模板或写入安全机制。
+
+已有运行实例需加载新配置：先停止 VM Runtime 和 softIOC，再依次点击 **Start softIOC**、**Start VM Runtime**，等待 Ready，并重新打开 Digital Shadow。无需重编译 IOC。需要四屏任务时可选择 `ALL_MAIN`、`QT01 entrance`，选取 PRF06/07/08/09 两平面诊断；入口参数仍需有明确来源，Load VM example 继续保留原有单段合成演示，不自动变成当前 VM 的入口。
+
+新增通道会改变 VM profile 签名。历史归档可继续只读查看，旧快照在当前配置下重放会被现有签名检查拒绝；使用原版本配置重放或重新采集快照，不能改写历史签名绕过检查。
+
+本次 43 项 VM/GUI 回归、2 项私有 CA/ELEGANT 集成和 `scripts/check.sh` 均通过。四屏 GUI 集成包含 8 项 compared，最大绝对残差 8.88e-16 mm，归档后重放成功；使用生产 IOC 模板和实际 ELEGANT 粒子数据，零动量散布、一次输运。临时服务仅监听随机 loopback 端口，当前 VM/IOC 运行文件未改动。产物保存在 `runs/digital_shadow_prf09_mapping/20261118/`。

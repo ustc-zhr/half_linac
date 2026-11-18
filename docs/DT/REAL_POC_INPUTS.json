@@ -160,7 +160,6 @@
     "unit_alias": "Local IOC reference uses m^-2; current snapshot conversion requires exact 1/m^2. Preserve raw EGU and add explicit equivalence handling before any affected real replay",
     "diagnostic_source": "Current comparison only accepts mapped sigx/sigy PVs as declared RMS. Image-derived RMS requires an explicit source adapter; do not relabel Gaussian snapshots or forge a SIZE PV origin",
     "real_capture": "No real collector/CLI exists. Planned default workflow is 132 mapped normalized quadrupole state PVs plus eight widths; all 68 quadrupoles remain in the integration inventory, with two pending normalized inputs",
-    "vm_prf09": "Real PRF09 SIZE PV mappings exist, but vm.json has no PRF09 sigx/sigy mappings; existing run-vm cannot capture all four screens",
     "quad_strength_mapping": "QDU01/02 normalized strength remains unresolved; do not replace it with current readings. QHL1..4 are unused current-file definitions, not extra physical devices to add"
   },
   "ready_for_real_snapshot_replay": false,
@@ -393,5 +392,19 @@
       "unit": "mm",
       "source": "User confirmation 2026-11-18"
     }
-  ]
+  ],
+  "resolved_implementation_items": {
+    "vm_prf09": {
+      "status": "implemented_and_isolated_runtime_verified",
+      "channels": {
+        "sigx": "HALF:IN:FLAG:PRF09:sigx",
+        "sigy": "HALF:IN:FLAG:PRF09:sigy"
+      },
+      "verification": "43 focused VM/GUI tests; 2 isolated CA/Elegant integrations; repository static checks passed",
+      "four_screen_gui_comparisons": 8,
+      "max_absolute_vm_residual_mm": 8.881784197001252e-16,
+      "existing_services_restarted": false,
+      "activation": "Restart softIOC then VM Runtime, reopen Digital Shadow and capture a new VM snapshot; profile signature changes"
+    }
+  }
 }

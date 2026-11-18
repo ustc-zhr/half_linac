@@ -2,7 +2,7 @@
 
 2026-11-18，接入目标为 HALF profile 定义的全部 68 块四极铁的**归一化强度**。当前 66 块具备 K1/K1_total 映射；QDU01/02 的 K1_total 缺失，不能把原始电流归档算作这两块四极铁已接入 ELEGANT。默认工作流不采用电流兜底，也不以采集 PV 数量代替模型接入完成度。
 
-当前 real 采集器和 CLI/GUI 实机运行入口仍未实现。本轮仅修正方案和来源记录，没有修改产品代码、PV/IOC 配置、状态机或连接实机。
+当前 real 采集器和 CLI/GUI 实机运行入口仍未实现。本次产品变更仅为 PRF09 的两个 VM 通道配置，并复用现有 IOC 生成器与发布器完成隔离验收；未改变 real PV、调束状态机或运行中的 IOC，也未连接实机。
 
 ## 全机强度输入与局部模型
 
@@ -27,9 +27,9 @@ QDU01/02 保留在 68 块接入目标中，但标为**归一化输入未接入**
 
 原始宽度、源时间、接收时间、报警和原始 EGU 均需保存。模型 RMS 与高斯拟合 σ 或算法定义尚未确认的观测分别标识；定义不兼容时不输出精度残差。无独立入口测量和历史原图的事实保持不变，不重复索要不存在的资料。
 
-## PRF09 缺少 VM 束宽映射的含义
+## PRF09 VM 束宽映射
 
-这是 [vm.json](../../configs/machines/half/control_backends/vm.json) 的软件配置缺项。PRF08 有 image、exposure_time、sigx、sigy；PRF09 只有 image、exposure_time，缺少 sigx/sigy 两个键。real.json 中 PRF09 的 H:SIZE/V:SIZE 映射已存在。
+已按用户要求在 [vm.json](../../configs/machines/half/control_backends/vm.json) 为 PRF09 补齐两个通道，沿用现有 PRF 命名：`sigx → HALF:IN:FLAG:PRF09:sigx`，`sigy → HALF:IN:FLAG:PRF09:sigy`。real.json 的 H:SIZE/V:SIZE 映射保持不变。
 
 实际调用链为：
 
@@ -40,9 +40,11 @@ ELEGANT PRF09.out 粒子数据
   → publish_watch_rms() 按发布项写入虚拟标量 PV
 ```
 
-实际检查中，冻结的 PRF09.out 含 8768 个粒子；现有发布计划没有 PRF09 的 RMS 发布项。缺的是虚拟通道的配置及发布连接，**不是 ELEGANT 不会计算 PRF09 束宽，也不是缺少真实 PRF09 通道**。
+补齐配置后，现有发布计划包含 PRF09 的 RMS 项，IOC 生成器自动生成对应的 SIGX/SIGY 记录及别名，无需改变产品发布器或模板。VM 标量仍是粒子总体 RMS、单位 mm，与真实图像高斯拟合 σ 的定义分开。
 
-后续补齐时需同步验证 IOC DB 生成、PV 别名和 VM 发布，不能仅写两个字符串就宣称已运行。本轮没有修改 PV、生成 IOC DB 或重启服务；此 VM 缺项不是全机 real 强度采集的前提。
+验证结果：43 项 VM/GUI 定向回归通过；2 项隔离 CA/ELEGANT 集成通过，GUI 用例覆盖 QT01→PRF09 四屏八项，使用现有 IOC 模板、实际 RMS 发布、一次采集及离线重放，最大束宽残差为 8.88e-16 mm；仓库静态检查通过。临时 IOC 使用随机 loopback 端口，当前服务和运行文件保持不变。
+
+当前运行实例不会热加载 profile。实际使用时先停止 VM Runtime 和 softIOC，再依次启动 softIOC、VM Runtime，并重新打开 Digital Shadow；IOC DB 由现有流程重生成，无需重编译 IOC。新增通道改变 VM profile 签名，旧归档可继续查看；旧快照重放须使用原配置版本，或重新采集新快照，不修改旧快照签名。详见 [GUI 说明](DIGITAL_SHADOW_GUI.md)。
 
 ## QHL1 至 QHL4 的具体位置
 
