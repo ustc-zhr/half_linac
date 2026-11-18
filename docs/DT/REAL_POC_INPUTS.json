@@ -187,7 +187,10 @@
     "primary_validation_screen": "PRF09",
     "selection_reason": "No independent QT01 entrance measurement; propose PRF06/07/08 image RMS reconstruction at PRF06 exit and hold out PRF09",
     "selection_final": false,
-    "execution_status": "Future measurement candidate only; historical reconstruction cannot be executed"
+    "execution_status": "Deferred by user 2026-11-18; record only, do not implement in the current phase",
+    "priority": "deferred_optional",
+    "is_prerequisite_for_architecture_work": false,
+    "decision_source": "User: 三屏重建记下来 不急着实现"
   },
   "capture_channel_count": 140,
   "capture_policy": {
@@ -470,5 +473,11 @@
     }
   },
   "offline_demo_ready": true,
-  "hardware_verified": false
+  "hardware_verified": false,
+  "architecture_goal_review": {
+    "date": "2026-11-18",
+    "document": "GOAL_GAP_REVIEW_20261118.md",
+    "next_focus": "Review existing model input/output contracts and L01B six-dimensional boundary; implementation is a later reviewed step",
+    "real_hardware_verified": false
+  }
 }
