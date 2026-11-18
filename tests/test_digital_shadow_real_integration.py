@@ -11,7 +11,8 @@ import pytest
 
 @pytest.mark.skipif(os.environ.get("HALF_SHADOW_REAL_DEMO_INTEGRATION") != "1",
                     reason="Set HALF_SHADOW_REAL_DEMO_INTEGRATION=1 for offline Elegant GUI verification")
-def test_real_demo_gui_capture_and_archived_replay_without_any_pv_access(tmp_path, monkeypatch):
+@pytest.mark.parametrize("save_images", [False, True])
+def test_real_demo_gui_capture_and_archived_replay_without_any_pv_access(tmp_path, monkeypatch, save_images):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     # Fresh workers inherit a deny-all EPICS shim as well as parent-side guards.
     blocker = tmp_path / "blocker"
@@ -50,6 +51,7 @@ epics.ca.poll = forbidden
     try:
         window.show()
         window.mode.setCurrentIndex(window.mode.findData("demo-real"))
+        window.save_images.setChecked(save_images)
         window.example_button.click()
         window.run_button.click()
         first = wait()
@@ -63,6 +65,19 @@ epics.ca.poll = forbidden
         assert len(first["manifest"]["unit_normalizations"]) == 4
         assert "SYNTHETIC" in window.result_banner.text()
         assert {axis.get_ylabel() for axis in window.figure.axes} == {"Width [mm]"}
+        if save_images:
+            from half_linac.src.shared.digital_shadow.image_store import ImageStore
+            images = first["image_index"]
+            assert images["summary"]["saved"] == images["summary"]["requested"] == 4
+            assert images["summary"]["status"] == "complete"
+            pool = ImageStore(images["store_root"], images["summary"]["limit_bytes"])
+            for frame in images["frames"]:
+                assert pool.get(frame["object"]).dtype.name == "uint16"
+                assert frame["derived_rms"]["status"] == "valid"
+            assert len(list(pool.root.glob("*.npz"))) == 1
+            assert window.image_results.rowCount() == 4
+            window.images_toggle.setChecked(True)
+            app.processEvents()
         window.grab().save(str(tmp_path / "real_demo_complete.png"))
         window._use_archive_inputs()
         assert window.mode.currentData() == "replay"
@@ -70,6 +85,9 @@ epics.ca.poll = forbidden
         second = wait()
         assert second["result"]["input_hash"] == first["result"]["input_hash"]
         assert second["result"]["comparisons"] == first["result"]["comparisons"]
+        if save_images:
+            assert first["image_index"] == second["image_index"]
+            assert not list(Path(second["run_dir"]).parent.rglob("*.npz"))
 
         # Even outside the GUI, an unflagged command cannot open real PVs.
         request = Path(first["run_dir"]) / "request.json"
@@ -84,6 +102,8 @@ epics.ca.poll = forbidden
             "comparison_count": 8, "all_residuals_empty": True, "input_hash_equal": True,
             "raw_units_preserved": True, "live_command_without_flag_refused": True,
             "pv_api_denied_in_parent_and_worker": True,
+            "images_enabled": save_images,
+            "image_summary": first["image_index"]["summary"] if save_images else None,
         }, indent=2))
     finally:
         window.controller.shutdown_now()

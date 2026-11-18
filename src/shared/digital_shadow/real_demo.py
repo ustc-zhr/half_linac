@@ -1,5 +1,7 @@
 """A clearly synthetic reader exercising the real capture path without CA."""
 from datetime import datetime, timezone
+import numpy as np
+from half_linac.src.shared.machine_profile.resolver import resolve_channel
 
 from .models import Diagnostic, ShadowRequest
 from .pipeline import prepare_model
@@ -20,6 +22,8 @@ class SimulatedRealReader:
         points, _ = build_real_capture_plan(context, request)
         state, _ = prepare_model(context, request)
         self.values, self.reads = {}, []
+        self.images = {resolve_channel(context, d.element, "image", "real"):
+                       context.profile.get_element(d.element).image_geometry["real"] for d in request.diagnostics}
         for index, point in enumerate(points):
             endpoint = point.endpoint
             if endpoint.element_kind == "quad":
@@ -32,13 +36,19 @@ class SimulatedRealReader:
         owner = self
         class Pv:
             connected = True
-            count = 1
+            count = int(np.prod(owner.images[name]["shape"])) if name in owner.images else 1
             def get_with_metadata(self, **kwargs):
                 assert kwargs["use_monitor"] is False
                 owner.reads.append(name)
-                value, unit = owner.values[name]
+                if name in owner.images:
+                    w, h = owner.images[name]["shape"]
+                    x, y = np.arange(w)[None, :], np.arange(h)[:, None]
+                    value = (10000*np.exp(-.5*(((x-w/2)/(w/12))**2+((y-h/2)/(h/10))**2))).astype(np.uint16).ravel()
+                    unit = "counts"
+                else:
+                    value, unit = owner.values[name]
                 return {"value": value, "units": unit, "timestamp": datetime.now(timezone.utc).timestamp(),
-                        "status": 0, "severity": 0, "count": 1}
+                        "status": 0, "severity": 0, "count": self.count}
             def put(self, *args, **kwargs):
                 raise AssertionError("Synthetic real reader cannot write PVs")
             def clear_callbacks(self):
@@ -48,8 +58,8 @@ class SimulatedRealReader:
         return Pv()
 
 
-def capture_demo(context, request, *, timeout_s=5.0):
+def capture_demo(context, request, *, timeout_s=5.0, image_capture=None):
     reader = SimulatedRealReader(context, request)
     snapshot, evidence = capture_real_once(context, request, timeout_s=timeout_s, pv_factory=reader,
-                                            poll_function=lambda interval: None, synthetic=True)
+                                            poll_function=lambda interval: None, synthetic=True, image_capture=image_capture)
     return snapshot, evidence

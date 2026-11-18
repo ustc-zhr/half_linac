@@ -157,7 +157,7 @@
     "target_source_proposed_phase": "Future image RMS physics validation; not the current scalar engineering display"
   },
   "known_implementation_gap": {
-    "diagnostic_source": "Scalar Gaussian/unknown observation metadata and incompatible display are implemented. Image-derived RMS provenance/archival adapter remains future work; no real images are claimed",
+    "diagnostic_source": "Scalar Gaussian/unknown display and independent image ROI RMS archival/provenance are implemented. Image RMS does not replace SIZE residuals or constitute independent physical precision validation; live images remain unverified.",
     "quad_strength_mapping": "QDU01/02 normalized strength remains unresolved; do not replace it with current readings. QHL1..4 are unused current-file definitions, not extra physical devices to add"
   },
   "ready_for_real_snapshot_replay": false,
@@ -432,6 +432,26 @@
       "raw_snapshot_preserved": true,
       "derived_model_input_snapshot_archived": true,
       "generic_model_converter_remains_strict": true
+    },
+    "image_archive": {
+      "status": "implemented_offline_and_private_vm_verified",
+      "gui_option": "Save one original frame per screen",
+      "one_frame_per_selected_screen": true,
+      "preserve_received_dtype": true,
+      "lossless_format": "npz",
+      "deduplicate_backgrounds_and_frames": true,
+      "default_limit_gib": 10,
+      "automatic_deletion": false,
+      "replay_reuses_original_objects": true,
+      "rms_definition": "image_roi_projection_rms",
+      "size_scalar_comparison_unchanged": true,
+      "tests": {
+        "focused_passed": 102,
+        "integration_passed": 9,
+        "static_checks_passed": true
+      },
+      "real_hardware_verified": false,
+      "review_document": "IMAGE_ARCHIVE_20261118.md"
     }
   },
   "offline_demo_ready": true,

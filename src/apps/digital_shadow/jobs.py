@@ -53,7 +53,7 @@ def read_archive(directory):
     if result and any(not isinstance(row, dict) for row in result["comparisons"]):
         raise ValueError("Malformed diagnostic comparison")
     if manifest:
-        for name in ("machine_snapshot.json", "request.json", "result.json", "vm_capture_evidence.json", "real_capture_evidence.json"):
+        for name in ("machine_snapshot.json", "request.json", "result.json", "vm_capture_evidence.json", "real_capture_evidence.json", "image_index.json"):
             expected = manifest.get("artifacts", {}).get(name)
             if expected and hashlib.sha256((run / name).read_bytes()).hexdigest() != expected:
                 raise ValueError(f"Archive integrity check failed: {name}")
@@ -61,12 +61,24 @@ def read_archive(directory):
     real_evidence = read_object(real_path) if real_path.exists() else None
     if real_evidence and real_evidence.get("schema") != "digital_shadow_real_capture_v1":
         raise ValueError("Unsupported real capture evidence")
+    image_path = run / "image_index.json"
+    images = read_object(image_path) if image_path.exists() else None
+    if images:
+        from dataclasses import replace
+        from half_linac.src.shared.machine_profile.loader import load_model_context
+        from half_linac.src.shared.machine_profile.models import ControlBackendConfig
+        from half_linac.src.shared.digital_shadow.image_capture import verify_image_bundle
+        if snapshot is None:
+            raise ValueError("Image archive has no bound scalar snapshot")
+        context = replace(load_model_context(snapshot.machine_id), control_backend=ControlBackendConfig(snapshot.backend))
+        verify_image_bundle(context, snapshot, images)
     return {"directory": str(directory), "run_dir": str(run), "backend": snapshot.backend if snapshot else (job or {}).get("backend", "unknown"),
             "machine": snapshot.machine_id if snapshot else "half", "status": (job or manifest or {}).get("status", "inputs"),
             "snapshot": read_runtime_state(snapshot_path) if snapshot else None,
             "snapshot_path": str(snapshot_path) if snapshot else None,
             "request": request, "result": result, "manifest": manifest, "job": job,
-            "real_evidence_path": str(real_path) if real_evidence else None}
+            "real_evidence_path": str(real_path) if real_evidence else None,
+            "image_index": images, "image_index_path": str(image_path) if images else None}
 
 
 class ShadowJobController(QObject):
@@ -92,7 +104,7 @@ class ShadowJobController(QObject):
         return self.process is not None
 
     def start(self, request, output_root, *, mode, snapshot_path=None, evidence_path=None, runtime_json=None,
-              ready_timeout=10.0, capture_timeout=5.0):
+              ready_timeout=10.0, capture_timeout=5.0, save_images=False, image_limit_gib=10.0, image_backgrounds=None):
         if self.busy:
             raise ValueError("A shadow task is already running")
         if mode not in {"replay", "run-vm", "demo-real", "run-real"}:
@@ -116,6 +128,9 @@ class ShadowJobController(QObject):
         arguments = [mode, "--request", str(directory / "request.json"), "--output-root", str(directory)]
         if mode == "replay":
             write_runtime_state(directory / "machine_snapshot.json", snapshot_to_dict(snapshot))
+            image_path = Path(snapshot_path).resolve().parent / "image_index.json"
+            if image_path.exists():
+                write_runtime_state(directory / "image_index.json", read_object(image_path))
             arguments.extend(["--snapshot", str(directory / "machine_snapshot.json")])
             if evidence_path:
                 name = "real_capture_evidence.json" if snapshot.backend == "real" else "vm_capture_evidence.json"
@@ -123,6 +138,11 @@ class ShadowJobController(QObject):
                 arguments.extend(["--real-evidence" if snapshot.backend == "real" else "--vm-evidence", str(directory / name)])
         else:
             arguments.extend(["--machine", "half", "--capture-timeout", str(capture_timeout)])
+            if save_images:
+                arguments.extend(["--save-images", "--image-limit-gib", str(image_limit_gib),
+                                  "--image-store", str(Path(output_root).resolve() / "image_store")])
+                if image_backgrounds:
+                    arguments.extend(["--image-backgrounds", str(Path(image_backgrounds).resolve())])
             if mode == "run-real":
                 arguments.append("--connect-real")
             if mode == "run-vm":

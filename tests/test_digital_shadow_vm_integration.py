@@ -35,7 +35,17 @@ def test_private_vm_gui_capture_and_model_comparison(tmp_path):
     assert max(abs(row["residual"]) for row in result["comparisons"]) < 1e-6
 
 
-def _gui_capture(root, directory, request_path, runtime):
+@pytest.mark.skipif(os.environ.get("HALF_VM_SHADOW_INTEGRATION") != "1",
+                    reason="Set HALF_VM_SHADOW_INTEGRATION=1 for isolated image PV verification")
+def test_private_vm_gui_image_archive_and_replay(tmp_path):
+    completed = subprocess.run([sys.executable, "-B", __file__, str(tmp_path), "--gui", "--four-screens", "--images"],
+                               capture_output=True, text=True, timeout=45)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    result = json.loads((tmp_path / "cli_result.json").read_text())
+    assert result["image_archive"]["saved"] == 4 and result["image_archive"]["status"] == "complete"
+
+
+def _gui_capture(root, directory, request_path, runtime, *, images=False):
     import time
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
     from PyQt5.QtWidgets import QApplication
@@ -46,6 +56,7 @@ def _gui_capture(root, directory, request_path, runtime):
         window.show()
         window.load_request_file(request_path)
         window.mode.setCurrentIndex(1)
+        window.save_images.setChecked(images)
         window.runtime_edit.setText(str(runtime))
         window.run_button.click()
         deadline = time.monotonic() + 15
@@ -66,7 +77,7 @@ def _gui_capture(root, directory, request_path, runtime):
         app.processEvents()
 
 
-def _run_private_vm(directory, *, gui=False, four_screens=False):
+def _run_private_vm(directory, *, gui=False, four_screens=False, images=False):
     from datetime import datetime, timezone
     from dataclasses import replace
     import math
@@ -83,6 +94,7 @@ def _run_private_vm(directory, *, gui=False, four_screens=False):
                       EPICS_CA_SERVER_PORT=str(server_port), EPICS_CAS_SERVER_PORT=str(server_port),
                       EPICS_CA_REPEATER_PORT=str(repeater_port), EPICS_CAS_INTF_ADDR_LIST="127.0.0.1",
                       EPICS_CAS_AUTO_BEACON_ADDR_LIST="NO", EPICS_CAS_BEACON_ADDR_LIST="127.0.0.1")
+    os.environ["EPICS_CA_MAX_ARRAY_BYTES"] = str(64*1024**2)
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root / "scripts/python_imports"))
     import epics
@@ -136,6 +148,8 @@ def _run_private_vm(directory, *, gui=False, four_screens=False):
 
     names = [resolve_channel(context, quad, "K1") for quad, _ in fields]
     names += [resolve_channel(context, screen, channel) for screen in screens for channel in ("sigx", "sigy")]
+    if images:
+        names += [resolve_channel(context, screen, "image") for screen in screens]
     db = directory / "private.db"
     templates = root / "src/softIOC/halflinac/db"
     records = []
@@ -148,6 +162,8 @@ def _run_private_vm(directory, *, gui=False, four_screens=False):
     for quad, _ in fields:
         record("quad.template", RECORD=f"VMIOC:QUAD:{quad}:K1", K1ALIAS=resolve_channel(context, quad, "K1"))
     for screen in screens:
+        if images:
+            record("flag.template", IMAGERECORD=f"VMIOC:FLAG:{screen}:IMAGE", IMAGEALIAS=resolve_channel(context, screen, "image"))
         for channel in ("sigx", "sigy"):
             record(f"flag_{channel}.template", **{
                 f"{channel.upper()}RECORD": f"VMIOC:FLAG:{screen}:{channel.upper()}",
@@ -171,6 +187,8 @@ def _run_private_vm(directory, *, gui=False, four_screens=False):
                 assert epics.caput(resolve_channel(context, quad, "K1"), float(state["lattice"][quad]["K1"]), wait=True) == 1
             plan = build_vm_publish_plan(context.profile)
             assert VmPublisher().publish_watch_rms(plan, lattice=state["lattice"], usedline=state["usedline"], elegant_dir=directory)
+            if images:
+                assert VmPublisher().publish_watch_images(plan, lattice=state["lattice"], usedline=state["usedline"], elegant_dir=directory)
             result = collect_results(state, directory)
             result.update(input_state=state, input_version=input_version(state), session="private-vm", calculation=1)
             status = {"phase": "Ready", "input_version": input_version(state), "result_version": input_version(state),
@@ -180,7 +198,7 @@ def _run_private_vm(directory, *, gui=False, four_screens=False):
             write_runtime_state(observation_dir(runtime) / "status.json", status)
             time.sleep(6)  # Unchanged VM diagnostics remain valid beyond the normal replay age window.
             if gui:
-                payload = _gui_capture(root, directory, request_path, runtime)
+                payload = _gui_capture(root, directory, request_path, runtime, images=images)
                 (directory / "cli_result.json").write_text(json.dumps(payload))
             else:
                 completed = subprocess.run([
@@ -201,6 +219,13 @@ def _run_private_vm(directory, *, gui=False, four_screens=False):
             ], capture_output=True, text=True, timeout=10)
             assert replay.returncode == 0, replay.stderr
             assert json.loads(replay.stdout)["status"] == "complete"
+            if images:
+                index = json.loads((replay_root / "image_index.json").read_text())
+                assert len(index["frames"]) == 4 and index["summary"]["saved"] == 4
+                assert all(frame["quality"] == "ok" for frame in index["frames"])
+                replayed = json.loads(replay.stdout)
+                assert replayed["input_hash"] == payload["input_hash"]
+                assert not list((directory / "replay").rglob("*.npz"))
         finally:
             for process in reversed(processes):
                 process.terminate()
@@ -215,4 +240,4 @@ def _run_private_vm(directory, *, gui=False, four_screens=False):
 if __name__ == "__main__":
     target = Path(sys.argv[1])
     target.mkdir(parents=True, exist_ok=True)
-    _run_private_vm(target, gui="--gui" in sys.argv[2:], four_screens="--four-screens" in sys.argv[2:])
+    _run_private_vm(target, gui="--gui" in sys.argv[2:], four_screens="--four-screens" in sys.argv[2:], images="--images" in sys.argv[2:])

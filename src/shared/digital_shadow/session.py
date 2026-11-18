@@ -29,7 +29,7 @@ def file_digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_evidence=None):
+def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_evidence=None, image_bundle=None):
     """Replay saved inputs. This entry point performs no EPICS reads or writes."""
     directory = Path(output_root).resolve() / f"shadow_{uuid.uuid4().hex}"
     directory.mkdir(parents=True, exist_ok=False)
@@ -45,6 +45,10 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_
         raw = snapshot_to_dict(snapshot)
         write_runtime_state(directory / "machine_snapshot.json", raw)
         write_runtime_state(directory / "request.json", request.as_metadata())
+        if image_bundle is not None:
+            from .image_capture import verify_image_bundle
+            write_runtime_state(directory / "image_index.json", image_bundle)
+            manifest["image_archive"] = verify_image_bundle(context, snapshot, image_bundle)
         diagnostic_window = None
         observation_definitions = None
         unit_normalizations = []
@@ -102,7 +106,8 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_
                                          "model": state, "engine": manifest["engine"],
                                          "implementation": manifest["implementation"], "dependencies": manifest["dependencies"],
                                          "model_snapshot": model_snapshot.as_metadata(), "vm_evidence": vm_evidence,
-                                         "real_evidence": real_evidence, "unit_normalizations": unit_normalizations})
+                                         "real_evidence": real_evidence, "unit_normalizations": unit_normalizations,
+                                         "image_index": image_bundle})
         save_model_snapshot(model_snapshot, directory / "model_snapshot.json", extra_metadata={
             "machine_snapshot_id": snapshot.snapshot_id, "machine_snapshot_hash": manifest["snapshot_hash"],
             "strength_basis": "real K1_total readback; VM K1; units 1/m^2",
@@ -114,6 +119,8 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_
         comparisons = compare_diagnostics(context, snapshot, request, predictions, diagnostic_window=diagnostic_window,
                                           observation_definitions=observation_definitions)
         status = "complete" if all(row["status"] == "compared" for row in comparisons) else "partial"
+        if image_bundle is not None and image_bundle["summary"]["status"] != "complete":
+            status = "partial"
         result = {"run_id": directory.name, "input_hash": manifest["input_hash"], "status": status,
                   "beam_basis": request.beam_basis, "beam_provenance": request.beam_provenance,
                   "comparisons": comparisons, "transfer_matrices": matrices}
@@ -121,6 +128,8 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_
             result.update(capture_status=snapshot.capture_status, prediction_status="complete",
                           missing_normalized_quadrupoles=real_evidence["scope"]["missing_normalized_quadrupoles"],
                           synthetic=real_evidence["reader_kind"] == "synthetic")
+        if image_bundle is not None:
+            result.update(image_archive=image_bundle["summary"], prediction_status="complete")
         write_runtime_state(directory / "result.json", result)
         manifest["status"] = status
     except Exception as exc:

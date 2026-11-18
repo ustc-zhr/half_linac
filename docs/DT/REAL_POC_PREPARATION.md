@@ -107,7 +107,7 @@ PRF06 → DMTC2 → PRF07 → DMTC3 → PRF08 → DMTC4
 
 另需 PRF06/07/08/09 的原始图像，PV 按现有 profile 为 `IN:BD:<屏幕>:image1:ArrayData`。前三屏用于入口重建，PRF09 只用于独立比较；需保存原始帧、图像源时间、采集时间、像素标定、背景、ROI 和处理版本。图像应作为单独产物保存，不改变既有 MachineStateSnapshot 排除数组的契约。
 
-派生的图像 RMS 必须记录实际 image PV、帧哈希和处理来源，不能冒用原高斯 SIZE PV 的来源身份，或把原始快照里的高斯 σ 改标为 rms。当前 comparison 只识别 profile 的 sigx/sigy 标量 PV，接入图像 RMS 需要小规模扩展诊断来源接口，尚未实现。
+派生的图像 RMS 必须记录实际 image PV、帧哈希和处理来源，不能冒用原高斯 SIZE PV 的来源身份，或把原始快照里的高斯 σ 改标为 rms。已实现[旁路原图归档和独立 ROI RMS](IMAGE_ARCHIVE_20261118.md)，在 VM/合成数据中验证。当前 comparison 仍消费原 sigx/sigy 标量，尚未将图像 RMS 接入物理精度残差或入口重建。
 
 K1 是设置、K1_total 是归一化强度回读、单位 `1/m^2` 的物理含义已经用户确认，继续沿用；不再用设置值替代缺失回读。找到的历史扫描模型字段共 755 条，来源 PV 均以 `:K1` 结束，没有 `:K1:TOTAL`，因此不满足这一输入要求。
 

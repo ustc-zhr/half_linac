@@ -130,15 +130,22 @@ def verify_vm_evidence(context, snapshot, request, evidence):
 
 
 def capture_vm_once(context, request, *, runtime_json=None, timeout_s=5.0,
-                    ready_timeout_s=10.0, pv_factory=None, poll_function=None):
+                    ready_timeout_s=10.0, pv_factory=None, poll_function=None, image_capture=None):
     points, units = build_vm_capture_plan(context, request)
+    if image_capture is not None and (image_capture.backend != "vm" or image_capture.machine_id != context.machine.id
+            or image_capture.request != request):
+        raise ValueError("Image capture context/request differs from VM scalar capture")
     runtime_json = Path(runtime_json or resolve_vm_runtime(context.profile).runtime_json).resolve()
     before, result, result_hash = _wait_ready(runtime_json, ready_timeout_s)
     started = datetime.now(timezone.utc)
+    bound = min(positive(timeout_s, "capture timeout"), request.max_capture_duration_s)
+    deadline = time.monotonic() + bound - (min(0.05, bound / 10) if image_capture is not None else 0)
     sampled = sample_capture_points(
-        points, min(positive(timeout_s, "capture timeout"), request.max_capture_duration_s),
+        points, max(0.001, deadline - time.monotonic()),
         pv_factory=pv_factory, poll_function=poll_function,
     )
+    if image_capture is not None:
+        image_capture.sample(deadline, pv_factory=pv_factory, poll_function=poll_function)
     finished = datetime.now(timezone.utc)
     after, _, after_hash = _ready_observation(runtime_json)
     if before != after or result_hash != after_hash:

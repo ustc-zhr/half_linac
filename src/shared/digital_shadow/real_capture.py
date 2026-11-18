@@ -84,8 +84,11 @@ def build_real_capture_plan(context, request):
 
 
 def capture_real_once(context, request, *, timeout_s=5.0, allow_live=False,
-                      pv_factory=None, poll_function=None, synthetic=False):
+                      pv_factory=None, poll_function=None, synthetic=False, image_capture=None):
     points, scope = build_real_capture_plan(context, request)
+    if image_capture is not None and (image_capture.backend != "real" or image_capture.machine_id != context.machine.id
+            or image_capture.request != request or image_capture.synthetic != synthetic):
+        raise ValueError("Image capture context/request/source differs from real scalar capture")
     if pv_factory is None:
         if allow_live is not True or synthetic:
             raise ValueError("Live real reads require explicit allow_live; use an injected reader offline")
@@ -106,7 +109,9 @@ def capture_real_once(context, request, *, timeout_s=5.0, allow_live=False,
         tuple(point for point in points if point.key not in required and point.state_class != StateClass.OBSERVATION),
     )
     sampled_entries, cancelled = [], False
-    for group in groups:
+    for index, group in enumerate(groups):
+        if index == 2 and image_capture is not None:
+            image_capture.sample(deadline, pv_factory=pv_factory, poll_function=poll_function, allow_live=allow_live)
         if not group:
             continue
         remaining = deadline - time.monotonic()

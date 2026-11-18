@@ -1,6 +1,6 @@
 # HALF 数字影子 GUI
 
-提供 HALF VM 一次采集、real 映射的离线演练、显式 real 只读采集、带来源的快照重放、诊断对应和历史查看。旧 real 档案没有来源证据时仍只读查看；没有 PV 写入、图像归档或多屏重建入口。当前 real 链路仅完成模拟读取器离线验收，未连接实机。
+提供 HALF VM 一次采集、real 映射的离线演练、显式 real 只读采集、可选单帧图像归档、带来源的快照重放、诊断对应和历史查看。旧 real 档案没有来源证据时仍只读查看；没有 PV 写入或多屏重建入口。当前 real 链路仅完成模拟读取器离线验收，未连接实机。
 
 ## 启动
 
@@ -43,6 +43,8 @@ python3 src/apps/digital_shadow/main.py --machine half
 VM runtime JSON 留空时使用本 worktree 的默认路径；VM 在其他工作区运行时，应选择该实例的 runtime JSON。现有后台核对 Ready、input/result version、PV 值与发布时间，不一致即失败，不通过重新采样拼接工作点。运行期间输入锁定，同一窗口只执行一个任务。
 
 ## 历史和归档
+
+采集模式可勾选 **Save one original frame per screen**，每屏保存一帧，原始类型加 NPZ 无损压缩。默认共享图片池上限 10 GiB，界面显示占用和磁盘余量；不自动删除，重放引用同一份图片。背景通过逐屏 JSON 映射选择。展开 **Saved images · ROI RMS [mm]** 查看独立结果；规则、CLI 和备份边界见[单帧图像归档](IMAGE_ARCHIVE_20261118.md)。默认离线重放不采图。
 
 没有真机或 VM 时，可直接选择 **Offline real capture demo · NO PV**，点击 **Load real demo**，再点击 **Run offline real demo**。默认四屏请求走正式采集器、快照与 ELEGANT，仅用注入的合成读取器替换 PV。正常结果为预测完成、比较 partial：Gaussian/unknown 与模型 RMS 定义不兼容，残差留空。界面和归档明确标记 SYNTHETIC；详见 [real 离线实现与验收](REAL_CAPTURE_OFFLINE_20261118.md)。
 

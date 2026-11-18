@@ -19,7 +19,7 @@ ensure_repo_import_path(__file__)
 from PyQt5.QtCore import Qt, QTimer, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
-    QApplication, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
+    QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QPlainTextEdit,
     QPushButton, QScrollArea, QSplitter, QTableWidget, QTableWidgetItem,
     QTabWidget, QToolButton, QVBoxLayout, QWidget,
@@ -36,6 +36,7 @@ from half_linac.src.shared.digital_shadow.pipeline import prepare_model
 from half_linac.src.shared.digital_shadow.vm_capture import build_vm_capture_plan
 from half_linac.src.shared.digital_shadow.real_capture import build_real_capture_plan, verify_real_evidence
 from half_linac.src.shared.digital_shadow.real_demo import demo_request
+from half_linac.src.shared.digital_shadow.image_store import store_usage
 from half_linac.src.shared.machine_profile.models import ControlBackendConfig
 from half_linac.src.shared.machine_profile.loader import load_model_context
 from half_linac.src.shared.machine_state import load_snapshot
@@ -131,6 +132,28 @@ class DigitalShadowWindow(QMainWindow):
         paths.addRow(self.evidence_label, self.evidence_row)
         paths.addRow(self.runtime_label, self.runtime_row)
         paths.addRow("Output directory", self._path_row(self.output_edit, self._choose_output))
+        image_row = QWidget(page)
+        image_layout = QHBoxLayout(image_row)
+        image_layout.setContentsMargins(0, 0, 0, 0)
+        self.save_images = QCheckBox("Save one original frame per screen", page)
+        self.save_images.setToolTip("Optional lossless archive; no continuous recording. Replay reuses existing image objects.")
+        self.image_limit = QDoubleSpinBox(page)
+        self.image_limit.setRange(.01, 10000)
+        self.image_limit.setValue(10)
+        self.image_limit.setSuffix(" GiB limit")
+        self.image_usage = QLabel(page)
+        image_layout.addWidget(self.save_images)
+        image_layout.addWidget(self.image_limit)
+        image_layout.addWidget(self.image_usage, 1)
+        paths.addRow("Image archive", image_row)
+        self.background_edit = QLineEdit(page)
+        self.background_edit.setPlaceholderText("Optional per-screen background path/provenance JSON; native camera orientation")
+        self.background_row = self._path_row(self.background_edit, lambda: self._choose_file(self.background_edit))
+        self.background_label = QLabel("Backgrounds JSON", page)
+        paths.addRow(self.background_label, self.background_row)
+        self.save_images.toggled.connect(self._image_options_changed)
+        self.image_limit.valueChanged.connect(self._update_image_usage)
+        self.output_edit.editingFinished.connect(self._update_image_usage)
         self.path_panel = QWidget(page)
         self.path_panel.setLayout(paths)
         page_layout.addWidget(self.path_panel)
@@ -169,6 +192,21 @@ class DigitalShadowWindow(QMainWindow):
         self.details_toggle.toggled.connect(self.details.setVisible)
         result_layout.addWidget(self.details_toggle)
         result_layout.addWidget(self.details)
+        self.images_toggle = QToolButton(result_panel)
+        self.images_toggle.setText("Saved images · ROI RMS [mm]")
+        self.images_toggle.setCheckable(True)
+        self.images_toggle.hide()
+        self.image_results = QTableWidget(0, 6, result_panel)
+        self.image_results.setHorizontalHeaderLabels(["Screen", "Original dtype", "Stored KiB", "RMS X", "RMS Y", "Status / reason"])
+        self.image_results.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.image_results.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.image_results.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.image_results.verticalHeader().hide()
+        self.image_results.setMaximumHeight(155)
+        self.image_results.hide()
+        self.images_toggle.toggled.connect(self.image_results.setVisible)
+        result_layout.addWidget(self.images_toggle)
+        result_layout.addWidget(self.image_results)
         splitter.setSizes([500, 800])
         page_layout.addWidget(splitter, 1)
         self.tabs.addTab(page, "Run & Compare")
@@ -244,6 +282,25 @@ class DigitalShadowWindow(QMainWindow):
         self.example_button.setText("Load real demo" if mode in {"demo-real", "run-real"} else "Load VM example")
         label = {"run-vm": "VM capture", "run-real": "REAL PV READS · explicit action", "demo-real": "SYNTHETIC · NO PV", "replay": "Offline replay"}[mode]
         self.context_label.setText("HALF · ELEGANT · " + label + " · READ ONLY")
+        self._image_options_changed()
+
+    def _image_options_changed(self, *args):
+        capture = self.mode.currentData() != "replay"
+        self.save_images.setEnabled(capture)
+        self.image_limit.setEnabled(capture and self.save_images.isChecked())
+        show_background = capture and self.save_images.isChecked()
+        self.background_label.setVisible(show_background)
+        self.background_row.setVisible(show_background)
+        self._update_image_usage()
+
+    def _update_image_usage(self, *args):
+        try:
+            usage = store_usage(Path(self.output_edit.text()).expanduser() / "image_store")
+            used, limit = usage["used_bytes"] / 1024**3, self.image_limit.value()
+            warning = " · near/full limit" if used >= limit * .8 else ""
+            self.image_usage.setText(f"Images {used*1024:.1f} MiB / {limit:g} GiB · disk free {usage['free_bytes']/1024**3:.1f} GiB{warning}")
+        except OSError as error:
+            self.image_usage.setText(f"Storage unavailable: {error}")
 
     def _choose_file(self, edit):
         path, _ = QFileDialog.getOpenFileName(self, "Select JSON", edit.text(), "JSON files (*.json)")
@@ -254,6 +311,7 @@ class DigitalShadowWindow(QMainWindow):
         path = QFileDialog.getExistingDirectory(self, "Output directory", self.output_edit.text())
         if path:
             self.output_edit.setText(path)
+            self._update_image_usage()
             self.refresh_history()
 
     def _error(self, error):
@@ -333,6 +391,10 @@ class DigitalShadowWindow(QMainWindow):
                 raise ValueError("Select an output directory")
             self.log.clear()
             self.results.setRowCount(0)
+            self.images_toggle.setChecked(False)
+            self.images_toggle.hide()
+            self.image_results.hide()
+            self.image_results.setRowCount(0)
             self._plot([])
             self.details.clear()
             self.current_archive = None
@@ -340,7 +402,9 @@ class DigitalShadowWindow(QMainWindow):
             self.result_banner.setText(f"{request.beam_basis} entrance beam · {request.beam_provenance}\nCompletion describes calculation and data alignment, not physical accuracy.")
             self.controller.start(request, Path(self.output_edit.text()).expanduser(), mode=mode,
                 snapshot_path=self.snapshot_edit.text(), evidence_path=self.evidence_edit.text().strip() or None,
-                runtime_json=self.runtime_edit.text().strip() or None)
+                runtime_json=self.runtime_edit.text().strip() or None,
+                save_images=mode != "replay" and self.save_images.isChecked(), image_limit_gib=self.image_limit.value(),
+                image_backgrounds=self.background_edit.text().strip() or None)
         except (ValueError, KeyError, TypeError, OSError) as error:
             self._error(error)
 
@@ -356,6 +420,7 @@ class DigitalShadowWindow(QMainWindow):
     def _job_completed(self, record):
         self._job_state(record["status"].title())
         self.refresh_history()
+        self._update_image_usage()
         try:
             self.show_archive(record["job_dir"])
         except (ValueError, KeyError, TypeError, OSError) as error:
@@ -383,6 +448,26 @@ class DigitalShadowWindow(QMainWindow):
             real_hint = ("Prediction complete. " if result.get("prediction_status") == "complete" else "Prediction unavailable. ") + "Gaussian/unknown widths have no RMS accuracy residual."
         self.result_banner.setText(("SYNTHETIC · " if synthetic else "") + f"{beam} entrance beam · {provenance}\n" +
                                   (real_hint if backend == "real" else "Completion is not a physics accuracy certificate."))
+        images = archive.get("image_index")
+        self.images_toggle.setVisible(bool(images))
+        self.image_results.setVisible(bool(images) and self.images_toggle.isChecked())
+        self.image_results.setRowCount(len(images["frames"]) if images else 0)
+        if images:
+            summary = images["summary"]
+            hint = f"Images saved {summary['saved']}/{summary['requested']} · {summary['status']} · ROI RMS kept separately from SIZE."
+            self.result_banner.setText(self.result_banner.text() + "\n" + hint)
+            self.result_banner.setToolTip("\n".join(summary["warnings"]))
+            for index, frame in enumerate(images["frames"]):
+                obj, rms = frame.get("object", {}), frame.get("derived_rms", {})
+                values = [frame["screen"], obj.get("dtype", ""), self._format(obj.get("stored_bytes", 0)/1024),
+                          self._format(rms.get("sigx_mm")), self._format(rms.get("sigy_mm")),
+                          frame.get("detail") or rms.get("status", frame["quality"])]
+                for column, value in enumerate(values):
+                    item = QTableWidgetItem(str(value))
+                    item.setToolTip(json.dumps(frame, indent=2))
+                    self.image_results.setItem(index, column, item)
+        else:
+            self.result_banner.setToolTip("")
         rows = result.get("comparisons", []) if archive["status"] in {"complete", "partial"} else []
         self.results.setRowCount(len(rows))
         for row, data in enumerate(rows):
