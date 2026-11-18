@@ -30,6 +30,7 @@ class RequestForm(QWidget):
     def __init__(self, context, parent=None):
         super().__init__(parent)
         self.context = context
+        self.diagnostic_backend = "vm"
         self._loaded = None
         self._beam_text = None
         self._state = None
@@ -79,7 +80,7 @@ class RequestForm(QWidget):
         self.basis.addItem("Independent measurement", "independent_measurement")
         self.provenance = QLineEdit(beam)
         self.provenance.setPlaceholderText("Required: describe where the entrance beam values came from")
-        self.provenance.setToolTip("For an offline demonstration, Load VM example fills this source automatically.")
+        self.provenance.setToolTip("For offline demonstrations, Load VM example or Load real demo fills this source.")
         grid.addWidget(QLabel("Basis"), 3, 0)
         grid.addWidget(self.basis, 3, 1, 1, 3)
         grid.addWidget(QLabel("Source *"), 4, 0)
@@ -150,6 +151,11 @@ class RequestForm(QWidget):
         self.diagnostics.setItem(row, 1, name)
         self.diagnostics.setCellWidget(row, 2, units)
 
+    def set_diagnostic_backend(self, backend):
+        if backend != self.diagnostic_backend:
+            self.diagnostic_backend = backend
+            self._refresh_diagnostics()
+
     def _refresh_diagnostics(self, *args):
         selected = {item.key: item for item in self._selected_diagnostics()}
         self.diagnostics.setRowCount(0)
@@ -169,7 +175,7 @@ class RequestForm(QWidget):
             if element.kind != "flag":
                 continue
             for channel in ("sigx", "sigy"):
-                if "vm" not in element.channels.get(channel, {}):
+                if self.diagnostic_backend not in element.channels.get(channel, {}):
                     continue
                 key = f"{name}/{channel}"
                 self._add_diagnostic(selected.get(key, Diagnostic(name, channel, "mm", "rms")), key in selected)
@@ -213,7 +219,7 @@ class RequestForm(QWidget):
     def request(self):
         if not self.provenance.text().strip():
             self.provenance.setFocus(Qt.OtherFocusReason)
-            raise ValueError("Fill Source in Entrance beam. For an offline demo, click Load VM example first.")
+            raise ValueError("Fill Source in Entrance beam. For an offline demo, use Load VM example or Load real demo.")
         def number(edit, name):
             try:
                 return float(edit.text())

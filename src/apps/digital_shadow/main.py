@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import sys
 import uuid
+from dataclasses import replace
 
 ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file())
 if str(ROOT) not in sys.path:
@@ -33,6 +34,9 @@ from half_linac.src.shared.digital_shadow.example import write_example
 from half_linac.src.shared.digital_shadow.models import ShadowRequest
 from half_linac.src.shared.digital_shadow.pipeline import prepare_model
 from half_linac.src.shared.digital_shadow.vm_capture import build_vm_capture_plan
+from half_linac.src.shared.digital_shadow.real_capture import build_real_capture_plan, verify_real_evidence
+from half_linac.src.shared.digital_shadow.real_demo import demo_request
+from half_linac.src.shared.machine_profile.models import ControlBackendConfig
 from half_linac.src.shared.machine_profile.loader import load_model_context
 from half_linac.src.shared.machine_state import load_snapshot
 from half_linac.src.shared.runtime_state import read_runtime_state, write_runtime_state
@@ -71,7 +75,7 @@ class DigitalShadowWindow(QMainWindow):
         self._build_run_page(output_root or ROOT / "runs/digital_shadow_gui/half")
         self._build_history_page()
         footer = QHBoxLayout()
-        self.status_label = QLabel("Ready · no PV reads until VM capture is explicitly started", central)
+        self.status_label = QLabel("Ready · no PV reads until a live capture is explicitly started", central)
         self.status_label.setWordWrap(True)
         self.log_toggle = QToolButton(central)
         self.log_toggle.setText("Show log")
@@ -95,8 +99,10 @@ class DigitalShadowWindow(QMainWindow):
         page_layout = QVBoxLayout(page)
         toolbar = QHBoxLayout()
         self.mode = QComboBox(page)
-        self.mode.addItem("Offline VM replay", "replay")
+        self.mode.addItem("Offline snapshot replay", "replay")
         self.mode.addItem("VM · capture once and predict", "run-vm")
+        self.mode.addItem("Offline real capture demo · NO PV", "demo-real")
+        self.mode.addItem("Real · capture once · READ ONLY", "run-real")
         self.import_button = QPushButton("Import request…", page)
         self.export_button = QPushButton("Export request…", page)
         self.example_button = QPushButton("Load VM example", page)
@@ -118,8 +124,8 @@ class DigitalShadowWindow(QMainWindow):
         self.snapshot_row = self._path_row(self.snapshot_edit, lambda: self._choose_file(self.snapshot_edit))
         self.evidence_row = self._path_row(self.evidence_edit, lambda: self._choose_file(self.evidence_edit))
         self.runtime_row = self._path_row(self.runtime_edit, lambda: self._choose_file(self.runtime_edit))
-        self.snapshot_label = QLabel("VM snapshot JSON", page)
-        self.evidence_label = QLabel("VM evidence JSON · optional", page)
+        self.snapshot_label = QLabel("Snapshot JSON", page)
+        self.evidence_label = QLabel("Capture evidence JSON", page)
         self.runtime_label = QLabel("VM runtime JSON", page)
         paths.addRow(self.snapshot_label, self.snapshot_row)
         paths.addRow(self.evidence_label, self.evidence_row)
@@ -142,7 +148,7 @@ class DigitalShadowWindow(QMainWindow):
         self.result_banner.setWordWrap(True)
         result_layout.addWidget(self.result_banner)
         self.results = QTableWidget(0, 7, result_panel)
-        self.results.setHorizontalHeaderLabels(["Diagnostic", "Predicted", "Measured", "Residual", "Unit", "Status", "Reason"])
+        self.results.setHorizontalHeaderLabels(["Diagnostic", "Predicted RMS", "Observed width", "Residual", "Unit", "Status", "Reason"])
         self.results.setEditTriggers(QTableWidget.NoEditTriggers)
         self.results.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.results.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
@@ -183,7 +189,7 @@ class DigitalShadowWindow(QMainWindow):
             button.clicked.connect(action)
             toolbar.addWidget(button)
         toolbar.addStretch()
-        self.use_inputs_button = QPushButton("Use VM inputs for replay", page)
+        self.use_inputs_button = QPushButton("Use archived inputs for replay", page)
         self.use_inputs_button.setEnabled(False)
         self.use_inputs_button.clicked.connect(self._use_archive_inputs)
         toolbar.addWidget(self.use_inputs_button)
@@ -227,13 +233,17 @@ class DigitalShadowWindow(QMainWindow):
         self._plot([])
 
     def _mode_changed(self, *args):
-        capture = self.mode.currentData() == "run-vm"
+        mode = self.mode.currentData()
+        self.form.set_diagnostic_backend("real" if mode in {"demo-real", "run-real"} else "vm")
+        capture = mode != "replay"
         for widget in (self.snapshot_label, self.snapshot_row, self.evidence_label, self.evidence_row):
             widget.setVisible(not capture)
-        self.runtime_label.setVisible(capture)
-        self.runtime_row.setVisible(capture)
-        self.run_button.setText("Capture VM & predict" if capture else "Run replay")
-        self.context_label.setText("HALF · ELEGANT · " + ("VM capture" if capture else "Offline VM replay") + " · READ ONLY")
+        self.runtime_label.setVisible(mode == "run-vm")
+        self.runtime_row.setVisible(mode == "run-vm")
+        self.run_button.setText({"run-vm": "Capture VM & predict", "run-real": "Read real PVs & predict", "demo-real": "Run offline real demo", "replay": "Run replay"}[mode])
+        self.example_button.setText("Load real demo" if mode in {"demo-real", "run-real"} else "Load VM example")
+        label = {"run-vm": "VM capture", "run-real": "REAL PV READS · explicit action", "demo-real": "SYNTHETIC · NO PV", "replay": "Offline replay"}[mode]
+        self.context_label.setText("HALF · ELEGANT · " + label + " · READ ONLY")
 
     def _choose_file(self, edit):
         path, _ = QFileDialog.getOpenFileName(self, "Select JSON", edit.text(), "JSON files (*.json)")
@@ -280,6 +290,13 @@ class DigitalShadowWindow(QMainWindow):
 
     def load_example(self):
         try:
+            if self.mode.currentData() in {"demo-real", "run-real"}:
+                self.form.load_request(demo_request())
+                self.mode.setCurrentIndex(self.mode.findData("demo-real"))
+                self.snapshot_edit.clear()
+                self.evidence_edit.clear()
+                self.status_label.setText("SYNTHETIC real-capture demo loaded · fabricated beam and observations · NO PV")
+                return
             directory = Path(self.output_edit.text()).expanduser().resolve() / "examples" / f"example_{uuid.uuid4().hex}"
             write_example(directory, vm=True)
             self.load_request_file(directory / "request.json")
@@ -300,10 +317,18 @@ class DigitalShadowWindow(QMainWindow):
             mode = self.mode.currentData()
             if mode == "run-vm":
                 build_vm_capture_plan(self.context, request)
+            elif mode in {"demo-real", "run-real"}:
+                real_context = replace(self.context, control_backend=ControlBackendConfig("real"))
+                build_real_capture_plan(real_context, request)
+                if mode == "run-real" and "SYNTHETIC" in request.beam_provenance.upper():
+                    raise ValueError("Replace the synthetic demo beam/source before live real capture")
             else:
                 snapshot = load_snapshot(self.snapshot_edit.text())
-                if snapshot.machine_id != "half" or snapshot.backend != "vm":
+                if snapshot.machine_id != "half" or snapshot.backend not in {"vm", "real"} or (snapshot.backend == "real" and not self.evidence_edit.text().strip()):
                     raise ValueError("Real or non-HALF snapshots are view-only; no model replay is started")
+                if snapshot.backend == "real":
+                    verify_real_evidence(replace(self.context, control_backend=ControlBackendConfig("real")), snapshot,
+                                         request, read_object(self.evidence_edit.text()))
             if not self.output_edit.text().strip():
                 raise ValueError("Select an output directory")
             self.log.clear()
@@ -353,8 +378,11 @@ class DigitalShadowWindow(QMainWindow):
         beam = result.get("beam_basis", (archive.get("request") or {}).get("beam", {}).get("basis", "unknown"))
         provenance = result.get("beam_provenance", (archive.get("request") or {}).get("beam", {}).get("provenance", ""))
         synthetic = snapshot.get("snapshot_id", "").startswith("synthetic_")
+        real_hint = "Real archive: view only. Gaussian SIZE values are not certified RMS."
+        if archive.get("real_evidence_path"):
+            real_hint = ("Prediction complete. " if result.get("prediction_status") == "complete" else "Prediction unavailable. ") + "Gaussian/unknown widths have no RMS accuracy residual."
         self.result_banner.setText(("SYNTHETIC · " if synthetic else "") + f"{beam} entrance beam · {provenance}\n" +
-                                  ("Real archive: view only. Gaussian SIZE values are not certified RMS." if backend == "real" else "Completion is not a physics accuracy certificate."))
+                                  (real_hint if backend == "real" else "Completion is not a physics accuracy certificate."))
         rows = result.get("comparisons", []) if archive["status"] in {"complete", "partial"} else []
         self.results.setRowCount(len(rows))
         for row, data in enumerate(rows):
@@ -385,12 +413,13 @@ class DigitalShadowWindow(QMainWindow):
                 scale = 1000 if row.get("unit") == "m" else 1
                 for key, marker, label in (("predicted", "o", "Predicted"), ("measured", "x", "Measured")):
                     value = row.get(key)
-                    if isinstance(value, (int, float)) and math.isfinite(value) and (key == "predicted" or row.get("status") == "compared"):
+                    if isinstance(value, (int, float)) and math.isfinite(value) and (key == "predicted" or row.get("status") in {"compared", "incompatible"}):
+                        label = "Predicted RMS" if key == "predicted" else "Observed " + row.get("measured_width_definition", "rms")
                         axis.plot(index, value * scale, marker, color="#45bcb0" if key == "predicted" else "#e7ad65", label=label)
             axis.set_xticks(range(len(data)))
             axis.set_xticklabels([str(row.get("key", "")).split("/")[0] for row in data], rotation=25)
             axis.set_title("X" if plane == "sigx" else "Y", color=color)
-            axis.set_ylabel("RMS [mm]", color=color)
+            axis.set_ylabel("Width [mm]" if any(row.get("status") == "incompatible" for row in data) else "RMS [mm]", color=color)
             axis.tick_params(colors=color)
             for spine in axis.spines.values():
                 spine.set_color(color)
@@ -424,7 +453,7 @@ class DigitalShadowWindow(QMainWindow):
         try:
             archive = self.show_archive(item.data(Qt.UserRole))
             self.history_details.setPlainText(json.dumps(archive, indent=2, ensure_ascii=False))
-            self.use_inputs_button.setEnabled(not self.controller.busy and archive["backend"] == "vm" and bool(archive.get("request")) and bool(archive.get("snapshot_path")))
+            self.use_inputs_button.setEnabled(not self.controller.busy and (archive["backend"] == "vm" or bool(archive.get("real_evidence_path"))) and bool(archive.get("request")) and bool(archive.get("snapshot_path")))
         except (ValueError, KeyError, TypeError, OSError) as error:
             self.history_details.setPlainText(f"Cannot read archive: {error}")
             self._error(error)
@@ -461,16 +490,17 @@ class DigitalShadowWindow(QMainWindow):
 
     def _use_archive_inputs(self):
         archive = self.current_archive
-        if not archive or archive["backend"] != "vm" or not archive.get("request") or self.controller.busy:
+        if not archive or (archive["backend"] != "vm" and not archive.get("real_evidence_path")) or not archive.get("request") or self.controller.busy:
             return
         try:
-            self.form.load_request(ShadowRequest.from_dict(archive["request"]))
             self.snapshot_edit.setText(archive["snapshot_path"])
-            evidence = Path(archive["snapshot_path"]).parent / "vm_capture_evidence.json"
+            evidence = Path(archive["snapshot_path"]).parent / ("real_capture_evidence.json" if archive["backend"] == "real" else "vm_capture_evidence.json")
             self.evidence_edit.setText(str(evidence) if evidence.exists() else "")
             self.mode.setCurrentIndex(0)
+            self.form.set_diagnostic_backend(archive["backend"])
+            self.form.load_request(ShadowRequest.from_dict(archive["request"]))
             self.tabs.setCurrentIndex(0)
-            self.status_label.setText("Archived VM inputs loaded; run explicitly to create a new result")
+            self.status_label.setText("Archived inputs loaded for offline replay; no live reconnection")
         except (ValueError, KeyError, TypeError, OSError) as error:
             self._error(error)
 
@@ -488,7 +518,7 @@ class DigitalShadowWindow(QMainWindow):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="HALF digital shadow GUI · VM and offline only")
+    parser = argparse.ArgumentParser(description="HALF digital shadow GUI · offline demos and explicit read-only capture")
     parser.add_argument("--machine", choices=("half",), default=os.environ.get("HALF_LINAC_MACHINE_ID") or os.environ.get("HALF_MACHINE_ID") or "half")
     args = parser.parse_args(argv)
     if args.machine != "half":

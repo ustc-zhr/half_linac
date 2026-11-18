@@ -7,13 +7,15 @@ from half_linac.src.shared.machine_state import SampleQuality
 from .models import timestamp
 
 
-def compare_diagnostics(context, snapshot, request, predictions_m, *, diagnostic_window=None):
+def compare_diagnostics(context, snapshot, request, predictions_m, *, diagnostic_window=None, observation_definitions=None):
     entries = {entry.key: entry for entry in snapshot.entries}
     started = timestamp(snapshot.capture_started_at)
     finished = timestamp(snapshot.capture_finished_at)
     rows = []
     for diagnostic in request.diagnostics:
+        observed_definition = (observation_definitions or {}).get(diagnostic.key, "rms")
         row = {"key": diagnostic.key, "unit": diagnostic.unit, "width_definition": "rms",
+               "measured_width_definition": observed_definition,
                "predicted": predictions_m[diagnostic.key] * (1000 if diagnostic.unit == "mm" else 1),
                "measured": None, "residual": None, "status": "unavailable", "detail": "",
                "source_timestamp": None, "received_at": None}
@@ -40,7 +42,11 @@ def compare_diagnostics(context, snapshot, request, predictions_m, *, diagnostic
                 raise ValueError("Diagnostic timestamp lies outside the capture age window")
             if entry.received_at is None or not started <= timestamp(entry.received_at) <= finished:
                 raise ValueError("Diagnostic receipt timestamp lies outside the capture window")
-            row.update(measured=value, residual=value - row["predicted"], status="compared")
+            row["measured"] = value
+            if observed_definition != "rms":
+                row.update(status="incompatible", detail=f"Observed {observed_definition}; prediction is RMS. No accuracy residual.")
+            else:
+                row.update(residual=value - row["predicted"], status="compared")
         except (ValueError, TypeError) as exc:
             row["detail"] = str(exc)
         rows.append(row)

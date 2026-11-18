@@ -14,16 +14,20 @@ def main():
         os.setsid()
     (job_dir / "worker.pgid").write_text(str(os.getpgrp()))
     arguments = sys.argv[2:]
-    if not arguments or arguments[0] not in {"replay", "run-vm"}:
-        raise ValueError("The GUI worker supports VM replay and VM capture only")
+    if not arguments or arguments[0] not in {"replay", "run-vm", "demo-real", "run-real"}:
+        raise ValueError("Unsupported shadow worker mode")
     if arguments[0] == "replay":
         snapshot_path = Path(arguments[arguments.index("--snapshot") + 1])
         snapshot = json.loads(snapshot_path.read_text())
         machine = snapshot["machine"]
-        if machine["id"] != "half" or machine["control_backend"] != "vm":
+        if machine["id"] != "half" or machine["control_backend"] not in {"vm", "real"} or (
+            machine["control_backend"] == "real" and "--real-evidence" not in arguments
+        ):
             raise ValueError("Real or non-HALF snapshots are view-only in this GUI")
     elif arguments[arguments.index("--machine") + 1] != "half":
         raise ValueError("This GUI supports HALF only")
+    if arguments[0] == "run-real" and "--connect-real" not in arguments:
+        raise ValueError("Real reads require explicit --connect-real")
     root = next(parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file())
     cli = runpy.run_path(str(root / "scripts/run_digital_shadow.py"))
     return cli["main"](arguments)

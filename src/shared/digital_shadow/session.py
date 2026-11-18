@@ -29,7 +29,7 @@ def file_digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def run_once(context, snapshot, request, output_root, *, vm_evidence=None):
+def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_evidence=None):
     """Replay saved inputs. This entry point performs no EPICS reads or writes."""
     directory = Path(output_root).resolve() / f"shadow_{uuid.uuid4().hex}"
     directory.mkdir(parents=True, exist_ok=False)
@@ -46,6 +46,20 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None):
         write_runtime_state(directory / "machine_snapshot.json", raw)
         write_runtime_state(directory / "request.json", request.as_metadata())
         diagnostic_window = None
+        observation_definitions = None
+        unit_normalizations = []
+        if vm_evidence is not None and real_evidence is not None:
+            raise ValueError("VM and real capture evidence cannot be combined")
+        if snapshot.backend == "real" and real_evidence is None and not (
+            snapshot.snapshot_id.startswith("synthetic_") and snapshot.consistency == "synthetic"
+        ):
+            raise ValueError("Real replay requires captured diagnostic/source metadata; old real archives remain view-only")
+        if real_evidence is not None:
+            from .real_capture import verify_real_evidence
+            write_runtime_state(directory / "real_capture_evidence.json", real_evidence)
+            observation_definitions = verify_real_evidence(context, snapshot, request, real_evidence)
+            manifest.update(mode="real_capture_replay", reader_kind=real_evidence["reader_kind"],
+                            capture_scope=real_evidence["scope"], synthetic=real_evidence["reader_kind"] == "synthetic")
         if vm_evidence is not None:
             from .vm_capture import verify_vm_evidence
             write_runtime_state(directory / "vm_capture_evidence.json", vm_evidence)
@@ -59,7 +73,13 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None):
             raise ValueError("Request and context model backends differ")
         state, fields = prepare_model(context, request)
         channels = {field: "K1_total" if snapshot.backend == "real" else "K1" for field in fields}
-        model_snapshot = build_model_snapshot_from_machine_state(context, snapshot, fields, logical_channels=channels)
+        model_input = snapshot
+        if real_evidence is not None:
+            from .real_capture import normalized_real_input
+            model_input, unit_normalizations = normalized_real_input(snapshot, fields)
+            manifest["unit_normalizations"] = unit_normalizations
+            write_runtime_state(directory / "model_input_snapshot.json", snapshot_to_dict(model_input))
+        model_snapshot = build_model_snapshot_from_machine_state(context, model_input, fields, logical_channels=channels)
         entries = {entry.key: entry for entry in snapshot.entries}
         for element, field in fields:
             entry = entries[f"{element}/{channels[(element, field)]}"]
@@ -81,17 +101,26 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None):
         manifest["input_hash"] = digest({"capture": raw, "request": request.as_metadata(),
                                          "model": state, "engine": manifest["engine"],
                                          "implementation": manifest["implementation"], "dependencies": manifest["dependencies"],
-                                         "model_snapshot": model_snapshot.as_metadata(), "vm_evidence": vm_evidence})
+                                         "model_snapshot": model_snapshot.as_metadata(), "vm_evidence": vm_evidence,
+                                         "real_evidence": real_evidence, "unit_normalizations": unit_normalizations})
         save_model_snapshot(model_snapshot, directory / "model_snapshot.json", extra_metadata={
             "machine_snapshot_id": snapshot.snapshot_id, "machine_snapshot_hash": manifest["snapshot_hash"],
             "strength_basis": "real K1_total readback; VM K1; units 1/m^2",
+            "unit_normalizations": unit_normalizations,
+            "reader_kind": real_evidence["reader_kind"] if real_evidence else "saved_input",
+            "synthetic": snapshot.snapshot_id.startswith("synthetic_"),
         })
         predictions, matrices = predict(context, request, state, model_snapshot, directory)
-        comparisons = compare_diagnostics(context, snapshot, request, predictions, diagnostic_window=diagnostic_window)
+        comparisons = compare_diagnostics(context, snapshot, request, predictions, diagnostic_window=diagnostic_window,
+                                          observation_definitions=observation_definitions)
         status = "complete" if all(row["status"] == "compared" for row in comparisons) else "partial"
         result = {"run_id": directory.name, "input_hash": manifest["input_hash"], "status": status,
                   "beam_basis": request.beam_basis, "beam_provenance": request.beam_provenance,
                   "comparisons": comparisons, "transfer_matrices": matrices}
+        if real_evidence is not None:
+            result.update(capture_status=snapshot.capture_status, prediction_status="complete",
+                          missing_normalized_quadrupoles=real_evidence["scope"]["missing_normalized_quadrupoles"],
+                          synthetic=real_evidence["reader_kind"] == "synthetic")
         write_runtime_state(directory / "result.json", result)
         manifest["status"] = status
     except Exception as exc:

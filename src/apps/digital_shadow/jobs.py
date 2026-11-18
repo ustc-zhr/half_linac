@@ -53,15 +53,20 @@ def read_archive(directory):
     if result and any(not isinstance(row, dict) for row in result["comparisons"]):
         raise ValueError("Malformed diagnostic comparison")
     if manifest:
-        for name in ("machine_snapshot.json", "request.json", "result.json", "vm_capture_evidence.json"):
+        for name in ("machine_snapshot.json", "request.json", "result.json", "vm_capture_evidence.json", "real_capture_evidence.json"):
             expected = manifest.get("artifacts", {}).get(name)
             if expected and hashlib.sha256((run / name).read_bytes()).hexdigest() != expected:
                 raise ValueError(f"Archive integrity check failed: {name}")
+    real_path = run / "real_capture_evidence.json"
+    real_evidence = read_object(real_path) if real_path.exists() else None
+    if real_evidence and real_evidence.get("schema") != "digital_shadow_real_capture_v1":
+        raise ValueError("Unsupported real capture evidence")
     return {"directory": str(directory), "run_dir": str(run), "backend": snapshot.backend if snapshot else (job or {}).get("backend", "unknown"),
             "machine": snapshot.machine_id if snapshot else "half", "status": (job or manifest or {}).get("status", "inputs"),
             "snapshot": read_runtime_state(snapshot_path) if snapshot else None,
             "snapshot_path": str(snapshot_path) if snapshot else None,
-            "request": request, "result": result, "manifest": manifest, "job": job}
+            "request": request, "result": result, "manifest": manifest, "job": job,
+            "real_evidence_path": str(real_path) if real_evidence else None}
 
 
 class ShadowJobController(QObject):
@@ -90,13 +95,20 @@ class ShadowJobController(QObject):
               ready_timeout=10.0, capture_timeout=5.0):
         if self.busy:
             raise ValueError("A shadow task is already running")
-        if mode not in {"replay", "run-vm"}:
+        if mode not in {"replay", "run-vm", "demo-real", "run-real"}:
             raise ValueError("Choose VM replay or VM capture")
         if mode == "replay":
             snapshot = load_snapshot(snapshot_path)
-            if snapshot.machine_id != "half" or snapshot.backend != "vm":
+            if snapshot.machine_id != "half" or snapshot.backend not in {"vm", "real"} or (snapshot.backend == "real" and not evidence_path):
                 raise ValueError("Real or non-HALF snapshots are view-only; choose a HALF VM snapshot")
         evidence = read_object(evidence_path) if evidence_path and mode == "replay" else None
+        if mode == "replay" and snapshot.backend == "real":
+            from dataclasses import replace
+            from half_linac.src.shared.machine_profile.loader import load_model_context
+            from half_linac.src.shared.machine_profile.models import ControlBackendConfig
+            from half_linac.src.shared.digital_shadow.real_capture import verify_real_evidence
+            context = replace(load_model_context("half", request.model_backend), control_backend=ControlBackendConfig("real"))
+            verify_real_evidence(context, snapshot, request, evidence)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         directory = Path(output_root).resolve() / f"job_{stamp}_{uuid.uuid4().hex[:10]}"
         directory.mkdir(parents=True, exist_ok=False)
@@ -106,14 +118,20 @@ class ShadowJobController(QObject):
             write_runtime_state(directory / "machine_snapshot.json", snapshot_to_dict(snapshot))
             arguments.extend(["--snapshot", str(directory / "machine_snapshot.json")])
             if evidence_path:
-                write_runtime_state(directory / "vm_capture_evidence.json", evidence)
-                arguments.extend(["--vm-evidence", str(directory / "vm_capture_evidence.json")])
+                name = "real_capture_evidence.json" if snapshot.backend == "real" else "vm_capture_evidence.json"
+                write_runtime_state(directory / name, evidence)
+                arguments.extend(["--real-evidence" if snapshot.backend == "real" else "--vm-evidence", str(directory / name)])
         else:
-            arguments.extend(["--machine", "half", "--ready-timeout", str(ready_timeout), "--capture-timeout", str(capture_timeout)])
-            if runtime_json:
+            arguments.extend(["--machine", "half", "--capture-timeout", str(capture_timeout)])
+            if mode == "run-real":
+                arguments.append("--connect-real")
+            if mode == "run-vm":
+                arguments.extend(["--ready-timeout", str(ready_timeout)])
+            if runtime_json and mode == "run-vm":
                 arguments.extend(["--vm-runtime-json", str(Path(runtime_json).resolve())])
         self.job_dir = directory
-        self.record = {"schema": "digital_shadow_gui_job_v1", "status": "running", "mode": mode, "backend": "vm",
+        backend = snapshot.backend if mode == "replay" else "real" if mode in {"demo-real", "run-real"} else "vm"
+        self.record = {"schema": "digital_shadow_gui_job_v1", "status": "running", "mode": mode, "backend": backend,
                        "started_at": datetime.now(timezone.utc).isoformat(), "run_dir": None}
         self._save()
         self._stopping = self._cleaned = False

@@ -1,0 +1,12 @@
+{
+  "real_observations": {
+    "unit": "mm",
+    "unit_source": "User confirmations 2026-11-17 and 2026-11-18",
+    "width_definitions": {
+      "PRF06": {"definition": "gaussian_sigma", "source": "User confirmation 2026-11-17"},
+      "PRF07": {"definition": "unknown", "source": "Only unit confirmed"},
+      "PRF08": {"definition": "gaussian_sigma", "source": "User confirmation 2026-11-17"},
+      "PRF09": {"definition": "unknown", "source": "Only unit confirmed"}
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # HALF 数字影子 GUI
 
-首版提供 HALF VM 一次采集、VM 快照离线重放、诊断比较与历史查看。real 快照和数字影子结果仅供查看；没有真实采集、实机重放、PV 写入、图像归档或多屏重建入口。
+提供 HALF VM 一次采集、real 映射的离线演练、显式 real 只读采集、带来源的快照重放、诊断对应和历史查看。旧 real 档案没有来源证据时仍只读查看；没有 PV 写入、图像归档或多屏重建入口。当前 real 链路仅完成模拟读取器离线验收，未连接实机。
 
 ## 启动
 
@@ -25,7 +25,7 @@ python3 src/apps/digital_shadow/main.py --machine half
 ## 离线演示与请求
 
 1. 点击 **Load VM example**，生成新的合成 VM 快照并填入表单。
-2. 保持 **Offline VM replay**，点击 **Run replay**。
+2. 保持 **Offline snapshot replay**，点击 **Run replay**。
 3. 查看预测、测量、残差、状态和两平面束宽图；可展开完整快照、请求与结果。
 
 示例入口为 assumed，测量值为合成数据，界面保留 SYNTHETIC 提示。complete 表示计算和比较条件满足，不表示物理精度通过；本版没有设置物理精度验收阈值。
@@ -44,18 +44,22 @@ VM runtime JSON 留空时使用本 worktree 的默认路径；VM 在其他工作
 
 ## 历史和归档
 
+没有真机或 VM 时，可直接选择 **Offline real capture demo · NO PV**，点击 **Load real demo**，再点击 **Run offline real demo**。默认四屏请求走正式采集器、快照与 ELEGANT，仅用注入的合成读取器替换 PV。正常结果为预测完成、比较 partial：Gaussian/unknown 与模型 RMS 定义不兼容，残差留空。界面和归档明确标记 SYNTHETIC；详见 [real 离线实现与验收](REAL_CAPTURE_OFFLINE_20261118.md)。
+
+**Real · capture once · READ ONLY** 为现场显式入口，只有点击 **Read real PVs & predict** 才会读取真实 PV；合成演示入口来源会被拒绝用于该模式。没有真机时使用上面的 NO PV 模式，不需要启动 IOC 或 VM。
+
 默认输出为 `runs/digital_shadow_gui/half/`，受既有 `.gitignore` 排除，可选择其他目录。每次创建唯一 job 目录：
 
 | 内容 | 用途 |
 | --- | --- |
 | job.json | GUI 作业状态、时间、退出码、后台 run 目录 |
-| request.json、machine_snapshot.json、可选 VM evidence | 冻结输入，不覆盖来源文件 |
+| request.json、machine_snapshot.json、VM/real capture evidence | 冻结输入、原始单位和观测来源，不覆盖来源文件 |
 | worker.pgid、stdout.log、stderr.log | 本任务进程组标记和日志 |
 | shadow_<uuid>/ | 原后台的模型输入输出、result、manifest 和追溯文件 |
 
-History 的 **Open archive** 支持既有数字影子 run 或 GUI job 目录。**Use VM inputs for replay** 自动载入请求、VM 快照和同目录证据，仍需显式运行。普通重放没有 VM 证据时继续执行原有诊断年龄限制。
+History 的 **Open archive** 支持既有数字影子 run 或 GUI job 目录。**Use archived inputs for replay** 自动载入请求、快照和同目录证据，仍需显式运行。新 real 归档需配套 real_capture_evidence.json，重放不再连接设备；旧 real 档案没有该证据时保持 view only。普通 VM 重放没有 VM 证据时继续执行原有诊断年龄限制。
 
-**Open snapshot** 只读查看 MachineStateSnapshot。real 档案不能执行；历史发射度扫描 metadata、多屏 JSON 不自动转换。归档读取检查结果与 manifest 对应关系及所展示输入/结果的已记录哈希；坏档案显示错误，不可比较项保留空残差与原因。
+**Open snapshot** 只读查看 MachineStateSnapshot。缺少 real_capture_evidence 的旧 real 档案不能执行；历史发射度扫描 metadata、多屏 JSON 不自动转换。归档读取检查结果与 manifest 对应关系及所展示输入/结果的已记录哈希；坏档案显示错误，不可比较项保留空残差与原因。
 
 ## 停止与退出
 

@@ -1,7 +1,7 @@
 {
   "schema": "digital_shadow_preparation_checklist_v1",
   "purpose": "Review checklist only; not accepted by the digital shadow CLI",
-  "status": "all_quadrupole_normalized_strength_scope_prepared_with_qdu_gaps",
+  "status": "real_readonly_capture_implemented_offline_verified_hardware_unverified",
   "review_date": "2026-11-18",
   "live_real_capture_authorized": false,
   "candidate": {
@@ -26,7 +26,7 @@
     ],
     "selection_reason": "User requested all quadrupoles; capture selection is independent of model segment and ALL_MAIN membership",
     "selection_final": true,
-    "execution_status": "Offline structure and GUI import checked; real collector is not implemented; no live connection performed",
+    "execution_status": "Collector, explicit CLI/GUI, offline injected-reader demo and evidence-based replay implemented; no real hardware connection performed",
     "physical_precision_validation_ready": false,
     "capture_scope": "All quadrupoles are targets for normalized-strength integration; 66 have usable K1/K1_total mappings, QDU01/02 remain unresolved; no current fallback",
     "model_quadrupoles_note": "Only the required inputs of the current QT01-to-PRF09 prediction; not a limit on capture scope"
@@ -157,15 +157,13 @@
     "target_source_proposed_phase": "Future image RMS physics validation; not the current scalar engineering display"
   },
   "known_implementation_gap": {
-    "unit_alias": "Local IOC reference uses m^-2; current snapshot conversion requires exact 1/m^2. Preserve raw EGU and add explicit equivalence handling before any affected real replay",
-    "diagnostic_source": "Current comparison only accepts mapped sigx/sigy PVs as declared RMS. Image-derived RMS requires an explicit source adapter; do not relabel Gaussian snapshots or forge a SIZE PV origin",
-    "real_capture": "No real collector/CLI exists. Planned default workflow is 132 mapped normalized quadrupole state PVs plus eight widths; all 68 quadrupoles remain in the integration inventory, with two pending normalized inputs",
+    "diagnostic_source": "Scalar Gaussian/unknown observation metadata and incompatible display are implemented. Image-derived RMS provenance/archival adapter remains future work; no real images are claimed",
     "quad_strength_mapping": "QDU01/02 normalized strength remains unresolved; do not replace it with current readings. QHL1..4 are unused current-file definitions, not extra physical devices to add"
   },
   "ready_for_real_snapshot_replay": false,
   "ready_for_live_capture": false,
   "next_stage_proposed": {
-    "scope": "Implement normalized-strength capture for all available quadrupoles and eight local screen widths; report QDU01/02 as incomplete until a physical K1 source is identified; do not collect currents as a substitute",
+    "scope": "Validate site connectivity, source EGU and diagnostic timing when machine access is available; no further hardware is required to use the offline demo",
     "model_reference": "QT01 entrance",
     "model_targets": [
       "PRF06",
@@ -176,7 +174,7 @@
     "existing_real_images_required_for_development": false,
     "raw_image_archival_phase": "Future measurement/RMS reconstruction; no existing historical frames requested",
     "live_real_operations_authorized": false,
-    "implementation_status": "All-quadrupole scope and offline mapping inspection complete; real capture and comparison adapters remain to be implemented",
+    "implementation_status": "Implemented and offline verified; actual hardware validation pending conditions and explicit authorization",
     "review_document": "REAL_CAPTURE_SCOPE_20261118.md"
   },
   "future_reconstruction_candidate": {
@@ -405,6 +403,37 @@
       "max_absolute_vm_residual_mm": 8.881784197001252e-16,
       "existing_services_restarted": false,
       "activation": "Restart softIOC then VM Runtime, reopen Digital Shadow and capture a new VM snapshot; profile signature changes"
+    },
+    "real_capture": {
+      "status": "implemented_offline_verified",
+      "api": "real_capture.capture_real_once",
+      "cli": [
+        "demo-real",
+        "run-real --connect-real",
+        "replay --real-evidence"
+      ],
+      "gui_demo": "Offline real capture demo · NO PV",
+      "source_reader": "SimulatedRealReader for offline acceptance",
+      "live_reads_performed": false,
+      "tests": {
+        "focused_passed": 85,
+        "integration_cases_passed": 7,
+        "static_checks_passed": true
+      }
+    },
+    "unit_alias": {
+      "status": "implemented_in_real_evidence_path_only",
+      "aliases": [
+        "1/m^2",
+        "m^-2",
+        "1/m²",
+        "m⁻²"
+      ],
+      "raw_snapshot_preserved": true,
+      "derived_model_input_snapshot_archived": true,
+      "generic_model_converter_remains_strict": true
     }
-  }
+  },
+  "offline_demo_ready": true,
+  "hardware_verified": false
 }
