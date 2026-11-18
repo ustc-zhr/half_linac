@@ -43,7 +43,7 @@ GUI 在选定输出目录共享 `image_store/<sha256>.npz`，每个 run 保存�
 
 派生处理复用 `subtract_background()` 与 `fit_beam_image(method="RMS moments")`：扣除可选背景，再应用 profile 的 flip_y、像素标定和 default_roi。完整原图保留，供未来重算。索引记录 ROI、背景、计算类型和处理规则，结果标为 **image_roi_projection_rms**，不将 Gaussian/unknown SIZE 改标为 RMS。
 
-新图像表是独立诊断展示，尚未用图像 RMS 自动替代原比较残差，也没有自动入口重建或校准。相机饱和、曝光/增益、有限视场及图像标定误差尚未验收；ROI RMS 不作为全分布粒子 RMS 的精度认证。
+归档阶段的图像表保留为独立诊断展示；后续已新增[图像 RMS 与模型的独立比较](IMAGE_COMPARISON_20261118.md)，先限于已核验的 VM 工作点及图像条件，不替代原 SIZE 比较。没有自动入口重建或校准。相机饱和、曝光/增益、有限视场及图像标定误差尚未现场验收；ROI RMS 不作为全分布粒子 RMS 的精度认证。
 
 ## 调用与时间范围
 

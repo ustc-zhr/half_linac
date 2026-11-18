@@ -76,6 +76,9 @@ epics.ca.poll = forbidden
                 assert frame["derived_rms"]["status"] == "valid"
             assert len(list(pool.root.glob("*.npz"))) == 1
             assert window.image_results.rowCount() == 4
+            assert all(row["status"] == "unverified" and row["residual"] is None for row in first["result"]["image_comparisons"])
+            window.comparison_source.setCurrentIndex(1)
+            assert window.results.rowCount() == 8 and not window.results.item(0, 3).text()
             window.images_toggle.setChecked(True)
             app.processEvents()
         window.grab().save(str(tmp_path / "real_demo_complete.png"))
@@ -87,6 +90,7 @@ epics.ca.poll = forbidden
         assert second["result"]["comparisons"] == first["result"]["comparisons"]
         if save_images:
             assert first["image_index"] == second["image_index"]
+            assert first["result"]["image_comparisons"] == second["result"]["image_comparisons"]
             assert not list(Path(second["run_dir"]).parent.rglob("*.npz"))
 
         # Even outside the GUI, an unflagged command cannot open real PVs.

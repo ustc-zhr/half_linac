@@ -43,6 +43,7 @@ def test_private_vm_gui_image_archive_and_replay(tmp_path):
     assert completed.returncode == 0, completed.stdout + completed.stderr
     result = json.loads((tmp_path / "cli_result.json").read_text())
     assert result["image_archive"]["saved"] == 4 and result["image_archive"]["status"] == "complete"
+    assert result["image_comparison_status"] == "complete" and len(result["image_comparisons"]) == 8
 
 
 def _gui_capture(root, directory, request_path, runtime, *, images=False):
@@ -69,6 +70,11 @@ def _gui_capture(root, directory, request_path, runtime, *, images=False):
         expected_rows = len(json.loads(request_path.read_text())["diagnostics"])
         assert window.results.rowCount() == expected_rows
         archive = window.current_archive
+        if images:
+            window.comparison_source.setCurrentIndex(1)
+            assert window.results.rowCount() == expected_rows
+            assert all(window.results.item(i, 5).text() == "compared" for i in range(expected_rows))
+            app.processEvents()
         window.grab().save(str(directory / "gui_vm_complete.png"))
         return {**archive["result"], "run_dir": archive["run_dir"]}
     finally:
@@ -192,7 +198,7 @@ def _run_private_vm(directory, *, gui=False, four_screens=False, images=False):
             result = collect_results(state, directory)
             result.update(input_state=state, input_version=input_version(state), session="private-vm", calculation=1)
             status = {"phase": "Ready", "input_version": input_version(state), "result_version": input_version(state),
-                      "session": "private-vm", "calculation": 1, "publication": {"rms": True},
+                      "session": "private-vm", "calculation": 1, "publication": {"rms": True, "screens": images},
                       "completed_at": datetime.now(timezone.utc).isoformat(), "elapsed": time.monotonic() - calculation_started}
             write_runtime_state(observation_dir(runtime) / "result.json", result)
             write_runtime_state(observation_dir(runtime) / "status.json", status)
@@ -226,6 +232,27 @@ def _run_private_vm(directory, *, gui=False, four_screens=False, images=False):
                 replayed = json.loads(replay.stdout)
                 assert replayed["input_hash"] == payload["input_hash"]
                 assert not list((directory / "replay").rglob("*.npz"))
+                assert payload["image_comparisons"] == replayed["image_comparisons"]
+                pixel_checks = []
+                for row in payload["image_comparisons"]:
+                    screen, channel = row["prediction_key"].split("/")
+                    geometry = context.profile.get_element(screen).image_geometry["vm"]
+                    w, h = geometry["shape"]
+                    pixel = float(geometry["pixel_width_mm"])
+                    x, y = columns(directory / (screen+".out"), ("x", "y"))
+                    inside = (np.abs(x) < w*pixel*.0005) & (np.abs(y) < h*pixel*.0005)
+                    values = x if channel == "sigx" else y
+                    viewport_bias = abs(values.std(ddof=0)-values[inside].std(ddof=0))*1000
+                    bound = pixel/2 + viewport_bias + 1e-8
+                    assert row["status"] == "compared" and abs(row["residual"]) <= bound
+                    pixel_checks.append({"key": row["key"], "residual_mm": row["residual"],
+                        "pixel_half_width_mm": pixel/2, "finite_viewport_bias_mm": viewport_bias,
+                        "pixel_and_viewport_bound_mm": bound, "particles_in_view": int(inside.sum()),
+                        "particle_count": len(values)})
+                (directory/"image_comparison_acceptance.json").write_text(json.dumps({
+                    "status": "passed", "same_vm_calculation": True, "image_comparisons": 8,
+                    "input_hash_equal_on_replay": True, "raw_image_objects_copied_on_replay": False,
+                    "pixel_checks": pixel_checks, "physics_precision_validated": False}, indent=2))
         finally:
             for process in reversed(processes):
                 process.terminate()

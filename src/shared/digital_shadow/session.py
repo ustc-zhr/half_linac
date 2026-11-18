@@ -102,6 +102,9 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_
                                                    shared / "machine_profile/model_snapshot.py",
                                                    shared / "elegant_backend/parser.py",
                                                    shared / "elegant_runtime.py", shared / "beam_matrix.py")}
+        if image_bundle is not None:
+            for name in ("beam_diagnostics/image_fit.py", "beam_diagnostics/background_store.py"):
+                manifest["implementation"][name] = file_digest(shared/name)
         manifest["input_hash"] = digest({"capture": raw, "request": request.as_metadata(),
                                          "model": state, "engine": manifest["engine"],
                                          "implementation": manifest["implementation"], "dependencies": manifest["dependencies"],
@@ -118,8 +121,17 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_
         predictions, matrices = predict(context, request, state, model_snapshot, directory)
         comparisons = compare_diagnostics(context, snapshot, request, predictions, diagnostic_window=diagnostic_window,
                                           observation_definitions=observation_definitions)
+        image_comparison = None
+        if image_bundle is not None:
+            from .image_comparison import compare_image_diagnostics
+            image_comparison = compare_image_diagnostics(context, snapshot, request, predictions, image_bundle,
+                                                          vm_evidence=vm_evidence)
+            write_runtime_state(directory / "image_comparisons.json", {**image_comparison, "input_hash": manifest["input_hash"]})
+            manifest["image_comparison"] = {key: value for key, value in image_comparison.items() if key != "comparisons"}
         status = "complete" if all(row["status"] == "compared" for row in comparisons) else "partial"
         if image_bundle is not None and image_bundle["summary"]["status"] != "complete":
+            status = "partial"
+        if image_comparison is not None and image_comparison["status"] != "complete":
             status = "partial"
         result = {"run_id": directory.name, "input_hash": manifest["input_hash"], "status": status,
                   "beam_basis": request.beam_basis, "beam_provenance": request.beam_provenance,
@@ -129,7 +141,8 @@ def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_
                           missing_normalized_quadrupoles=real_evidence["scope"]["missing_normalized_quadrupoles"],
                           synthetic=real_evidence["reader_kind"] == "synthetic")
         if image_bundle is not None:
-            result.update(image_archive=image_bundle["summary"], prediction_status="complete")
+            result.update(image_archive=image_bundle["summary"], prediction_status="complete",
+                          image_comparisons=image_comparison["comparisons"], image_comparison_status=image_comparison["status"])
         write_runtime_state(directory / "result.json", result)
         manifest["status"] = status
     except Exception as exc:

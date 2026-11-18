@@ -157,7 +157,7 @@
     "target_source_proposed_phase": "Future image RMS physics validation; not the current scalar engineering display"
   },
   "known_implementation_gap": {
-    "diagnostic_source": "Scalar Gaussian/unknown display and independent image ROI RMS archival/provenance are implemented. Image RMS does not replace SIZE residuals or constitute independent physical precision validation; live images remain unverified.",
+    "diagnostic_source": "Image ROI RMS comparison is implemented for verified VM working points, independently of SIZE scalars. Real image alignment, camera/ROI physics validation and entrance reconstruction remain unverified; no real hardware access performed.",
     "quad_strength_mapping": "QDU01/02 normalized strength remains unresolved; do not replace it with current readings. QHL1..4 are unused current-file definitions, not extra physical devices to add"
   },
   "ready_for_real_snapshot_replay": false,
@@ -452,6 +452,21 @@
       },
       "real_hardware_verified": false,
       "review_document": "IMAGE_ARCHIVE_20261118.md"
+    },
+    "image_comparison": {
+      "status": "implemented_offline_and_private_vm_verified",
+      "review_document": "IMAGE_COMPARISON_20261118.md",
+      "separate_from_size_scalar": true,
+      "saved_pixels_recomputed": true,
+      "requires_vm_image_publication": true,
+      "roi_background_pixel_metrics": true,
+      "real_or_synthetic_image_residuals_enabled": false,
+      "physics_precision_validated": false,
+      "tests": {
+        "focused_passed": 120,
+        "integration_passed": 9,
+        "static_checks_passed": true
+      }
     }
   },
   "offline_demo_ready": true,

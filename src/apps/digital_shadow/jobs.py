@@ -53,7 +53,7 @@ def read_archive(directory):
     if result and any(not isinstance(row, dict) for row in result["comparisons"]):
         raise ValueError("Malformed diagnostic comparison")
     if manifest:
-        for name in ("machine_snapshot.json", "request.json", "result.json", "vm_capture_evidence.json", "real_capture_evidence.json", "image_index.json"):
+        for name in ("machine_snapshot.json", "request.json", "result.json", "vm_capture_evidence.json", "real_capture_evidence.json", "image_index.json", "image_comparisons.json"):
             expected = manifest.get("artifacts", {}).get(name)
             if expected and hashlib.sha256((run / name).read_bytes()).hexdigest() != expected:
                 raise ValueError(f"Archive integrity check failed: {name}")
@@ -62,6 +62,14 @@ def read_archive(directory):
     if real_evidence and real_evidence.get("schema") != "digital_shadow_real_capture_v1":
         raise ValueError("Unsupported real capture evidence")
     image_path = run / "image_index.json"
+    if result and "image_comparisons" in result:
+        comparisons = result["image_comparisons"]
+        saved = read_object(run / "image_comparisons.json")
+        if (not isinstance(comparisons, list) or any(not isinstance(row, dict) for row in comparisons)
+                or saved.get("schema") != "digital_shadow_image_comparison_v1"
+                or saved.get("input_hash") != result["input_hash"] or saved.get("comparisons") != comparisons
+                or saved.get("status") != result.get("image_comparison_status")):
+            raise ValueError("Image comparison does not match its archived result")
     images = read_object(image_path) if image_path.exists() else None
     if images:
         from dataclasses import replace

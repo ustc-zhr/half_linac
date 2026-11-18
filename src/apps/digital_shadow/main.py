@@ -170,6 +170,12 @@ class DigitalShadowWindow(QMainWindow):
         self.result_banner = QLabel("Local uncoupled transverse optics · RMS diagnostics only. Completion is not a physics accuracy certificate.", result_panel)
         self.result_banner.setWordWrap(True)
         result_layout.addWidget(self.result_banner)
+        self.comparison_source = QComboBox(result_panel)
+        self.comparison_source.addItem("SIZE / scalar diagnostics", "scalar")
+        self.comparison_source.addItem("Image ROI RMS", "image")
+        self.comparison_source.setEnabled(False)
+        self.comparison_source.setToolTip("Image RMS comparisons retain their own source, ROI and background. SIZE values keep their original definitions.")
+        result_layout.addWidget(self.comparison_source)
         self.results = QTableWidget(0, 7, result_panel)
         self.results.setHorizontalHeaderLabels(["Diagnostic", "Predicted RMS", "Observed width", "Residual", "Unit", "Status", "Reason"])
         self.results.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -207,6 +213,7 @@ class DigitalShadowWindow(QMainWindow):
         self.images_toggle.toggled.connect(self.image_results.setVisible)
         result_layout.addWidget(self.images_toggle)
         result_layout.addWidget(self.image_results)
+        self.comparison_source.currentIndexChanged.connect(self._show_comparison_rows)
         splitter.setSizes([500, 800])
         page_layout.addWidget(splitter, 1)
         self.tabs.addTab(page, "Run & Compare")
@@ -398,6 +405,7 @@ class DigitalShadowWindow(QMainWindow):
             self._plot([])
             self.details.clear()
             self.current_archive = None
+            self.comparison_source.setEnabled(False)
             self.result_title.setText("Running · result pending")
             self.result_banner.setText(f"{request.beam_basis} entrance beam · {request.beam_provenance}\nCompletion describes calculation and data alignment, not physical accuracy.")
             self.controller.start(request, Path(self.output_edit.text()).expanduser(), mode=mode,
@@ -457,6 +465,9 @@ class DigitalShadowWindow(QMainWindow):
             hint = f"Images saved {summary['saved']}/{summary['requested']} · {summary['status']} · ROI RMS kept separately from SIZE."
             self.result_banner.setText(self.result_banner.text() + "\n" + hint)
             self.result_banner.setToolTip("\n".join(summary["warnings"]))
+            if "image_comparisons" in result:
+                count = sum(row["status"] == "compared" for row in result["image_comparisons"])
+                self.result_banner.setText(self.result_banner.text() + f" Image comparison {count}/{len(result['image_comparisons'])} usable.")
             for index, frame in enumerate(images["frames"]):
                 obj, rms = frame.get("object", {}), frame.get("derived_rms", {})
                 values = [frame["screen"], obj.get("dtype", ""), self._format(obj.get("stored_bytes", 0)/1024),
@@ -468,7 +479,19 @@ class DigitalShadowWindow(QMainWindow):
                     self.image_results.setItem(index, column, item)
         else:
             self.result_banner.setToolTip("")
-        rows = result.get("comparisons", []) if archive["status"] in {"complete", "partial"} else []
+        self.comparison_source.setEnabled("image_comparisons" in result)
+        if "image_comparisons" not in result:
+            self.comparison_source.setCurrentIndex(0)
+        self._show_comparison_rows()
+        self.details.setPlainText(json.dumps(archive, indent=2, ensure_ascii=False))
+        self.status_label.setText("Archive loaded · " + archive["status"])
+        return archive
+
+    def _show_comparison_rows(self, *args):
+        archive = self.current_archive or {}
+        result = archive.get("result") or {}
+        field = "image_comparisons" if self.comparison_source.currentData() == "image" else "comparisons"
+        rows = result.get(field, []) if archive.get("status") in {"complete", "partial"} else []
         self.results.setRowCount(len(rows))
         for row, data in enumerate(rows):
             if not isinstance(data, dict):
@@ -481,9 +504,6 @@ class DigitalShadowWindow(QMainWindow):
                 item.setToolTip(json.dumps(data, indent=2))
                 self.results.setItem(row, column, item)
         self._plot(rows)
-        self.details.setPlainText(json.dumps(archive, indent=2, ensure_ascii=False))
-        self.status_label.setText("Archive loaded · " + archive["status"])
-        return archive
 
     def _plot(self, rows):
         self.figure.clear()
@@ -493,13 +513,15 @@ class DigitalShadowWindow(QMainWindow):
         axes = self.figure.subplots(1, 2)
         for axis, plane in zip(axes, ("sigx", "sigy")):
             axis.set_facecolor(background)
-            data = [row for row in rows if isinstance(row, dict) and str(row.get("key", "")).endswith("/" + plane)]
+            data = [row for row in rows if isinstance(row, dict) and str(row.get("prediction_key", row.get("key", ""))).endswith("/" + plane)]
             for index, row in enumerate(data):
                 scale = 1000 if row.get("unit") == "m" else 1
                 for key, marker, label in (("predicted", "o", "Predicted"), ("measured", "x", "Measured")):
                     value = row.get(key)
-                    if isinstance(value, (int, float)) and math.isfinite(value) and (key == "predicted" or row.get("status") in {"compared", "incompatible"}):
+                    if isinstance(value, (int, float)) and math.isfinite(value) and (key == "predicted" or row.get("status") in {"compared", "incompatible", "unverified", "limited"}):
                         label = "Predicted RMS" if key == "predicted" else "Observed " + row.get("measured_width_definition", "rms")
+                        if row.get("measured_width_definition") == "image_roi_projection_rms":
+                            label = "Model RMS" if key == "predicted" else "Image ROI RMS"
                         axis.plot(index, value * scale, marker, color="#45bcb0" if key == "predicted" else "#e7ad65", label=label)
             axis.set_xticks(range(len(data)))
             axis.set_xticklabels([str(row.get("key", "")).split("/")[0] for row in data], rotation=25)
