@@ -1,7 +1,7 @@
 {
   "schema": "digital_shadow_preparation_checklist_v1",
   "purpose": "Review checklist only; not accepted by the digital shadow CLI",
-  "status": "all_quadrupole_real_capture_scope_prepared",
+  "status": "all_quadrupole_normalized_strength_scope_prepared_with_qdu_gaps",
   "review_date": "2026-11-18",
   "live_real_capture_authorized": false,
   "candidate": {
@@ -28,7 +28,7 @@
     "selection_final": true,
     "execution_status": "Offline structure and GUI import checked; real collector is not implemented; no live connection performed",
     "physical_precision_validation_ready": false,
-    "capture_scope": "All machine profile quadrupoles, plus the existing local screen and context observations",
+    "capture_scope": "All quadrupoles are targets for normalized-strength integration; 66 have usable K1/K1_total mappings, QDU01/02 remain unresolved; no current fallback",
     "model_quadrupoles_note": "Only the required inputs of the current QT01-to-PRF09 prediction; not a limit on capture scope"
   },
   "entrance_beam": {
@@ -137,7 +137,9 @@
     ],
     "unit_confirmed_for": [
       "PRF06",
-      "PRF08"
+      "PRF07",
+      "PRF08",
+      "PRF09"
     ],
     "scalar_rms_compatibility_confirmed": false,
     "target_source_proposed": "RMS derived from saved PRF09 raw image, with image PV, frame hash and processing provenance; not the Gaussian SIZE PV",
@@ -157,14 +159,14 @@
   "known_implementation_gap": {
     "unit_alias": "Local IOC reference uses m^-2; current snapshot conversion requires exact 1/m^2. Preserve raw EGU and add explicit equivalence handling before any affected real replay",
     "diagnostic_source": "Current comparison only accepts mapped sigx/sigy PVs as declared RMS. Image-derived RMS requires an explicit source adapter; do not relabel Gaussian snapshots or forge a SIZE PV origin",
-    "real_capture": "No real collector/CLI exists; revised capture plan covers 68 profile quadrupoles plus 23 local observations, 159 scalar PVs; retain run-vm isolation",
+    "real_capture": "No real collector/CLI exists. Planned default workflow is 132 mapped normalized quadrupole state PVs plus eight widths; all 68 quadrupoles remain in the integration inventory, with two pending normalized inputs",
     "vm_prf09": "Real PRF09 SIZE PV mappings exist, but vm.json has no PRF09 sigx/sigy mappings; existing run-vm cannot capture all four screens",
-    "quad_strength_mapping": "QDU01/02 lack K1_total and K1 aliases current_set; capture native currents without normalized conversion. QHL1..4 are model-only definitions with unresolved real identities"
+    "quad_strength_mapping": "QDU01/02 normalized strength remains unresolved; do not replace it with current readings. QHL1..4 are unused current-file definitions, not extra physical devices to add"
   },
   "ready_for_real_snapshot_replay": false,
   "ready_for_live_capture": false,
   "next_stage_proposed": {
-    "scope": "Implement explicit read-only capture for all profile quadrupoles (136 native scalar channels) plus 23 existing local observations; the QT01-to-PRF09 model consumes only its four normalized readbacks; validate with offline injected readers",
+    "scope": "Implement normalized-strength capture for all available quadrupoles and eight local screen widths; report QDU01/02 as incomplete until a physical K1 source is identified; do not collect currents as a substitute",
     "model_reference": "QT01 entrance",
     "model_targets": [
       "PRF06",
@@ -190,7 +192,7 @@
     "selection_final": false,
     "execution_status": "Future measurement candidate only; historical reconstruction cannot be executed"
   },
-  "capture_channel_count": 159,
+  "capture_channel_count": 140,
   "capture_policy": {
     "model_inputs": [
       "QT01/K1_total",
@@ -200,9 +202,10 @@
     ],
     "model_input_missing_policy": "Do not predict if any readback required by the selected model is missing or unusable. Missing unrelated global states are archived separately and do not masquerade as local model failure; never fall back to K1 settings",
     "observation_missing_policy": "Archive quality and reason per channel; preserve unavailable diagnostics, never fabricate residuals",
-    "bpm_corrector_ict_role": "Archive context only; no orbit, current-to-kick conversion or transmission prediction in this phase",
-    "source": "All quad devices are derived by kind from machine profile; additional observations are derived from the current local model segment. This remains a review checklist, not a runtime API",
-    "scope_completeness": "Report global capture completeness separately from the availability of the local model inputs"
+    "bpm_corrector_ict_role": "Not in the default normalized-strength/width workflow; old state inventories are historical mapping evidence only",
+    "source": "All profile quads are inspected independently of the model segment; current fallback and non-model current channels are excluded from the default workflow",
+    "scope_completeness": "Report global capture completeness separately from the availability of the local model inputs",
+    "extra_observations": "BPM/ICT context may be added for a demonstrated requirement later; corrector currents and QDU raw currents are not default model inputs"
   },
   "historical_physics_validation_status": "Unavailable from existing historical inputs; user confirmed raw frames and synchronous states do not exist",
   "future_image_artifacts_required": [
@@ -237,62 +240,6 @@
   ],
   "additional_capture_channels": [
     {
-      "element": "BPM20",
-      "kind": "bpm",
-      "channel": "x",
-      "pv": "IN:BD:LE14:DBPM:20:BPM_X",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "BPM20",
-      "kind": "bpm",
-      "channel": "y",
-      "pv": "IN:BD:LE14:DBPM:20:BPM_Y",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "BPM20",
-      "kind": "bpm",
-      "channel": "sum",
-      "pv": "IN:BD:LE14:DBPM:20:BPM_S",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "XC21",
-      "kind": "corr",
-      "channel": "current_set",
-      "pv": "IN:PS:LE16:XC21:current:ao",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "XC21",
-      "kind": "corr",
-      "channel": "current_readback",
-      "pv": "IN:PS:LE16:XC21:current:ai",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "YC21",
-      "kind": "corr",
-      "channel": "current_set",
-      "pv": "IN:PS:LE16:YC21:current:ao",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "YC21",
-      "kind": "corr",
-      "channel": "current_readback",
-      "pv": "IN:PS:LE16:YC21:current:ai",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
       "element": "PRF06",
       "kind": "flag",
       "channel": "sigx",
@@ -320,10 +267,11 @@
       "channel": "sigx",
       "pv": "IN:BD:PRF07:H:SIZE",
       "role": "width_observation",
-      "physical_unit": null,
+      "physical_unit": "mm",
       "width_definition": "unknown",
       "definition_source": null,
-      "compatible_with_current_rms_comparison": false
+      "compatible_with_current_rms_comparison": false,
+      "unit_source": "User confirmation 2026-11-18"
     },
     {
       "element": "PRF07",
@@ -331,10 +279,11 @@
       "channel": "sigy",
       "pv": "IN:BD:PRF07:V:SIZE",
       "role": "width_observation",
-      "physical_unit": null,
+      "physical_unit": "mm",
       "width_definition": "unknown",
       "definition_source": null,
-      "compatible_with_current_rms_comparison": false
+      "compatible_with_current_rms_comparison": false,
+      "unit_source": "User confirmation 2026-11-18"
     },
     {
       "element": "PRF08",
@@ -359,79 +308,16 @@
       "compatible_with_current_rms_comparison": false
     },
     {
-      "element": "BPM21",
-      "kind": "bpm",
-      "channel": "x",
-      "pv": "IN:BD:LE14:DBPM:21:BPM_X",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "BPM21",
-      "kind": "bpm",
-      "channel": "y",
-      "pv": "IN:BD:LE14:DBPM:21:BPM_Y",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "BPM21",
-      "kind": "bpm",
-      "channel": "sum",
-      "pv": "IN:BD:LE14:DBPM:21:BPM_S",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "XC22",
-      "kind": "corr",
-      "channel": "current_set",
-      "pv": "IN:PS:LE16:XC22:current:ao",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "XC22",
-      "kind": "corr",
-      "channel": "current_readback",
-      "pv": "IN:PS:LE16:XC22:current:ai",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "YC22",
-      "kind": "corr",
-      "channel": "current_set",
-      "pv": "IN:PS:LE16:YC22:current:ao",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "YC22",
-      "kind": "corr",
-      "channel": "current_readback",
-      "pv": "IN:PS:LE16:YC22:current:ai",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "ICT02",
-      "kind": "ct",
-      "channel": "charge",
-      "pv": "IN:BD:ICT2:C",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
       "element": "PRF09",
       "kind": "flag",
       "channel": "sigx",
       "pv": "IN:BD:PRF09:H:SIZE",
       "role": "width_observation",
-      "physical_unit": null,
+      "physical_unit": "mm",
       "width_definition": "unknown",
       "definition_source": null,
-      "compatible_with_current_rms_comparison": false
+      "compatible_with_current_rms_comparison": false,
+      "unit_source": "User confirmation 2026-11-18"
     },
     {
       "element": "PRF09",
@@ -439,37 +325,73 @@
       "channel": "sigy",
       "pv": "IN:BD:PRF09:V:SIZE",
       "role": "width_observation",
-      "physical_unit": null,
+      "physical_unit": "mm",
       "width_definition": "unknown",
       "definition_source": null,
-      "compatible_with_current_rms_comparison": false
+      "compatible_with_current_rms_comparison": false,
+      "unit_source": "User confirmation 2026-11-18"
     }
   ],
   "all_quadrupole_capture": {
-    "selection_source": "Load every machine profile element with kind=quad, independent of chosen model segment",
+    "selection_source": "Inspect every machine profile kind=quad; collect only identified normalized K1/K1_total for the model workflow",
     "device_count": 68,
     "normalized_strength_device_count": 66,
     "normalized_strength_channels": [
       "K1",
       "K1_total"
     ],
-    "raw_current_only_devices": [
+    "normalized_strength_channel_count": 132,
+    "pending_normalized_devices": [
       "QDU01",
       "QDU02"
     ],
-    "raw_current_channels": [
-      "current_set",
-      "current_readback"
-    ],
-    "raw_current_semantics": "QDU01/02 have no K1_total. Their K1 PV equals current_set; archive native current channels, never label those values normalized K1 or invent a conversion",
-    "quad_channel_count": 136,
-    "generated_inventory": "runs/digital_shadow_all_quadrupoles/20261118/all_quad_scope_review.json",
-    "model_only_unresolved_definitions": [
+    "current_fallback_enabled": false,
+    "qdu_reason": "No K1_total mapping; K1 aliases a current_set PV. No QDU current-to-K1 conversion was found in the inspected profile/shared model input chain. Raw current archival does not constitute Elegant integration",
+    "generated_inventory": "runs/digital_shadow_scope_clarification/20261118/scope_clarification.json",
+    "model_only_unused_definitions": [
       "QHL1",
       "QHL2",
       "QHL3",
       "QHL4"
     ],
-    "model_only_policy": "No matching physical-device profile or real PV mapping; preserve as unresolved identities, do not invent channels or assume aliases"
-  }
+    "unused_definition_policy": "Current lattice_ini.lte lines 42-45 define these names but do not reference them in any line. Historical files did use them. They are not four newly missing physical devices or a current capture blocker"
+  },
+  "confirmed_scalar_units": [
+    {
+      "element": "PRF06",
+      "channels": [
+        "sigx",
+        "sigy"
+      ],
+      "unit": "mm",
+      "source": "User confirmation 2026-11-17"
+    },
+    {
+      "element": "PRF07",
+      "channels": [
+        "sigx",
+        "sigy"
+      ],
+      "unit": "mm",
+      "source": "User confirmation 2026-11-18"
+    },
+    {
+      "element": "PRF08",
+      "channels": [
+        "sigx",
+        "sigy"
+      ],
+      "unit": "mm",
+      "source": "User confirmation 2026-11-17"
+    },
+    {
+      "element": "PRF09",
+      "channels": [
+        "sigx",
+        "sigy"
+      ],
+      "unit": "mm",
+      "source": "User confirmation 2026-11-18"
+    }
+  ]
 }

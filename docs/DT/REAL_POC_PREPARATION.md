@@ -1,6 +1,6 @@
 # HALF 数字影子实机离线准备
 
-历史资料检查基线为专用 worktree 的 `feature/digital-shadow-poc` 分支 `58cf829`；原工作区历史资料只读。2026-11-18 按用户要求，已将首轮 real 状态采集扩大为 **全机 profile 的 68 块四极铁，加 PRF06～PRF09 和局部辅助状态，共 159 个不同 PV**，并完成映射离线盘点。当前预测仍使用 QT01 entrance → PRF09，采集范围不受该局部模型限制。范围、缺口和实施计划以[接入方案](REAL_CAPTURE_SCOPE_20261118.md)及准备清单为准，没有修改产品代码或连接实机。
+历史资料检查基线为专用 worktree 的 `feature/digital-shadow-poc` 分支 `58cf829`；原工作区历史资料只读。2026-11-18 按用户要求，已将首轮 real 接入目标扩大为 **全机 profile 的 68 块四极铁的归一化强度及 PRF06～PRF09 束宽**。当前 66 块具有 K1/K1_total 映射，QDU01/02 仍缺有效归一化输入，不用电流兜底；默认映射为 132 项归一化状态和 8 项束宽。当前预测仍使用 QT01 entrance → PRF09，采集范围不受该局部模型限制。范围、缺口和实施计划以[接入方案](REAL_CAPTURE_SCOPE_20261118.md)及准备清单为准，没有修改产品代码或连接实机。
 
 2026-11-17，用户确认 PRF06/08 SIZE PV 为 **mm 单位的高斯拟合 σ**，无独立 QT01 入口束流测量资料，也没有 PRF06/07/08/09 原始图像及同期机器状态。因此，QT01 入口比较和 PRF06 出口重建后留出 PRF09 比较均暂缓实机执行；不再将补交这些历史资料作为当前工作的前提。
 
@@ -42,7 +42,7 @@
 
 `quality.pv_sigx_mm/pv_sigy_mm` 是界面保存的交叉检查值。[MultiScreenWorkspace._read_optional_size_channel()](../../src/apps/emit_measure/multi_screen_workspace.py) 仅取数值，未读取 EGU、源时间与报警；字段名中的 mm 不构成部署端单位证明。
 
-用户现已确认 PRF06/08 的单位和高斯 σ 定义；PRF07/09 的 SIZE 定义尚未逐项确认。上述旧读取方式仍不能提供源时间或质量证明。
+用户已确认 PRF06/08 的单位和高斯 σ 定义，2026-11-18 进一步确认 PRF07/09 单位同为 mm；PRF07/09 的测宽算法定义保留为待确认。上述旧读取方式仍不能提供源时间或质量证明。
 
 ### 1.3 原始图像和可复用的处理
 
@@ -94,7 +94,7 @@ PRF06 → DMTC2 → PRF07 → DMTC3 → PRF08 → DMTC4
 
 ## 3 后续图像重建测量的数据清单
 
-下表为 PRF06 出口重建候选段所需的四极铁状态，来自当前 [real profile](../../configs/machines/half/control_backends/real.json)。当前首轮工程采集包含全部 68 块四极铁、四屏和局部辅助状态，共 159 项，见[接入方案](REAL_CAPTURE_SCOPE_20261118.md)。映射存在不表示已连接或现场确认。
+下表为 PRF06 出口重建候选段所需的四极铁状态，来自当前 [real profile](../../configs/machines/half/control_backends/real.json)。当前接入目标涵盖全部 68 块四极铁；默认采集已映射的 132 项归一化状态和 8 项束宽，QDU01/02 的强度来源仍待接入，见[接入方案](REAL_CAPTURE_SCOPE_20261118.md)。映射存在不表示已连接或现场确认。
 
 本节是未来归档设计要求，不是向用户索要现有历史文件，也不构成执行实机操作的授权。
 
@@ -142,7 +142,7 @@ PRF08 的 profile 图像标定为 1440×1080、0.0217 mm/pixel、flip_y=true，�
 
 ## 5 后续实现的最小范围
 
-当前下一步为 **全机四极铁状态加局部诊断的 real 一次只读采集，局部模型按需消费快照子集**，先离线验收，不依赖已有实机图像。复用现有 MachineStateSnapshot、标量采样和模型 pipeline，纳入 159 个标量；QDU01/02 仅保存原生电流，不冒充归一化强度。当前采集器和实机 CLI/GUI 入口尚未实现。范围和逐项验收条件见[接入方案](REAL_CAPTURE_SCOPE_20261118.md)。
+当前下一步为 **全机四极铁归一化强度加局部诊断的 real 一次只读采集，局部模型按需消费快照子集**，先离线验收，不依赖已有实机图像。复用现有 MachineStateSnapshot、标量采样和模型 pipeline，默认纳入 140 个已映射标量；QDU01/02 记为归一化输入未接入，不以电流归档替代模型接入。当前采集器和实机 CLI/GUI 入口尚未实现。范围和逐项验收条件见[接入方案](REAL_CAPTURE_SCOPE_20261118.md)。
 
 未来数据包应绑定机器/后端、逐帧源时间与接收时间、每屏采集前后的设置和回读、图像标定、ROI、背景及处理版本和产物哈希。多屏顺序测量需要独立稳定性证据，不合并伪称一次原子快照；数据不完整、状态变化、诊断定义不兼容时不输出物理验收通过。
 
@@ -152,7 +152,7 @@ PRF08 的 profile 图像标定为 1440×1080、0.0217 mm/pixel、flip_y=true，�
 
 未来取得原始图像时，入口处理复用 `image_fit.py` 的 RMS 处理、`multi_screen.py` 的 optics/重建和 `beam_matrix.py` 的 rank/正定性检查，保存原始帧与派生 RMS 的来源。当前工程预测可使用来源明确的 assumed 入口，不自动沿用 VM 参数或默认能量。
 
-1. 单次 real 采集：新增独立 `src/shared/digital_shadow/real_capture.py`，复用 CapturePoint、sample_capture_points 和 MachineStateSnapshot；按 profile 的 kind=quad 选择全机四极铁，再加局部四屏及辅助状态，共 159 项。采集与模型选段分开，保存原始元数据，不设置、恢复或重复采样。
+1. 单次 real 采集：新增独立 `src/shared/digital_shadow/real_capture.py`，复用 CapturePoint、sample_capture_points 和 MachineStateSnapshot；按 profile 的 kind=quad 检查全机四极铁，使用有效的 K1/K1_total 映射，再加局部四屏束宽；当前默认 140 项。原始电流不作为归一化输入缺失时的兜底。采集与模型选段分开，保存原始元数据，不设置、恢复或重复采样。
 2. 单位处理：只在数字影子的快照派生路径加入明确的等价单位处理，保留原始单位及转换来源。覆盖 `m^-2 ↔ 1/m^2`，不接受 A 等非等价单位，不改变其他应用的 live K1 映射。
 3. CLI：给 `scripts/run_digital_shadow.py` 增加显式 real 只读子命令，禁止从环境默认值自动切换；实际调用另行明确授权。现有 run-vm 的连接前隔离校验保持不变。
 4. 诊断适配：小改 `digital_shadow/comparison.py` 与 session 的诊断输入，原始 Gaussian SIZE、unknown 定义和模型 RMS 分开保存并按屏展示；不兼容项保留空残差。PRF07/09 定义保持未确认，不标成 RMS。未来图像 RMS 需有独立来源，不能冒用 SIZE PV；当前二阶矩不足以确定非高斯束流的高斯拟合 σ。
