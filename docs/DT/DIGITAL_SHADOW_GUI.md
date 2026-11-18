@@ -88,3 +88,5 @@ HALF_VM_SHADOW_INTEGRATION=1 QT_QPA_PLATFORM=offscreen python3 -m pytest -q \
 ## VM 工作点的入口束流对齐
 
 用户完成实际 GUI 的 VM 一次采集后，已从同次计算的跟踪二阶矩提取 QT02 入口参数，并用原采集快照离线重放。PRF06 的 X、Y 相对残差分别约为 0.0000489% 和 -0.001467%，GUI 归档打开与请求导入检查通过。新请求、原始来源和重放结果保存在 `runs/digital_shadow_vm_alignment/20261117_qt02/`；具体数值、模型适用边界及 GUI 打开步骤见 [入口对齐验收](VM_ENTRANCE_ALIGNMENT_20261117.md)。该请求仅适用于记录中的同一次 VM 计算。
+
+后续[同阶对照验收](VM_ORDER_COMPARISON_20261118.md)已确认一阶矩阵与一阶粒子跟踪一致，原微小残差以动量散布参与的高阶效应为主。此次验收仅增加离线产物和文档，GUI 行为及原结果保持不变。
