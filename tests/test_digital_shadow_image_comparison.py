@@ -182,3 +182,40 @@ def test_session_archive_and_gui_preserve_scalar_rows_and_replay(data, tmp_path,
     artifact.write_text('{}')
     with pytest.raises(ValueError, match="integrity"):
         read_archive(first["run_dir"])
+
+
+def test_image_selector_opens_for_a_result_without_images_and_explains_how_to_proceed(data, tmp_path):
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtTest import QTest
+    from PyQt5.QtWidgets import QApplication
+    from half_linac.src.apps.digital_shadow.main import DigitalShadowWindow
+    directory = tmp_path/"inputs"
+    (directory/"manifest.json").write_text(json.dumps({"schema": "digital_shadow_run_v1", "status": "complete", "input_hash": "fixture"}))
+    (directory/"result.json").write_text(json.dumps({"status": "complete", "input_hash": "fixture", "comparisons": []}))
+    app = QApplication.instance() or QApplication([])
+    window = DigitalShadowWindow(output_root=tmp_path/"gui")
+    try:
+        window.show()
+        window.show_archive(directory)
+        app.processEvents()
+        assert window.comparison_source.isEnabled()
+        QTest.mouseClick(window.comparison_source, Qt.LeftButton)
+        app.processEvents()
+        assert window.comparison_source.view().isVisible()
+        window.comparison_source.hidePopup()
+        window.comparison_source.setCurrentIndex(1)
+        assert window.comparison_hint.isVisible()
+        assert "no saved images" in window.comparison_hint.text()
+        assert "cannot add missing images" in window.comparison_hint.text()
+        assert window.results.rowCount() == 0 and not window.controller.busy
+        window.comparison_source.setCurrentIndex(0)
+        assert not window.comparison_hint.isVisible()
+        window.controller.process = object()
+        window._job_state("Running")
+        assert not window.comparison_source.isEnabled()
+        window.controller.process = None
+        window._job_state("Failed")
+        assert window.comparison_source.isEnabled()
+    finally:
+        window.close()
+        app.processEvents()

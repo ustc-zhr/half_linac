@@ -173,9 +173,12 @@ class DigitalShadowWindow(QMainWindow):
         self.comparison_source = QComboBox(result_panel)
         self.comparison_source.addItem("SIZE / scalar diagnostics", "scalar")
         self.comparison_source.addItem("Image ROI RMS", "image")
-        self.comparison_source.setEnabled(False)
         self.comparison_source.setToolTip("Image RMS comparisons retain their own source, ROI and background. SIZE values keep their original definitions.")
         result_layout.addWidget(self.comparison_source)
+        self.comparison_hint = QLabel(result_panel)
+        self.comparison_hint.setWordWrap(True)
+        self.comparison_hint.hide()
+        result_layout.addWidget(self.comparison_hint)
         self.results = QTableWidget(0, 7, result_panel)
         self.results.setHorizontalHeaderLabels(["Diagnostic", "Predicted RMS", "Observed width", "Residual", "Unit", "Status", "Reason"])
         self.results.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -405,7 +408,7 @@ class DigitalShadowWindow(QMainWindow):
             self._plot([])
             self.details.clear()
             self.current_archive = None
-            self.comparison_source.setEnabled(False)
+            self.comparison_hint.hide()
             self.result_title.setText("Running · result pending")
             self.result_banner.setText(f"{request.beam_basis} entrance beam · {request.beam_provenance}\nCompletion describes calculation and data alignment, not physical accuracy.")
             self.controller.start(request, Path(self.output_edit.text()).expanduser(), mode=mode,
@@ -418,6 +421,7 @@ class DigitalShadowWindow(QMainWindow):
 
     def _job_state(self, state):
         busy = self.controller.busy
+        self.comparison_source.setEnabled(not busy)
         for widget in (self.form, self.path_panel, self.mode, self.import_button, self.export_button, self.example_button, self.run_button):
             widget.setEnabled(not busy)
         self.stop_button.setEnabled(busy and state != "Stopping")
@@ -479,9 +483,7 @@ class DigitalShadowWindow(QMainWindow):
                     self.image_results.setItem(index, column, item)
         else:
             self.result_banner.setToolTip("")
-        self.comparison_source.setEnabled("image_comparisons" in result)
-        if "image_comparisons" not in result:
-            self.comparison_source.setCurrentIndex(0)
+        self.comparison_source.setEnabled(not self.controller.busy)
         self._show_comparison_rows()
         self.details.setPlainText(json.dumps(archive, indent=2, ensure_ascii=False))
         self.status_label.setText("Archive loaded · " + archive["status"])
@@ -491,6 +493,17 @@ class DigitalShadowWindow(QMainWindow):
         archive = self.current_archive or {}
         result = archive.get("result") or {}
         field = "image_comparisons" if self.comparison_source.currentData() == "image" else "comparisons"
+        hint = ""
+        if field == "image_comparisons":
+            if not result:
+                hint = "No completed result loaded. Open an archive in History or run a capture with saved images."
+            elif "image_comparisons" not in result:
+                if archive.get("image_index"):
+                    hint = "This archive has saved images but no image comparisons. In History, use archived inputs for replay, then Run replay."
+                else:
+                    hint = "This result has no saved images. Capture with 'Save one original frame per screen', or open an image archive in History. Replaying this snapshot cannot add missing images."
+        self.comparison_hint.setText(hint)
+        self.comparison_hint.setVisible(bool(hint))
         rows = result.get(field, []) if archive.get("status") in {"complete", "partial"} else []
         self.results.setRowCount(len(rows))
         for row, data in enumerate(rows):

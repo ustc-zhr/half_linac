@@ -48,6 +48,8 @@ VM runtime JSON 留空时使用本 worktree 的默认路径；VM 在其他工作
 
 含图像的新结果可在表格上方切换 **SIZE / scalar diagnostics** 与 **Image ROI RMS**，图形随来源切换。已核验 VM 图像发布和工作点、且 ROI/边缘/像素条件满足时才显示图像差值；受限、real 或合成演练保留空残差。四屏验收示例可无需 VM 直接从 History 打开，见[图像 RMS 比较](IMAGE_COMPARISON_20261118.md)。旧归档仍可查看，新增比较需显式重放。
 
+结果没有图像比较时，下拉框仍可展开：选择 Image ROI RMS 后显示原因和下一步。无原图的旧快照重放不能补出图片；需重新采集并勾选保存原图，或打开已有图像归档。已保存原图但尚无比较的旧归档可使用 History 的 archived inputs 重放生成比较。
+
 没有真机或 VM 时，可直接选择 **Offline real capture demo · NO PV**，点击 **Load real demo**，再点击 **Run offline real demo**。默认四屏请求走正式采集器、快照与 ELEGANT，仅用注入的合成读取器替换 PV。正常结果为预测完成、比较 partial：Gaussian/unknown 与模型 RMS 定义不兼容，残差留空。界面和归档明确标记 SYNTHETIC；详见 [real 离线实现与验收](REAL_CAPTURE_OFFLINE_20261118.md)。
 
 **Real · capture once · READ ONLY** 为现场显式入口，只有点击 **Read real PVs & predict** 才会读取真实 PV；合成演示入口来源会被拒绝用于该模式。没有真机时使用上面的 NO PV 模式，不需要启动 IOC 或 VM。
