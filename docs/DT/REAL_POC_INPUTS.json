@@ -1,7 +1,7 @@
 {
   "schema": "digital_shadow_preparation_checklist_v1",
   "purpose": "Review checklist only; not accepted by the digital shadow CLI",
-  "status": "expanded_real_engineering_scope_prepared",
+  "status": "all_quadrupole_real_capture_scope_prepared",
   "review_date": "2026-11-18",
   "live_real_capture_authorized": false,
   "candidate": {
@@ -24,10 +24,12 @@
       "QT03",
       "QT04"
     ],
-    "selection_reason": "User requested expanded real engineering scope; include all four quadrupoles, four screens and mapped scalar context in QT01-to-PRF09 segment",
+    "selection_reason": "User requested all quadrupoles; capture selection is independent of model segment and ALL_MAIN membership",
     "selection_final": true,
     "execution_status": "Offline structure and GUI import checked; real collector is not implemented; no live connection performed",
-    "physical_precision_validation_ready": false
+    "physical_precision_validation_ready": false,
+    "capture_scope": "All machine profile quadrupoles, plus the existing local screen and context observations",
+    "model_quadrupoles_note": "Only the required inputs of the current QT01-to-PRF09 prediction; not a limit on capture scope"
   },
   "entrance_beam": {
     "energy_mev_kinetic": null,
@@ -59,284 +61,6 @@
     "basis_policy": "Use explicitly sourced assumed inputs for engineering prediction until independent real entrance data exist; never use extracted VM particles as a real measurement",
     "reconstruction_phase": "Future PRF06 exit reconstruction candidate, not current QT01 entrance input"
   },
-  "capture_channels": [
-    {
-      "element": "QT01",
-      "kind": "quad",
-      "channel": "K1",
-      "pv": "IN:MG:L002:QUAD:QT01:K1",
-      "role": "provenance",
-      "physical_unit": "1/m^2"
-    },
-    {
-      "element": "QT01",
-      "kind": "quad",
-      "channel": "K1_total",
-      "pv": "IN:MG:L002:QUAD:QT01:K1:TOTAL",
-      "role": "model_input",
-      "physical_unit": "1/m^2",
-      "model_field": "K1"
-    },
-    {
-      "element": "BPM20",
-      "kind": "bpm",
-      "channel": "x",
-      "pv": "IN:BD:LE14:DBPM:20:BPM_X",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "BPM20",
-      "kind": "bpm",
-      "channel": "y",
-      "pv": "IN:BD:LE14:DBPM:20:BPM_Y",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "BPM20",
-      "kind": "bpm",
-      "channel": "sum",
-      "pv": "IN:BD:LE14:DBPM:20:BPM_S",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "XC21",
-      "kind": "corr",
-      "channel": "current_set",
-      "pv": "IN:PS:LE16:XC21:current:ao",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "XC21",
-      "kind": "corr",
-      "channel": "current_readback",
-      "pv": "IN:PS:LE16:XC21:current:ai",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "YC21",
-      "kind": "corr",
-      "channel": "current_set",
-      "pv": "IN:PS:LE16:YC21:current:ao",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "YC21",
-      "kind": "corr",
-      "channel": "current_readback",
-      "pv": "IN:PS:LE16:YC21:current:ai",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "QT02",
-      "kind": "quad",
-      "channel": "K1",
-      "pv": "IN:MG:L002:QUAD:QT02:K1",
-      "role": "provenance",
-      "physical_unit": "1/m^2"
-    },
-    {
-      "element": "QT02",
-      "kind": "quad",
-      "channel": "K1_total",
-      "pv": "IN:MG:L002:QUAD:QT02:K1:TOTAL",
-      "role": "model_input",
-      "physical_unit": "1/m^2",
-      "model_field": "K1"
-    },
-    {
-      "element": "PRF06",
-      "kind": "flag",
-      "channel": "sigx",
-      "pv": "IN:BD:PRF06:H:SIZE",
-      "role": "width_observation",
-      "physical_unit": "mm",
-      "width_definition": "gaussian_sigma",
-      "definition_source": "User confirmation 2026-11-17",
-      "compatible_with_current_rms_comparison": false
-    },
-    {
-      "element": "PRF06",
-      "kind": "flag",
-      "channel": "sigy",
-      "pv": "IN:BD:PRF06:V:SIZE",
-      "role": "width_observation",
-      "physical_unit": "mm",
-      "width_definition": "gaussian_sigma",
-      "definition_source": "User confirmation 2026-11-17",
-      "compatible_with_current_rms_comparison": false
-    },
-    {
-      "element": "PRF07",
-      "kind": "flag",
-      "channel": "sigx",
-      "pv": "IN:BD:PRF07:H:SIZE",
-      "role": "width_observation",
-      "physical_unit": null,
-      "width_definition": "unknown",
-      "definition_source": null,
-      "compatible_with_current_rms_comparison": false
-    },
-    {
-      "element": "PRF07",
-      "kind": "flag",
-      "channel": "sigy",
-      "pv": "IN:BD:PRF07:V:SIZE",
-      "role": "width_observation",
-      "physical_unit": null,
-      "width_definition": "unknown",
-      "definition_source": null,
-      "compatible_with_current_rms_comparison": false
-    },
-    {
-      "element": "PRF08",
-      "kind": "flag",
-      "channel": "sigx",
-      "pv": "IN:BD:PRF08:H:SIZE",
-      "role": "width_observation",
-      "physical_unit": "mm",
-      "width_definition": "gaussian_sigma",
-      "definition_source": "User confirmation 2026-11-17",
-      "compatible_with_current_rms_comparison": false
-    },
-    {
-      "element": "PRF08",
-      "kind": "flag",
-      "channel": "sigy",
-      "pv": "IN:BD:PRF08:V:SIZE",
-      "role": "width_observation",
-      "physical_unit": "mm",
-      "width_definition": "gaussian_sigma",
-      "definition_source": "User confirmation 2026-11-17",
-      "compatible_with_current_rms_comparison": false
-    },
-    {
-      "element": "QT03",
-      "kind": "quad",
-      "channel": "K1",
-      "pv": "IN:MG:L002:QUAD:QT03:K1",
-      "role": "provenance",
-      "physical_unit": "1/m^2"
-    },
-    {
-      "element": "QT03",
-      "kind": "quad",
-      "channel": "K1_total",
-      "pv": "IN:MG:L002:QUAD:QT03:K1:TOTAL",
-      "role": "model_input",
-      "physical_unit": "1/m^2",
-      "model_field": "K1"
-    },
-    {
-      "element": "QT04",
-      "kind": "quad",
-      "channel": "K1",
-      "pv": "IN:MG:L002:QUAD:QT04:K1",
-      "role": "provenance",
-      "physical_unit": "1/m^2"
-    },
-    {
-      "element": "QT04",
-      "kind": "quad",
-      "channel": "K1_total",
-      "pv": "IN:MG:L002:QUAD:QT04:K1:TOTAL",
-      "role": "model_input",
-      "physical_unit": "1/m^2",
-      "model_field": "K1"
-    },
-    {
-      "element": "BPM21",
-      "kind": "bpm",
-      "channel": "x",
-      "pv": "IN:BD:LE14:DBPM:21:BPM_X",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "BPM21",
-      "kind": "bpm",
-      "channel": "y",
-      "pv": "IN:BD:LE14:DBPM:21:BPM_Y",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "BPM21",
-      "kind": "bpm",
-      "channel": "sum",
-      "pv": "IN:BD:LE14:DBPM:21:BPM_S",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "XC22",
-      "kind": "corr",
-      "channel": "current_set",
-      "pv": "IN:PS:LE16:XC22:current:ao",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "XC22",
-      "kind": "corr",
-      "channel": "current_readback",
-      "pv": "IN:PS:LE16:XC22:current:ai",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "YC22",
-      "kind": "corr",
-      "channel": "current_set",
-      "pv": "IN:PS:LE16:YC22:current:ao",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "YC22",
-      "kind": "corr",
-      "channel": "current_readback",
-      "pv": "IN:PS:LE16:YC22:current:ai",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "ICT02",
-      "kind": "ct",
-      "channel": "charge",
-      "pv": "IN:BD:ICT2:C",
-      "role": "context",
-      "physical_unit": null
-    },
-    {
-      "element": "PRF09",
-      "kind": "flag",
-      "channel": "sigx",
-      "pv": "IN:BD:PRF09:H:SIZE",
-      "role": "width_observation",
-      "physical_unit": null,
-      "width_definition": "unknown",
-      "definition_source": null,
-      "compatible_with_current_rms_comparison": false
-    },
-    {
-      "element": "PRF09",
-      "kind": "flag",
-      "channel": "sigy",
-      "pv": "IN:BD:PRF09:V:SIZE",
-      "role": "width_observation",
-      "physical_unit": null,
-      "width_definition": "unknown",
-      "definition_source": null,
-      "compatible_with_current_rms_comparison": false
-    }
-  ],
   "confirmed_scalar_definitions": [
     {
       "element": "PRF06",
@@ -433,13 +157,14 @@
   "known_implementation_gap": {
     "unit_alias": "Local IOC reference uses m^-2; current snapshot conversion requires exact 1/m^2. Preserve raw EGU and add explicit equivalence handling before any affected real replay",
     "diagnostic_source": "Current comparison only accepts mapped sigx/sigy PVs as declared RMS. Image-derived RMS requires an explicit source adapter; do not relabel Gaussian snapshots or forge a SIZE PV origin",
-    "real_capture": "No real capture CLI exists; planned range is now QT01 entrance to PRF09, 31 scalars; retain run-vm isolation",
-    "vm_prf09": "Real PRF09 SIZE PV mappings exist, but vm.json has no PRF09 sigx/sigy mappings; existing run-vm cannot capture all four screens"
+    "real_capture": "No real collector/CLI exists; revised capture plan covers 68 profile quadrupoles plus 23 local observations, 159 scalar PVs; retain run-vm isolation",
+    "vm_prf09": "Real PRF09 SIZE PV mappings exist, but vm.json has no PRF09 sigx/sigy mappings; existing run-vm cannot capture all four screens",
+    "quad_strength_mapping": "QDU01/02 lack K1_total and K1 aliases current_set; capture native currents without normalized conversion. QHL1..4 are model-only definitions with unresolved real identities"
   },
   "ready_for_real_snapshot_replay": false,
   "ready_for_live_capture": false,
   "next_stage_proposed": {
-    "scope": "Implement explicit read-only real capture for the 31 mapped scalars in QT01-to-PRF09 segment; freeze snapshot before model calculation; validate using injected offline PV readers",
+    "scope": "Implement explicit read-only capture for all profile quadrupoles (136 native scalar channels) plus 23 existing local observations; the QT01-to-PRF09 model consumes only its four normalized readbacks; validate with offline injected readers",
     "model_reference": "QT01 entrance",
     "model_targets": [
       "PRF06",
@@ -450,7 +175,7 @@
     "existing_real_images_required_for_development": false,
     "raw_image_archival_phase": "Future measurement/RMS reconstruction; no existing historical frames requested",
     "live_real_operations_authorized": false,
-    "implementation_status": "Expanded proposal and offline scope checks only; real capture and comparison adapters remain to be implemented",
+    "implementation_status": "All-quadrupole scope and offline mapping inspection complete; real capture and comparison adapters remain to be implemented",
     "review_document": "REAL_CAPTURE_SCOPE_20261118.md"
   },
   "future_reconstruction_candidate": {
@@ -465,7 +190,7 @@
     "selection_final": false,
     "execution_status": "Future measurement candidate only; historical reconstruction cannot be executed"
   },
-  "capture_channel_count": 31,
+  "capture_channel_count": 159,
   "capture_policy": {
     "model_inputs": [
       "QT01/K1_total",
@@ -473,10 +198,11 @@
       "QT03/K1_total",
       "QT04/K1_total"
     ],
-    "model_input_missing_policy": "Do not predict if any required readback is missing or unusable; never fall back to K1 settings",
+    "model_input_missing_policy": "Do not predict if any readback required by the selected model is missing or unusable. Missing unrelated global states are archived separately and do not masquerade as local model failure; never fall back to K1 settings",
     "observation_missing_policy": "Archive quality and reason per channel; preserve unavailable diagnostics, never fabricate residuals",
     "bpm_corrector_ict_role": "Archive context only; no orbit, current-to-kick conversion or transmission prediction in this phase",
-    "source": "Derived from actual model segment and real profile, not a new runtime configuration interface"
+    "source": "All quad devices are derived by kind from machine profile; additional observations are derived from the current local model segment. This remains a review checklist, not a runtime API",
+    "scope_completeness": "Report global capture completeness separately from the availability of the local model inputs"
   },
   "historical_physics_validation_status": "Unavailable from existing historical inputs; user confirmed raw frames and synchronous states do not exist",
   "future_image_artifacts_required": [
@@ -508,5 +234,242 @@
       "saved_frame_path": null,
       "phase": "Future RMS reconstruction and physical validation; not a prerequisite for scalar engineering capture"
     }
-  ]
+  ],
+  "additional_capture_channels": [
+    {
+      "element": "BPM20",
+      "kind": "bpm",
+      "channel": "x",
+      "pv": "IN:BD:LE14:DBPM:20:BPM_X",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "BPM20",
+      "kind": "bpm",
+      "channel": "y",
+      "pv": "IN:BD:LE14:DBPM:20:BPM_Y",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "BPM20",
+      "kind": "bpm",
+      "channel": "sum",
+      "pv": "IN:BD:LE14:DBPM:20:BPM_S",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "XC21",
+      "kind": "corr",
+      "channel": "current_set",
+      "pv": "IN:PS:LE16:XC21:current:ao",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "XC21",
+      "kind": "corr",
+      "channel": "current_readback",
+      "pv": "IN:PS:LE16:XC21:current:ai",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "YC21",
+      "kind": "corr",
+      "channel": "current_set",
+      "pv": "IN:PS:LE16:YC21:current:ao",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "YC21",
+      "kind": "corr",
+      "channel": "current_readback",
+      "pv": "IN:PS:LE16:YC21:current:ai",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "PRF06",
+      "kind": "flag",
+      "channel": "sigx",
+      "pv": "IN:BD:PRF06:H:SIZE",
+      "role": "width_observation",
+      "physical_unit": "mm",
+      "width_definition": "gaussian_sigma",
+      "definition_source": "User confirmation 2026-11-17",
+      "compatible_with_current_rms_comparison": false
+    },
+    {
+      "element": "PRF06",
+      "kind": "flag",
+      "channel": "sigy",
+      "pv": "IN:BD:PRF06:V:SIZE",
+      "role": "width_observation",
+      "physical_unit": "mm",
+      "width_definition": "gaussian_sigma",
+      "definition_source": "User confirmation 2026-11-17",
+      "compatible_with_current_rms_comparison": false
+    },
+    {
+      "element": "PRF07",
+      "kind": "flag",
+      "channel": "sigx",
+      "pv": "IN:BD:PRF07:H:SIZE",
+      "role": "width_observation",
+      "physical_unit": null,
+      "width_definition": "unknown",
+      "definition_source": null,
+      "compatible_with_current_rms_comparison": false
+    },
+    {
+      "element": "PRF07",
+      "kind": "flag",
+      "channel": "sigy",
+      "pv": "IN:BD:PRF07:V:SIZE",
+      "role": "width_observation",
+      "physical_unit": null,
+      "width_definition": "unknown",
+      "definition_source": null,
+      "compatible_with_current_rms_comparison": false
+    },
+    {
+      "element": "PRF08",
+      "kind": "flag",
+      "channel": "sigx",
+      "pv": "IN:BD:PRF08:H:SIZE",
+      "role": "width_observation",
+      "physical_unit": "mm",
+      "width_definition": "gaussian_sigma",
+      "definition_source": "User confirmation 2026-11-17",
+      "compatible_with_current_rms_comparison": false
+    },
+    {
+      "element": "PRF08",
+      "kind": "flag",
+      "channel": "sigy",
+      "pv": "IN:BD:PRF08:V:SIZE",
+      "role": "width_observation",
+      "physical_unit": "mm",
+      "width_definition": "gaussian_sigma",
+      "definition_source": "User confirmation 2026-11-17",
+      "compatible_with_current_rms_comparison": false
+    },
+    {
+      "element": "BPM21",
+      "kind": "bpm",
+      "channel": "x",
+      "pv": "IN:BD:LE14:DBPM:21:BPM_X",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "BPM21",
+      "kind": "bpm",
+      "channel": "y",
+      "pv": "IN:BD:LE14:DBPM:21:BPM_Y",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "BPM21",
+      "kind": "bpm",
+      "channel": "sum",
+      "pv": "IN:BD:LE14:DBPM:21:BPM_S",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "XC22",
+      "kind": "corr",
+      "channel": "current_set",
+      "pv": "IN:PS:LE16:XC22:current:ao",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "XC22",
+      "kind": "corr",
+      "channel": "current_readback",
+      "pv": "IN:PS:LE16:XC22:current:ai",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "YC22",
+      "kind": "corr",
+      "channel": "current_set",
+      "pv": "IN:PS:LE16:YC22:current:ao",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "YC22",
+      "kind": "corr",
+      "channel": "current_readback",
+      "pv": "IN:PS:LE16:YC22:current:ai",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "ICT02",
+      "kind": "ct",
+      "channel": "charge",
+      "pv": "IN:BD:ICT2:C",
+      "role": "context",
+      "physical_unit": null
+    },
+    {
+      "element": "PRF09",
+      "kind": "flag",
+      "channel": "sigx",
+      "pv": "IN:BD:PRF09:H:SIZE",
+      "role": "width_observation",
+      "physical_unit": null,
+      "width_definition": "unknown",
+      "definition_source": null,
+      "compatible_with_current_rms_comparison": false
+    },
+    {
+      "element": "PRF09",
+      "kind": "flag",
+      "channel": "sigy",
+      "pv": "IN:BD:PRF09:V:SIZE",
+      "role": "width_observation",
+      "physical_unit": null,
+      "width_definition": "unknown",
+      "definition_source": null,
+      "compatible_with_current_rms_comparison": false
+    }
+  ],
+  "all_quadrupole_capture": {
+    "selection_source": "Load every machine profile element with kind=quad, independent of chosen model segment",
+    "device_count": 68,
+    "normalized_strength_device_count": 66,
+    "normalized_strength_channels": [
+      "K1",
+      "K1_total"
+    ],
+    "raw_current_only_devices": [
+      "QDU01",
+      "QDU02"
+    ],
+    "raw_current_channels": [
+      "current_set",
+      "current_readback"
+    ],
+    "raw_current_semantics": "QDU01/02 have no K1_total. Their K1 PV equals current_set; archive native current channels, never label those values normalized K1 or invent a conversion",
+    "quad_channel_count": 136,
+    "generated_inventory": "runs/digital_shadow_all_quadrupoles/20261118/all_quad_scope_review.json",
+    "model_only_unresolved_definitions": [
+      "QHL1",
+      "QHL2",
+      "QHL3",
+      "QHL4"
+    ],
+    "model_only_policy": "No matching physical-device profile or real PV mapping; preserve as unresolved identities, do not invent channels or assume aliases"
+  }
 }
