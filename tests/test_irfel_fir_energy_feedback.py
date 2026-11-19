@@ -1040,6 +1040,76 @@ class IrfelProfileTests(unittest.TestCase):
             ],
         )
 
+    def test_operator_phase_limit_applies_to_existing_reference_and_window_audit(self):
+        from half_linac.src.apps.energy_feedback import main as feedback_main
+
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        config = load_runtime_config(context)
+        config["runtime"]["sample_period_s"] = 0.01
+        config["controller"]["control_period_s"] = 0.02
+        source = config["measurement_sources"][config["measurement_source_id"]]
+        actuator = config["control_groups"][0].actuators[0]
+        keys = source["guard_keys"]
+        acc1 = keys["rf.acc1.phase"]
+        buncher = keys["rf.buncher.phase"]
+        values = {
+            key: reading(key, 39.0)
+            for key in (*source["recording_keys"], actuator.setpoint_key, actuator.readback_key)
+        }
+        values.update({
+            acc1: reading(acc1, -179.0),
+            buncher: reading(buncher, 149.0),
+            source["fct_key"]: reading(source["fct_key"], 2000.0),
+            actuator.readback_key: reading(actuator.readback_key, 38.994),
+        })
+        client = FakeClient(dict(values))
+        worker = feedback_main.AcquisitionThread(context, config)
+        samples = []
+        notices = []
+        worker.sample_ready.connect(lambda *sample: samples.append(sample))
+        worker.protection_updated.connect(lambda *notice: notices.append(notice))
+        count = 0
+
+        class Provider:
+            def sample(self):
+                nonlocal count
+                count += 1
+                if count == 2:
+                    worker.request_capture_reference()
+                elif count == 3:
+                    worker.set_control_parameters({"rf_phase_limit_deg": 2.0})
+                    worker.set_feedback_enabled(True)
+                elif count == 4:
+                    worker.set_control_parameters({"rf_phase_limit_deg": 3.0})
+                    client.values[acc1] = reading(acc1, 178.5)
+                    client.values[buncher] = reading(buncher, 146.4)
+                elif count == 6:
+                    client.values[acc1] = values[acc1]
+                    client.values[buncher] = values[buncher]
+                    worker._stop_event.set()
+                return measurement(-3.0, timestamp=float(count))
+
+        with (
+            patch.object(feedback_main, "EpicsPVClient", return_value=client),
+            patch.object(feedback_main, "build_measurement_provider", return_value=Provider()),
+            patch.object(feedback_main.EnergyControlLock, "for_machine"),
+        ):
+            worker.run()
+
+        measure, decision, readbacks, setpoints = samples[3]
+        self.assertEqual(decision.state, "HOLD")
+        self.assertEqual(decision.control_parameters["rf_phase_limit_deg"], 2.0)
+        self.assertEqual(decision.control_parameters["safety_reference.rf.acc1.phase_deg"], -179.0)
+        self.assertEqual(measure.diagnostics["safety.rf.acc1.phase_limit_deg"], 2.0)
+        self.assertEqual(measure.diagnostics["safety.rf.buncher.phase_limit_deg"], 2.0)
+        self.assertIn("ACC1 -2.5° (limit ±2°)", decision.reason)
+        self.assertIn("BUNCHER -2.6° (limit ±2°)", decision.reason)
+        self.assertEqual(setpoints[actuator.id].value, 39.0)
+        self.assertEqual(readbacks[actuator.id].value, 38.994)
+        self.assertEqual([(time, status) for time, status, _ in notices], [(4.0, "HOLD"), (6.0, "OK")])
+
 
 if __name__ == "__main__":
     unittest.main()

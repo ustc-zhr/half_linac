@@ -382,8 +382,21 @@ class FirFeedbackCoordinator:
             self.controller.reset()
 
 
+def shared_rf_phase_limit(source: Mapping[str, Any]) -> float | None:
+    limits = source.get("rf_safety", {}).get("safety", {}).get("phase_limit_deg", {})
+    values = {float(value) for value in limits.values()}
+    if len(values) == 1:
+        value = values.pop()
+        if 0 < value < 180:
+            return value
+    return None
+
+
 def build_rf_hv_safety_checker(
-    source: Mapping[str, Any], aggregate: Mapping[str, float]
+    source: Mapping[str, Any],
+    aggregate: Mapping[str, float],
+    *,
+    phase_limit_deg: float | None = None,
 ) -> SafetyChecker:
     raw = source["rf_safety"]
     safety = raw["safety"]
@@ -407,7 +420,8 @@ def build_rf_hv_safety_checker(
         hv_max_kv=None,
         hv_readback_tolerance_kv=float(safety["hv_readback_tolerance_kv"]),
         phase_limit_deg={
-            str(key): float(value) for key, value in safety["phase_limit_deg"].items()
+            str(key): float(value) if phase_limit_deg is None else phase_limit_deg
+            for key, value in safety["phase_limit_deg"].items()
         },
         require_valid_pv=bool(safety.get("require_valid_pv", True)),
         hold_on_fault=bool(safety.get("hold_on_fault", True)),
@@ -481,6 +495,8 @@ def safety_audit_fields(
     guard_values: Mapping[str, float],
     guard_read_issue: str,
     checker: SafetyChecker | None,
+    *,
+    phase_limit_deg: float | None = None,
 ) -> tuple[dict[str, float | None], dict[str, str], dict[str, float], str]:
     """Build safety diagnostics for a freshly recorded window snapshot."""
 
@@ -507,7 +523,12 @@ def safety_audit_fields(
             aggregate["hv_readback"] - aggregate["hv_setpoint"]
         )
 
-    for channel_id, limit in safety["phase_limit_deg"].items():
+    phase_limits = safety["phase_limit_deg"]
+    if checker is not None:
+        phase_limits = checker.cfg.phase_limit_deg
+    elif phase_limit_deg is not None:
+        phase_limits = dict.fromkeys(phase_limits, phase_limit_deg)
+    for channel_id, limit in phase_limits.items():
         diagnostics[f"safety.rf.{channel_id}.phase_limit_deg"] = float(limit)
         phase_key = f"rf.{channel_id}.phase"
         if checker is not None and phase_key in aggregate:
@@ -531,6 +552,32 @@ def safety_audit_fields(
     if checker is not None and issue:
         errors["safety"] = issue
     return diagnostics, errors, aggregate, issue
+
+
+def window_guard_details(
+    diagnostics: Mapping[str, float | None], source: Mapping[str, Any]
+) -> str:
+    """Describe all numeric violations in the same window safety snapshot."""
+
+    notices = []
+    fct = diagnostics.get(source["fct_key"])
+    fct_min = diagnostics.get("safety.fct_minimum")
+    if fct is not None and fct_min is not None and abs(fct) < fct_min:
+        notices.append(f"|FCT| {abs(fct):.4g} a.u. (min {fct_min:g} a.u.)")
+
+    hv_delta = diagnostics.get("safety.hv_readback_minus_setpoint_kv")
+    hv_limit = diagnostics.get("safety.hv_readback_tolerance_kv")
+    if hv_delta is not None and hv_limit is not None and abs(hv_delta) > hv_limit:
+        notices.append(f"HV deviation {hv_delta:+.4g} kV (limit ±{hv_limit:g} kV)")
+
+    for channel in source["rf_safety"]["rf_channels"]:
+        key = f"safety.rf.{channel['id']}"
+        phase = diagnostics.get(f"{key}.phase_delta_deg")
+        limit = diagnostics.get(f"{key}.phase_limit_deg")
+        if phase is not None and limit is not None and abs(phase) > limit:
+            notices.append(f"{channel['label']} {phase:+.4g}° (limit ±{limit:g}°)")
+
+    return " · ".join(notices)
 
 
 def read_closed_loop_inputs(

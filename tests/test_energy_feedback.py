@@ -1152,7 +1152,7 @@ try:
 
     if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
         raise ImportError("offscreen Qt platform was not explicitly enabled")
-    from PyQt5.QtWidgets import QApplication, QDoubleSpinBox, QGroupBox, QSplitter
+    from PyQt5.QtWidgets import QApplication, QDoubleSpinBox, QGroupBox, QMessageBox, QSplitter
     from half_linac.src.apps.energy_feedback.main import (
         DARK_THEME,
         LIGHT_THEME,
@@ -1299,6 +1299,83 @@ class EnergyFeedbackGuiTests(unittest.TestCase):
             window._set_parameter_editing(False)
             self.assertFalse(window.kp_spin.isEnabled())
         finally:
+            window.close()
+
+    def test_irfel_phase_limit_settings_and_protection_notice(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        try:
+            initial = window._operator_parameters()["rf_phase_limit_deg"]
+            self.assertAlmostEqual(initial, 3.0)
+            window._show_feedback_settings()
+            window.rf_phase_limit_spin.setValue(2.5)
+            self.assertAlmostEqual(window._operator_parameters()["rf_phase_limit_deg"], initial)
+            window.feedback_settings_apply_button.click()
+            self.assertAlmostEqual(window._operator_parameters()["rf_phase_limit_deg"], 2.5)
+            self.assertIn("RF drift ≤ 2.5°", window.feedback_parameter_summary.text())
+
+            window.safety.start_acquisition()
+            window._on_feedback_state(True, "Feedback enabled")
+            self.assertFalse(window.rf_phase_limit_spin.isEnabled())
+            hold = "ACC1 -3.1° (limit ±2.5°) · BUNCHER -3.2° (limit ±2.5°)"
+            window._on_protection_update(100.0, "HOLD", hold)
+            window._on_sample(measurement(), FeedbackDecision("HOLD", hold, 0.0), {})
+            previous = window.protection_value.text()
+            window._on_sample(
+                measurement(),
+                FeedbackDecision("HOLD", "collecting FIR window (1/25)", 0.0),
+                {},
+            )
+            self.assertEqual(window.protection_value.text(), previous)
+            self.assertEqual(window.last_action_value.toolTip(), hold)
+            window._on_protection_update(105.0, "OK", "")
+            self.assertIn("Protection recovered", window.protection_value.text())
+            window._on_protection_update(110.0, "LIMITED", "HV step +0.06 → +0.05 kV")
+            self.assertIn("Step limited", window.protection_value.text())
+        finally:
+            window.close()
+
+    def test_irfel_hv_current_setpoint_and_restore_are_independent_of_readback(self):
+        context = load_app_context(
+            "energy_feedback", machine_id="irfel", control_backend="real"
+        )
+        window = EnergyFeedbackWindow(context, auto_start=False)
+        actuator = window.config["control_groups"][0].actuators[0]
+        targets = []
+        window.worker = SimpleNamespace(isRunning=lambda: True, request_manual_targets=targets.append)
+        decision = FeedbackDecision("SHADOW", "valid shadow suggestion", 0.0)
+        try:
+            window._on_sample(
+                measurement(), decision,
+                {actuator.id: reading(actuator.readback_key, 38.994)},
+                {actuator.id: reading(actuator.setpoint_key, 39.000)},
+            )
+            window._on_sample(
+                measurement(),
+                FeedbackDecision(
+                    "APPLIED", "feedback applied", 0.0,
+                    commands=(ActuatorCommand(actuator.id, 39.0, 0.191, 39.191, "kV"),),
+                ),
+                {actuator.id: reading(actuator.readback_key, 39.184)},
+                {actuator.id: reading(actuator.setpoint_key, 39.191)},
+            )
+            readback, setpoint, button = window._phase_controls[actuator.id]
+            self.assertEqual(readback.text(), "39.184 kV")
+            self.assertEqual(setpoint.text(), "39.191 kV")
+            self.assertEqual(window.initial_phase_value.text(), "Initial Setpoint: 39.000 kV")
+            self.assertAlmostEqual(window._history[f"actuator.{actuator.id}.command_delta"][-1], 0.191)
+            with patch.object(window, "_manual_setpoint", return_value=39.192) as edit:
+                button.click()
+                edit.assert_called_once_with(actuator, 39.191)
+            self.assertFalse(button.isEnabled())
+            window._on_manual_result(FeedbackDecision("APPLIED", "sent", 0.0))
+            with patch.object(QMessageBox, "warning", return_value=QMessageBox.Yes):
+                window.restore_initial_button.click()
+            self.assertEqual(targets, [{actuator.id: 39.192}, {actuator.id: 39.000}])
+        finally:
+            window.worker = None
             window.close()
 
     def test_half_write_controls_are_present_but_safe_until_connected(self):

@@ -154,7 +154,13 @@ def evaluate_shadow(
     if abs(error_mev) <= group.deadband_mev:
         return FeedbackDecision("IDLE", "inside feedback deadband", error_mev, 0.0)
     if abs(error_mev) >= group.action_window_mev:
-        return FeedbackDecision("HOLD", "observable error exceeds action window", error_mev)
+        unit = measurement.observable_unit
+        return FeedbackDecision(
+            "HOLD",
+            f"Observable error exceeds action window: {error_mev:+.4g} {unit} "
+            f"(limit ±{group.action_window_mev:g} {unit})",
+            error_mev,
+        )
 
     timestamp = time.time() if now is None else float(now)
     values: dict[str, float] = {}
@@ -226,7 +232,9 @@ def evaluate_shadow(
         ):
             return FeedbackDecision(
                 "HOLD",
-                f"actuator {actuator.id} proposal exceeds operating or machine limit",
+                f"{actuator.label} proposal exceeds operating or machine limit: "
+                f"{proposed:.6g} {actuator.unit} "
+                f"(range {absolute_limit[0]:g}–{absolute_limit[1]:g} {actuator.unit})",
                 error_mev,
             )
         if actuator.id in origins:
@@ -247,7 +255,9 @@ def evaluate_shadow(
             if abs(session_delta) > actuator.max_session_delta:
                 return FeedbackDecision(
                     "HOLD",
-                    f"actuator {actuator.id} proposal exceeds session limit",
+                    f"{actuator.label} proposal exceeds session limit: "
+                    f"{session_delta:+.4g} {actuator.unit} "
+                    f"(limit ±{actuator.max_session_delta:g} {actuator.unit})",
                     error_mev,
                 )
         commands.append(
