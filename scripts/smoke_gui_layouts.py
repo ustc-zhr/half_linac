@@ -716,6 +716,12 @@ def _run_child(app_name: str) -> None:
         # App cards render their title in a child label, not QPushButton.text().
         if window.rf_phase_scan_button.title_label.text() != "RF Phase Tuning":
             raise AssertionError("Launcher did not expose the RF Phase Tuning label.")
+        window.category_buttons["rf"].click()
+        for search_term in ("Transmission Recovery", "BPM SUM"):
+            window.app_search.setText(search_term)
+            if not window.rf_phase_scan_button.isVisible():
+                raise AssertionError(f"Launcher search did not find RF Phase Tuning for {search_term!r}.")
+        window.app_search.clear()
         window._apply_runtime_selection("irfel", "real")
         switched_log = window.textEdit.toPlainText()
         if "Runtime: machine=irfel, backend=real." not in switched_log:

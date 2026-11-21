@@ -1103,7 +1103,7 @@ APP_DEFINITIONS = {
             "RF Phase–Energy Gain Scan",
             "RF Phase Scan",
         ),
-        "description": "Recover beam transmission and measure RF crest phase and energy gain.",
+        "description": "Transmission Recovery with BPM SUM. Measure RF crest phase and energy gain.",
         "workflow_name": "rf_phase_scan",
         "machine_ids": ("half",),
         "cmd": ["python3", "main.py"],
