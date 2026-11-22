@@ -88,6 +88,7 @@ Common logical channel meanings:
 | `{hv,llrf,ssa,kly}_width_set` | us | writable | `real` | power-source trigger pulse-width setpoint |
 | `{hv,llrf,ssa,kly}_width_readback` | us | read-only | `real` | power-source trigger pulse-width readback |
 | `{hv,llrf,ssa,kly}_enable` | boolean | writable | `real` | power-source trigger enable state |
+| `kly_forward_power` | backend-specific | read-only | `real` | scalar klystron forward RF power |
 | `current` | A | read-only | `real` | beam current measured by an ICT in macro-pulse/micro-pulse operation |
 | `kick` | rad | writable | `vm` | corrector kick used by elegant `KICK` |
 | `angle` | rad | writable | `vm` | bend angle used by elegant `ANGLE` |
@@ -133,6 +134,23 @@ app configs only for external controls that are not yet represented as machine e
 See [`docs/platform/APP_WORKFLOW_CONFIG_PRINCIPLES.md`](../../docs/platform/APP_WORKFLOW_CONFIG_PRINCIPLES.md)
 for the shared layout, scan, limit, derivation, and compatibility conventions used by
 these workflow files.
+
+RF Tuning uses the existing `rf_phase_scan` workflow. The optional `amp_scan`
+section sets the starting values for AMP half-range, point count, settle
+time, samples per point, minimum sample interval, and `execution_mode`.
+Operators can choose Serial or Parallel in Power Scan. Parallel scans run the
+selected stations concurrently, with one distinct AMP setpoint PV per
+station. The profile also sets the time budget for
+fresh samples beyond the requested spacing, the AMP readback tolerance, and
+the relative forward power tolerance. The optional `power_unit` labels the
+native power readings. The app discovers RF stations from the active
+backend's AMP setpoint, AMP readback, and forward power channels. Add each
+accepted station to `amp_scan.approved_stations` by element ID. An empty
+station entry uses its `amplitude_set` limits from `machine.json`. Use
+optional `low` and `high` values to narrow the scan window. A
+`default_selection` of `"all"` preselects all eligible stations on opening
+the scan page. Power Scan and Transmission Recovery use the
+`rf_phase_scan` workflow's `write_control` policy for the active backend.
 
 `calibrations/*.json` contains tracked runtime calibration data that converts a physical
 quantity into a machine-native setpoint. Keep original measurements in `references/`; do not

@@ -2684,7 +2684,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF02",
@@ -2696,7 +2696,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF03",
@@ -2708,7 +2708,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF04",
@@ -2720,7 +2720,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF05",
@@ -2732,7 +2732,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF06",
@@ -2744,7 +2744,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF07",
@@ -2756,7 +2756,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF08",
@@ -2768,7 +2768,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF09",
@@ -2780,7 +2780,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF10",
@@ -2792,7 +2792,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF11",
@@ -2804,7 +2804,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF12",
@@ -2816,7 +2816,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF13",
@@ -2828,7 +2828,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF14",
@@ -2840,7 +2840,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF15",
@@ -2852,7 +2852,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF16",
@@ -2864,7 +2864,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF17",
@@ -2876,7 +2876,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF18",
@@ -2888,7 +2888,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF19",
@@ -2900,7 +2900,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRF20",
@@ -2912,7 +2912,7 @@
         "phase_set": {"low": -180, "high": 180, "unit": "deg"},
         "amplitude_set": {"low": 0, "high": 100, "unit": "%"}
       },
-      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback"]
+      "logical_channels": ["phase_set", "phase_readback", "amplitude_set", "amplitude_readback", "kly_forward_power"]
     },
     {
       "id": "LLRFPB",

@@ -1902,121 +1902,141 @@
       "phase_set": "IN:MW:LLRF01:SET_PHASE",
       "phase_readback": "IN:MW:LLRF01:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF01:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF01:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF01:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF01:GET_CH2_POWER"
     },
     "LLRF02": {
       "phase_set": "IN:MW:LLRF02:SET_PHASE",
       "phase_readback": "IN:MW:LLRF02:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF02:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF02:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF02:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF02:GET_CH2_POWER"
     },
     "LLRF03": {
       "phase_set": "IN:MW:LLRF03:SET_PHASE",
       "phase_readback": "IN:MW:LLRF03:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF03:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF03:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF03:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF03:GET_CH2_POWER"
     },
     "LLRF04": {
       "phase_set": "IN:MW:LLRF04:SET_PHASE",
       "phase_readback": "IN:MW:LLRF04:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF04:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF04:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF04:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF04:GET_CH2_POWER"
     },
     "LLRF05": {
       "phase_set": "IN:MW:LLRF05:SET_PHASE",
       "phase_readback": "IN:MW:LLRF05:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF05:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF05:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF05:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF05:GET_CH2_POWER"
     },
     "LLRF06": {
       "phase_set": "IN:MW:LLRF06:SET_PHASE",
       "phase_readback": "IN:MW:LLRF06:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF06:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF06:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF06:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF06:GET_CH2_POWER"
     },
     "LLRF07": {
       "phase_set": "IN:MW:LLRF07:SET_PHASE",
       "phase_readback": "IN:MW:LLRF07:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF07:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF07:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF07:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF07:GET_CH2_POWER"
     },
     "LLRF08": {
       "phase_set": "IN:MW:LLRF08:SET_PHASE",
       "phase_readback": "IN:MW:LLRF08:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF08:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF08:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF08:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF08:GET_CH2_POWER"
     },
     "LLRF09": {
       "phase_set": "IN:MW:LLRF09:SET_PHASE",
       "phase_readback": "IN:MW:LLRF09:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF09:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF09:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF09:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF09:GET_CH2_POWER"
     },
     "LLRF10": {
       "phase_set": "IN:MW:LLRF10:SET_PHASE",
       "phase_readback": "IN:MW:LLRF10:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF10:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF10:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF10:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF10:GET_CH2_POWER"
     },
     "LLRF11": {
       "phase_set": "IN:MW:LLRF11:SET_PHASE",
       "phase_readback": "IN:MW:LLRF11:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF11:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF11:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF11:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF11:GET_CH2_POWER"
     },
     "LLRF12": {
       "phase_set": "IN:MW:LLRF12:SET_PHASE",
       "phase_readback": "IN:MW:LLRF12:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF12:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF12:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF12:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF12:GET_CH2_POWER"
     },
     "LLRF13": {
       "phase_set": "IN:MW:LLRF13:SET_PHASE",
       "phase_readback": "IN:MW:LLRF13:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF13:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF13:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF13:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF13:GET_CH2_POWER"
     },
     "LLRF14": {
       "phase_set": "IN:MW:LLRF14:SET_PHASE",
       "phase_readback": "IN:MW:LLRF14:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF14:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF14:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF14:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF14:GET_CH2_POWER"
     },
     "LLRF15": {
       "phase_set": "IN:MW:LLRF15:SET_PHASE",
       "phase_readback": "IN:MW:LLRF15:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF15:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF15:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF15:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF15:GET_CH2_POWER"
     },
     "LLRF16": {
       "phase_set": "IN:MW:LLRF16:SET_PHASE",
       "phase_readback": "IN:MW:LLRF16:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF16:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF16:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF16:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF16:GET_CH2_POWER"
     },
     "LLRF17": {
       "phase_set": "IN:MW:LLRF17:SET_PHASE",
       "phase_readback": "IN:MW:LLRF17:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF17:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF17:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF17:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF17:GET_CH2_POWER"
     },
     "LLRF18": {
       "phase_set": "IN:MW:LLRF18:SET_PHASE",
       "phase_readback": "IN:MW:LLRF18:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF18:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF18:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF18:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF18:GET_CH2_POWER"
     },
     "LLRF19": {
       "phase_set": "IN:MW:LLRF19:SET_PHASE",
       "phase_readback": "IN:MW:LLRF19:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF19:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF19:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF19:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF19:GET_CH2_POWER"
     },
     "LLRF20": {
       "phase_set": "IN:MW:LLRF20:SET_PHASE",
       "phase_readback": "IN:MW:LLRF20:GET_PHASE",
       "amplitude_set": "IN:MW:LLRF20:SET_AMP",
-      "amplitude_readback": "IN:MW:LLRF20:GET_AMP"
+      "amplitude_readback": "IN:MW:LLRF20:GET_AMP",
+      "kly_forward_power": "IN:MW:LLRF20:GET_CH2_POWER"
     },
     "LLRFPB": {
       "phase_set": "IN:MW:LLRFPB:SET_PHASE",

@@ -29,6 +29,7 @@ from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.apps.rf_phase_scan.energy_match_tuner import (
     RFPhaseEnergyMatcher, reference_x_pixel,
 )
+from half_linac.src.apps.rf_phase_scan.amp_scan_ui import AmpScanPage
 from half_linac.src.apps.rf_phase_scan.executor import (
     RFPhaseScanCallbacks,
     RFPhaseScanExecutor,
@@ -128,11 +129,11 @@ QMainWindow, QDialog, QWidget#centralwidget {{ background: {p['window']}; color:
 QTabWidget#modeTabs {{ background: {p['window']}; }}
 QTabWidget#modeTabs::pane {{ background: {p['window']}; border: none; }}
 QTabBar#modeTabBar {{ background: {p['window']}; }}
-QTabBar#modeTabBar::tab {{ background: {p['panel']}; color: {p['muted']}; border: 1px solid {p['border']}; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; min-width: 170px; padding: 7px 22px; margin-right: 4px; font-weight: 700; }}
+QTabBar#modeTabBar::tab {{ background: {p['panel']}; color: {p['muted']}; border: 1px solid {p['border']}; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; min-width: 180px; padding: 7px 22px; margin-right: 4px; font-size: 13px; font-weight: 700; }}
 QTabBar#modeTabBar::tab:hover {{ background: {p['button_hover']}; color: {p['text']}; }}
 QTabBar#modeTabBar::tab:selected {{ background: {p['summary']}; color: {p['text']}; border-bottom: 2px solid {p['accent']}; }}
-QSplitter#recoverySplitter::handle {{ background: {p['window']}; }}
-QSplitter#recoverySplitter::handle:hover {{ background: {p['border']}; }}
+QSplitter#scanSplitter::handle {{ background: {p['window']}; }}
+QSplitter#scanSplitter::handle:hover {{ background: {p['border']}; }}
 QFrame#summaryPanel {{ background: {p['summary']}; border: 1px solid {p['border']}; border-radius: 14px; }}
 QFrame#workspaceCard, QFrame#plotCard {{ background: {p['panel']}; border: 1px solid {p['border']}; border-radius: 14px; }}
 QFrame#parameterCard {{ background: {p['panel']}; border: 1px solid {p['border']}; border-radius: 10px; }}
@@ -164,6 +165,7 @@ QToolButton#themeToggleButton:hover {{ background: {p['button_hover']}; }}
 QToolButton#themeToggleButton:pressed {{ background: {p['input']}; }}
 QTableWidget {{ background: {p['input']}; color: {p['text']}; border: 1px solid {p['border']}; gridline-color: {p['border']}; selection-background-color: {p['button_hover']}; }}
 QHeaderView::section {{ background: {p['summary']}; color: {p['text']}; border: none; border-right: 1px solid {p['border']}; border-bottom: 1px solid {p['border']}; padding: 5px; font-weight: 700; }}
+QHeaderView#scanTableHeader::section {{ font-size: 13px; }}
 QCheckBox {{ color: {p['text']}; font-size: 12px; font-weight: 600; spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {p['border']}; border-radius: 4px; background-color: {p['input']}; }}
 QCheckBox::indicator:checked {{ background-color: {p['accent']}; border: 2px solid {p['text']}; }}
@@ -574,10 +576,21 @@ class RFPhaseScanWindow(QMainWindow):
         self.resize(1500, 1040)
         self.context = load_app_context("rf_phase_scan")
         self.current_theme = resolve_initial_theme()
-        self.setWindowTitle(
-            f"{self.context.machine.display_name} RF Phase Tuning"
-        )
+        self.setWindowTitle(f"{self.context.machine.display_name} RF Tuning")
         self.config = dict(get_workflow(self.context.profile, "rf_phase_scan"))
+        self.runtime_paths = resolve_app_runtime_paths(Path(__file__).resolve().parent, self.context)
+        self.thread = None
+        self.batch_dialog = None
+        self.recovery_page = None
+        self.crest_page = None
+        self.amp_page = None
+        self._phase_selection = None
+        self._batch_selection = None
+        self.scan_enabled = workflow_writes_allowed(self.context, "rf_phase_scan")
+        if "scan" not in self.config:
+            self._build_tuning_tabs()
+            self._apply_theme()
+            return
         self.station = self.config
         self.batch_config = dict(self.config.get("batch", {}))
         self.diagnostics = dict(self.config["diagnostics"])
@@ -588,10 +601,6 @@ class RFPhaseScanWindow(QMainWindow):
         )
         self.image_flip_y = diagnostic_geometry.flip_y
         self.preview_energy_mev = float(self.config.get("preview_energy_mev", 2200.0))
-        self.scan_enabled = workflow_writes_allowed(
-            self.context,
-            "rf_phase_scan",
-        )
         self.targets = []
         if self.scan_enabled and self.config.get("enabled", True):
             for element in list_elements(self.context, kind="rf"):
@@ -695,7 +704,6 @@ class RFPhaseScanWindow(QMainWindow):
         self.background_image = None
         self.background_metadata = {}
         self.background_image_path = None
-        self.runtime_paths = resolve_app_runtime_paths(Path(__file__).resolve().parent, self.context)
         self.runtime_paths["background_image_path"] = self.runtime_paths["latest_dir"] / "background.npy"
         self.runtime_paths["background_metadata_path"] = self.runtime_paths["latest_dir"] / "background.json"
         roi_geometry = resolve_element_image_geometry(self.context, self.diagnostics["flag_element"], self.context.control_backend.name)
@@ -915,34 +923,8 @@ class RFPhaseScanWindow(QMainWindow):
         workspace.addLayout(control_column)
         workspace.addWidget(plot_card, 1)
         root.addLayout(workspace, 1)
-        self.thread = None
-        self.batch_dialog = None
-        self.mode_tabs = QTabWidget(self)
-        self.mode_tabs.setObjectName("modeTabs")
-        mode_tab_bar = self.mode_tabs.tabBar()
-        mode_tab_bar.setObjectName("modeTabBar")
-        mode_tab_bar.setElideMode(Qt.ElideNone)
-        mode_tab_bar.setUsesScrollButtons(False)
-        self.recovery_page = None
-        recovery_config = self.config.get("transmission_recovery")
-        if (
-            isinstance(recovery_config, dict)
-            and recovery_config.get("enabled", False)
-        ):
-            self.recovery_page = TransmissionRecoveryPage(
-                window=self,
-                context=self.context,
-                workflow=self.config,
-                runtime_paths=self.runtime_paths,
-                write_enabled=self.scan_enabled,
-                parent=self.mode_tabs,
-            )
-            self.mode_tabs.addTab(
-                self.recovery_page, "  Transmission Recovery  "
-            )
-        self.mode_tabs.addTab(body, "Crest && Gain")
-        self.mode_tabs.setCurrentIndex(0)
-        self.setCentralWidget(self.mode_tabs)
+        self.crest_page = body
+        self._build_tuning_tabs()
         self.points_data = []
         self.last_result = {}
         self.last_review_path = None
@@ -975,6 +957,86 @@ class RFPhaseScanWindow(QMainWindow):
         self.auto_tune_lock_trigger.setSuffix(" mm")
         self.auto_tune_center_tolerance.setSuffix(" mm")
         self.tracking.setSuffix(" MeV")
+
+    def _build_tuning_tabs(self):
+        self.tuning_tabs = QTabWidget(self)
+        self.tuning_tabs.setObjectName("modeTabs")
+        tab_bar = self.tuning_tabs.tabBar()
+        tab_bar.setObjectName("modeTabBar")
+        tab_bar.setExpanding(False)
+        tab_bar.setElideMode(Qt.ElideNone)
+        if self.crest_page is not None:
+            recovery_config = self.config.get("transmission_recovery")
+            if isinstance(recovery_config, dict) and recovery_config.get("enabled", False):
+                self.recovery_page = TransmissionRecoveryPage(
+                    window=self,
+                    context=self.context,
+                    workflow=self.config,
+                    runtime_paths=self.runtime_paths,
+                    write_enabled=self.scan_enabled,
+                    parent=self.tuning_tabs,
+                )
+                self.tuning_tabs.addTab(self.recovery_page, "Transmission Recovery")
+            self.tuning_tabs.addTab(self.crest_page, "Crest && Gain")
+        amp_config = self.config.get("amp_scan")
+        if amp_config is not None:
+            self.amp_page = AmpScanPage(
+                self.context, amp_config, self.runtime_paths["runs_dir"], self.scan_enabled,
+                PALETTES[self.current_theme], parent=self.tuning_tabs,
+            )
+            self.tuning_tabs.addTab(self.amp_page, "Power Scan")
+            self.amp_page.busy_changed.connect(self._refresh_tuning_tabs)
+            self.amp_page.applied.connect(self._queue_phase_selection)
+        self.tuning_tabs.currentChanged.connect(self._select_phase_targets)
+        self.setCentralWidget(self.tuning_tabs)
+
+    def _amp_busy(self):
+        return self.amp_page is not None and self.amp_page.is_running()
+
+    def _recovery_busy(self):
+        return self.recovery_page is not None and (
+            self.recovery_page.worker is not None or self.recovery_page.restore_worker is not None
+        )
+
+    def _phase_busy(self):
+        return (
+            self.thread is not None
+            or (self.batch_dialog is not None and self.batch_dialog.worker is not None)
+            or self._recovery_busy()
+        )
+
+    def _refresh_tuning_tabs(self, *_):
+        amp_busy = self._amp_busy()
+        for page, busy in (
+            (self.recovery_page, amp_busy),
+            (self.crest_page, amp_busy or self._recovery_busy()),
+            (self.amp_page, self._phase_busy()),
+        ):
+            if page is not None:
+                self.tuning_tabs.setTabEnabled(self.tuning_tabs.indexOf(page), not busy)
+
+    def _queue_phase_selection(self, stations):
+        self._phase_selection = stations
+
+    def _select_phase_targets(self, _index):
+        if self.crest_page is None or self.tuning_tabs.currentWidget() not in (
+            self.recovery_page, self.crest_page
+        ):
+            return
+        if self._phase_selection is None:
+            return
+        stations, self._phase_selection = self._phase_selection, None
+        if self.recovery_page is not None:
+            self.recovery_page.select_stations(stations)
+        for station in stations:
+            index = self.combo.findText(station)
+            if index >= 0:
+                self.combo.setCurrentIndex(index)
+                break
+        if self.batch_dialog is None:
+            self._batch_selection = stations
+        else:
+            self.batch_dialog.select_stations(stations)
 
     @staticmethod
     def _spin(value, low, high):
@@ -1514,6 +1576,10 @@ class RFPhaseScanWindow(QMainWindow):
     def _apply_theme(self):
         palette = PALETTES.get(self.current_theme, PALETTES["dark"])
         self.setStyleSheet(build_style(palette))
+        if self.amp_page is not None:
+            self.amp_page.apply_theme(palette)
+        if self.crest_page is None:
+            return
         self.status_panel.apply_theme(palette)
         self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
         for widget in (self.plot, self.image_plot):
@@ -2291,7 +2357,7 @@ class RFPhaseScanWindow(QMainWindow):
         )
 
     def _show_batch_dialog(self):
-        if self.thread is not None or (
+        if self._amp_busy() or self.thread is not None or (
             self.recovery_page is not None
             and self.recovery_page.is_running()
         ):
@@ -2300,11 +2366,15 @@ class RFPhaseScanWindow(QMainWindow):
 
         if self.batch_dialog is None:
             self.batch_dialog = RFPhaseBatchDialog(self)
+            if self._batch_selection is not None:
+                self.batch_dialog.select_stations(self._batch_selection)
+                self._batch_selection = None
         self.batch_dialog.show()
         self.batch_dialog.raise_()
         self.batch_dialog.activateWindow()
 
     def _set_batch_running(self, running):
+        self._refresh_tuning_tabs()
         for widget in (
             self.combo, self.phase_mode, self.low, self.high, self.points,
             self.settle, self.tracking, self.measurement_samples,
@@ -2322,7 +2392,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.review_button.setEnabled(not running and bool(self.points_data))
 
     def _set_recovery_running(self, running):
-        self.mode_tabs.setTabEnabled(1, not running)
+        self._refresh_tuning_tabs()
         self.start.setEnabled(
             not running and self.thread is None and bool(self.targets)
         )
@@ -2379,7 +2449,7 @@ class RFPhaseScanWindow(QMainWindow):
             self.status_panel.set_item("restore", "Failed", "warning")
 
     def start_scan(self):
-        if not self.targets or self.thread is not None: return
+        if self._amp_busy() or not self.targets or self.thread is not None: return
         if (
             self.recovery_page is not None
             and self.recovery_page.is_running()
@@ -2503,6 +2573,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.thread.progress.connect(self._update_progress)
         self.thread.done.connect(self.finished)
         self._set_scan_status("Preparing")
+        self._refresh_tuning_tabs()
         self.thread.start()
         self.start.setEnabled(False)
         self.batch_button.setEnabled(False)
@@ -2562,6 +2633,7 @@ class RFPhaseScanWindow(QMainWindow):
     def finished(self, result):
         self._set_scan_status(str(result.get("status", "FAILED")))
         self.stop.setEnabled(False); self.start.setEnabled(True); self.thread = None
+        self._refresh_tuning_tabs()
         self.batch_button.setEnabled(
             bool(self.targets) and bool(self.batch_config.get("enabled", False))
         )
@@ -2590,6 +2662,9 @@ class RFPhaseScanWindow(QMainWindow):
             widget.setEnabled(True)
 
     def closeEvent(self, event):
+        if self._amp_busy() and not self.amp_page.stop_and_wait(15000):
+            event.ignore()
+            return
         if (
             self.recovery_page is not None
             and self.recovery_page.is_running()

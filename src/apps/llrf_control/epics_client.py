@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import epics
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
+
+from half_linac.src.shared.machine_profile import EnergyControlLock
 
 from .profile_runtime import LlrfGroup
 
@@ -66,15 +70,24 @@ class WriteWorker(QThread):
         pv_name: str,
         value: float,
         parent: QObject | None = None,
+        *,
+        machine_id: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.quantity = quantity
         self.pv_name = pv_name
         self.value = float(value)
+        self.machine_id = machine_id
 
     def run(self) -> None:
         try:
-            success = bool(epics.caput(self.pv_name, self.value, wait=True, timeout=5))
+            lock = nullcontext()
+            if self.machine_id is not None and self.quantity == "amplitude":
+                lock = EnergyControlLock.for_machine(
+                    self.machine_id, {"operation": "Manual LLRF AMP write"}
+                )
+            with lock:
+                success = bool(epics.caput(self.pv_name, self.value, wait=True, timeout=5))
             error = "" if success else "EPICS write did not complete."
         except Exception as exc:
             success = False
@@ -100,8 +113,14 @@ class SnapshotWorker(QThread):
         current = "Snapshot validation"
         attempted = False
         index = -1
+        lock = None
         try:
             values = validate_snapshot(self.runtime, self.data) if self.data is not None else []
+            if self.data is not None:
+                lock = EnergyControlLock.for_machine(
+                    self.runtime.context.machine.id, {"operation": "Restore LLRF snapshot"}
+                )
+                lock.acquire()
             epics.ca.use_initial_context()
             for index, (device, name, spec) in enumerate(entries):
                 current = f"{device} {name} ({spec.setpoint_pv})"
@@ -139,3 +158,6 @@ class SnapshotWorker(QThread):
             self.message = (f"Failed: {current}\n{exc}{uncertain}\n\nCompleted ({len(completed)}):\n"
                             + ("\n".join(completed) or "None")
                             + "\n\nNot executed:\n" + ("\n".join(remaining) or "None"))
+        finally:
+            if lock is not None:
+                lock.release()

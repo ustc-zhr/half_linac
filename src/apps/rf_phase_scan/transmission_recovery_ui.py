@@ -5,29 +5,24 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
     QDoubleSpinBox,
-    QFrame,
-    QGridLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QSpinBox,
-    QSplitter,
     QTableWidget,
     QTableWidgetItem,
-    QToolBar,
-    QVBoxLayout,
     QWidget,
 )
 
-from half_linac.src.apps.rf_phase_scan.mplwidget import MplWidget
+from half_linac.src.apps.rf_phase_scan.scan_widgets import (
+    parameter_card, prepare_scan_axes, scan_actions, scan_page_layout,
+    scan_workspace, station_selector,
+)
 from half_linac.src.apps.rf_phase_scan.transmission_recovery import (
     TransmissionRecoveryCallbacks,
     TransmissionRecoveryRunner,
@@ -149,29 +144,7 @@ class TransmissionRecoveryPage(QWidget):
             "border": "#24333d",
         }
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(12, 10, 12, 12)
-        root.setSpacing(8)
-
-        summary_card = QFrame(self)
-        summary_card.setObjectName("summaryPanel")
-        summary_layout = QVBoxLayout(summary_card)
-        summary_layout.setContentsMargins(12, 8, 12, 8)
-        title = QLabel("Transmission Recovery", summary_card)
-        title.setObjectName("summaryTitle")
-        summary_layout.addWidget(title)
-        self.summary = QLabel(summary_card)
-        self.summary.setProperty("role", "muted")
-        self.summary.setWordWrap(True)
-        summary_layout.addWidget(self.summary)
-        root.addWidget(summary_card)
-
-        controls = QFrame(self)
-        controls.setObjectName("parameterCard")
-        controls_layout = QGridLayout(controls)
-        controls_layout.setContentsMargins(12, 8, 12, 8)
-        controls_layout.setHorizontalSpacing(14)
-        controls_layout.setVerticalSpacing(4)
+        root, self.summary = scan_page_layout(self, "Transmission Recovery")
         self.half_range = self._double_spin(
             self.default_settings.half_range_deg, 0.1, 180.0
         )
@@ -200,95 +173,28 @@ class TransmissionRecoveryPage(QWidget):
             ("Samples / point", self.samples),
             ("Sample interval", self.sample_interval),
         )
-        for column, (label, widget) in enumerate(parameter_widgets):
-            controls_layout.addWidget(QLabel(label, controls), 0, column)
-            controls_layout.addWidget(widget, 1, column)
-        controls_layout.setColumnStretch(len(parameter_widgets), 1)
-        root.addWidget(controls)
+        root.addWidget(parameter_card(self, parameter_widgets))
 
-        splitter = QSplitter(Qt.Horizontal, self)
-        splitter.setObjectName("recoverySplitter")
-        splitter.setChildrenCollapsible(False)
-        splitter.setHandleWidth(6)
-
-        stage_panel = QFrame(splitter)
-        stage_panel.setObjectName("plotCard")
-        stage_panel.setMinimumWidth(730)
-        stage_layout = QVBoxLayout(stage_panel)
-        stage_layout.setContentsMargins(10, 8, 10, 10)
-        stage_layout.setSpacing(6)
-        stage_header = QHBoxLayout()
-        stage_title = QLabel(
-            f"Stages · {len(self.candidates)} configured", stage_panel
-        )
-        stage_title.setObjectName("cardTitle")
         self.all_button = QPushButton("All", self)
         self.clear_button = QPushButton("Clear", self)
-        self.all_button.setProperty("compact", True)
-        self.clear_button.setProperty("compact", True)
-        stage_header.addWidget(stage_title)
-        stage_header.addStretch(1)
-        stage_header.addWidget(self.all_button)
-        stage_header.addWidget(self.clear_button)
-        stage_layout.addLayout(stage_header)
-
-        self.table = QTableWidget(
-            len(self.candidates), len(self.COLUMNS), stage_panel
-        )
+        self.table = QTableWidget(len(self.candidates), len(self.COLUMNS), self)
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.table.setMinimumWidth(710)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(28)
-        header = self.table.horizontalHeader()
-        column_widths = (46, 78, 112, 82, 82, 98, 94)
-        for column, width in enumerate(column_widths):
-            header.setSectionResizeMode(column, QHeaderView.Fixed)
-            self.table.setColumnWidth(column, width)
-        header.setSectionResizeMode(7, QHeaderView.Stretch)
-        header.setStretchLastSection(True)
+        splitter, self.plot, self.plot_title = scan_workspace(
+            self, self.table, f"Stages · {len(self.candidates)} configured",
+            (46, 78, 112, 82, 82, 98, 94), (self.all_button, self.clear_button),
+            "Current phase scan",
+        )
         self.stage_checkboxes: list[QCheckBox] = []
         for row, stage in enumerate(self.candidates):
-            selector_cell = QWidget(self.table)
-            selector_layout = QHBoxLayout(selector_cell)
-            selector_layout.setContentsMargins(0, 0, 0, 0)
-            selector = QCheckBox(selector_cell)
-            selector.setProperty("stageSelector", True)
-            selector.setChecked(True)
-            selector.setFocusPolicy(Qt.NoFocus)
+            selector = station_selector(self.table, row, checked=True)
             selector.stateChanged.connect(lambda _state: self._update_summary())
-            selector_layout.addWidget(selector, 0, Qt.AlignCenter)
-            self.table.setCellWidget(row, 0, selector_cell)
             self.stage_checkboxes.append(selector)
             self.table.setItem(row, 1, QTableWidgetItem(stage.rf_element))
             self.table.setItem(row, 2, QTableWidgetItem(stage.target_bpm))
             for column in range(3, len(self.COLUMNS)):
                 self.table.setItem(row, column, QTableWidgetItem("—"))
-        stage_layout.addWidget(self.table, 1)
-
-        plot_panel = QFrame(splitter)
-        plot_panel.setObjectName("plotCard")
-        plot_panel.setMinimumWidth(400)
-        plot_layout = QVBoxLayout(plot_panel)
-        plot_layout.setContentsMargins(12, 10, 12, 10)
-        self.plot_title = QLabel("Current phase scan", plot_panel)
-        self.plot_title.setProperty("role", "field")
-        plot_layout.addWidget(self.plot_title)
-        self.plot = MplWidget(plot_panel)
-        for toolbar in self.plot.findChildren(QToolBar):
-            toolbar.hide()
-        plot_layout.addWidget(self.plot, 1)
-        splitter.addWidget(stage_panel)
-        splitter.addWidget(plot_panel)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([760, 700])
         root.addWidget(splitter, 1)
 
-        actions = QHBoxLayout()
-        actions.setSpacing(8)
         self.start_button = QPushButton("Start Selected", self)
         self.start_button.setObjectName("startButton")
         self.stop_button = QPushButton("Stop", self)
@@ -296,15 +202,9 @@ class TransmissionRecoveryPage(QWidget):
         self.restore_button = QPushButton("Restore Snapshot", self)
         self.stop_button.setEnabled(False)
         self.restore_button.setEnabled(False)
-        actions.addWidget(self.start_button)
-        actions.addWidget(self.stop_button)
-        actions.addWidget(self.restore_button)
-        actions.addSpacing(10)
-        self.progress = QProgressBar(self)
-        self.progress.setRange(0, len(self.candidates))
-        self.progress.setValue(0)
-        self.progress.setMinimumWidth(320)
-        actions.addWidget(self.progress, 1)
+        actions, self.progress = scan_actions(
+            self, (self.start_button, self.stop_button, self.restore_button), len(self.candidates)
+        )
         root.addLayout(actions)
 
         self.all_button.clicked.connect(lambda: self._select_all(True))
@@ -360,6 +260,13 @@ class TransmissionRecoveryPage(QWidget):
             signals_were_blocked = selector.blockSignals(True)
             selector.setChecked(bool(checked))
             selector.blockSignals(signals_were_blocked)
+        self._update_summary()
+
+    def select_stations(self, stations):
+        for stage, selector in zip(self.candidates, self.stage_checkboxes):
+            previous = selector.blockSignals(True)
+            selector.setChecked(stage.rf_element in stations)
+            selector.blockSignals(previous)
         self._update_summary()
 
     def _settings(self):
@@ -434,6 +341,7 @@ class TransmissionRecoveryPage(QWidget):
             self.worker is not None
             or self.restore_worker is not None
             or not self.write_enabled
+            or self.window._amp_busy()
             or self.window.thread is not None
             or (
                 self.window.batch_dialog is not None
@@ -599,6 +507,7 @@ class TransmissionRecoveryPage(QWidget):
             or self.last_settings is None
             or self.worker is not None
             or self.restore_worker is not None
+            or self.window._amp_busy()
         ):
             return
         if QMessageBox.question(
@@ -658,21 +567,12 @@ class TransmissionRecoveryPage(QWidget):
         self._draw_plot()
 
     def _draw_plot(self):
-        axes = self.plot.axes
-        figure = self.plot.fig
-        axes.clear()
-        axes.set_axis_on()
-        figure.patch.set_facecolor(self.palette["plot"])
-        axes.set_facecolor(self.palette["plot"])
-        axes.grid(True, color=self.palette["grid"], alpha=0.6)
-        axes.tick_params(colors=self.palette["muted"])
-        for spine in axes.spines.values():
-            spine.set_color(self.palette["border"])
         valid = [
             point
             for point in self.current_points
             if point.get("median_sum") is not None
         ]
+        axes = prepare_scan_axes(self.plot, self.palette, has_data=bool(valid))
         if valid:
             axes.set_xlabel("Phase offset (deg)", color=self.palette["muted"])
             axes.set_ylabel("BPM SUM median", color=self.palette["muted"])
@@ -695,17 +595,6 @@ class TransmissionRecoveryPage(QWidget):
                 s=55,
                 zorder=3,
             )
-        else:
-            axes.set_axis_off()
-            axes.text(
-                0.5,
-                0.5,
-                "Waiting for scan data",
-                ha="center",
-                va="center",
-                transform=axes.transAxes,
-                color=self.palette["muted"],
-            )
-        figure.tight_layout()
+        self.plot.fig.tight_layout()
         self.plot.canvas.draw_idle()
 

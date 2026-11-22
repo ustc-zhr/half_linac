@@ -1389,10 +1389,15 @@ def _validate_basic_app_support(
         if not isinstance(workflow, Mapping):
             raise MachineProfileError("rf_phase_scan requires apps/rf_phase_scan.json.")
         if workflow.get("enabled", True) is False:
-            return
+            raise MachineProfileError("RF Tuning is disabled for this machine profile.")
         backends = tuple(normalize_mode(v, "workflows.rf_phase_scan.control_backends[]") for v in _expect_string_list(workflow.get("control_backends"), "workflows.rf_phase_scan.control_backends"))
         if control_backend not in backends:
             raise MachineProfileError(f"rf_phase_scan does not support backend {control_backend!r}.")
+        amp_scan = workflow.get("amp_scan")
+        if amp_scan is not None:
+            _expect_mapping(amp_scan, "workflows.rf_phase_scan.amp_scan")
+            if "scan" not in workflow:
+                return
         write_control = workflow.get("write_control", {})
         write_backends = tuple(
             backend

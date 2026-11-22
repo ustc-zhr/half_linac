@@ -1576,16 +1576,17 @@ class MachineProfileTests(unittest.TestCase):
             with self.subTest(element_id=element_id):
                 element = profile.get_element(element_id)
                 self.assertEqual(element.kind, "rf")
-                self.assertEqual(
-                    set(element.channels),
-                    {
-                        "phase_set",
-                        "phase_readback",
-                        "amplitude_set",
-                        "amplitude_readback",
-                    },
-                )
+                expected_channels = {
+                    "phase_set", "phase_readback", "amplitude_set", "amplitude_readback",
+                }
                 prefix = f"IN:MW:{element_id}"
+                if element_id != "LLRFPB":
+                    expected_channels.add("kly_forward_power")
+                    self.assertEqual(
+                        resolve_channel(profile, element_id, "kly_forward_power", "real"),
+                        f"{prefix}:GET_CH2_POWER",
+                    )
+                self.assertEqual(set(element.channels), expected_channels)
                 self.assertEqual(
                     resolve_channel(profile, element_id, "phase_set", "real"),
                     f"{prefix}:SET_PHASE",

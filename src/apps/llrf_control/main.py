@@ -510,7 +510,9 @@ class LlrfControlWindow(QMainWindow):
             return
         name, value = request
         spec = self.current_group.quantities[name]
-        worker = WriteWorker(name, spec.setpoint_pv, value, self)
+        worker = WriteWorker(
+            name, spec.setpoint_pv, value, self, machine_id=self.runtime.context.machine.id
+        )
         worker.completed.connect(self._write_completed)
         worker.finished.connect(worker.deleteLater)
         self._worker = worker

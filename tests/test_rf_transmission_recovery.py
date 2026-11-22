@@ -591,11 +591,17 @@ class TransmissionRecoveryGuiTests(unittest.TestCase):
         self.assertEqual(page.table.horizontalScrollBarPolicy(), Qt.ScrollBarAlwaysOff)
         self.assertFalse(page.plot.axes.axison)
 
-        self.assertEqual(window.windowTitle(), "HALF Linac RF Phase Tuning")
-        self.assertEqual(window.mode_tabs.count(), 2)
-        self.assertEqual(window.mode_tabs.tabText(0).strip(), "Transmission Recovery")
-        self.assertEqual(window.mode_tabs.tabText(1), "Crest && Gain")
-        self.assertEqual(window.mode_tabs.currentIndex(), 0)
+        self.assertEqual(window.windowTitle(), "HALF Linac RF Tuning")
+        self.assertEqual(
+            [window.tuning_tabs.tabText(index) for index in range(window.tuning_tabs.count())],
+            ["Transmission Recovery", "Crest && Gain", "Power Scan"],
+        )
+        self.assertIs(window.centralWidget(), window.tuning_tabs)
+        self.assertIs(window.tuning_tabs.widget(0), page)
+        self.assertIs(window.tuning_tabs.widget(1), window.crest_page)
+        self.assertIs(window.tuning_tabs.widget(2), window.amp_page)
+        self.assertFalse(window.amp_page.start_button.isEnabled())
+        self.assertEqual(window.tuning_tabs.currentIndex(), 0)
         self.assertEqual(page.table.rowCount(), len(EXPECTED_MAPPING))
         self.assertEqual(len(page.stage_checkboxes), len(EXPECTED_MAPPING))
         self.assertTrue(all(
@@ -611,11 +617,13 @@ class TransmissionRecoveryGuiTests(unittest.TestCase):
         page._set_running(True)
         self.assertFalse(page.table.isEnabled())
         self.assertFalse(page.points.isEnabled())
-        self.assertFalse(window.mode_tabs.isTabEnabled(1))
+        self.assertFalse(window.tuning_tabs.isTabEnabled(1))
+        self.assertFalse(window.tuning_tabs.isTabEnabled(2))
         page.worker = None
         page._set_running(False)
         self.assertTrue(page.table.isEnabled())
-        self.assertTrue(window.mode_tabs.isTabEnabled(1))
+        self.assertTrue(window.tuning_tabs.isTabEnabled(1))
+        self.assertTrue(window.tuning_tabs.isTabEnabled(2))
 
         page.selected_rows = [0]
         page._item(

@@ -837,6 +837,15 @@ class RFPhaseBatchDialog(QDialog):
             if self.table.item(row, 0).checkState() == Qt.Checked
         ]
 
+    def select_stations(self, stations):
+        self.table.blockSignals(True)
+        for row, device in enumerate(self.devices):
+            self.table.item(row, 0).setCheckState(
+                Qt.Checked if device.element_id in stations else Qt.Unchecked
+            )
+        self.table.blockSignals(False)
+        self._update_summary()
+
     def _select(self, selected):
         self.table.blockSignals(True)
         for row in range(len(self.devices)):
@@ -901,7 +910,7 @@ class RFPhaseBatchDialog(QDialog):
 
     def _start(self):
         rows = self._rows()
-        if not rows or self.worker is not None or self.window.thread is not None:
+        if not rows or self.window._amp_busy() or self.window._phase_busy():
             return
         quality = CrestQualitySettings.from_mapping(
             self.batch_config.get("quality")
