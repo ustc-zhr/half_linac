@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from uuid import uuid4
@@ -84,7 +85,7 @@ class TimingEnergyScanExecutor:
         callbacks: TimingEnergyScanCallbacks | None = None,
         runs_dir: Path | None = None,
         manage_locks: bool = True,
-        read_pv: Callable[[str], Any] = caget,
+        read_pv: Callable[[str], Any] | None = None,
         write_pv: Callable[..., Any] = caput,
         write_many: Callable[..., Any] = epics.caput_many,
         matcher_factory: Callable[..., Any] = ScreenEnergyMatcher,
@@ -94,7 +95,9 @@ class TimingEnergyScanExecutor:
         self.callbacks = callbacks or TimingEnergyScanCallbacks()
         self.runs_dir = None if runs_dir is None else Path(runs_dir)
         self.manage_locks = bool(manage_locks)
-        self.read_pv = read_pv
+        self.read_pv = (
+            read_pv if read_pv is not None else partial(caget, use_monitor=False)
+        )
         self.write_pv = write_pv
         self.write_many = write_many
         self.matcher_factory = matcher_factory
@@ -306,12 +309,13 @@ class TimingEnergyScanExecutor:
                 "Timing write failed: " + ", ".join(item.upper() for item in failed)
             )
 
-        deadline = time.monotonic() + float(self.request.readback_timeout_s)
-        latest: dict[str, float] = {}
+        timeout_s = float(self.request.readback_timeout_s)
+        tolerance_us = float(self.request.readback_tolerance_us)
+        deadline = time.monotonic() + timeout_s
         while True:
-            latest.clear()
-            all_matched = True
-            for device in DEVICES:
+            matched = {}
+            mismatches = {}
+            for device, target in zip(DEVICES, values):
                 raw = self.read_pv(
                     self.request.group.pv(device, "delay_readback")
                 )
@@ -319,29 +323,25 @@ class TimingEnergyScanExecutor:
                     actual = float(raw)
                 except (TypeError, ValueError):
                     actual = math.nan
-                if math.isfinite(actual):
-                    latest[device] = actual
-                if (
-                    not math.isfinite(actual)
-                    or abs(actual - float(targets_us[device]))
-                    > float(self.request.readback_tolerance_us)
-                ):
-                    all_matched = False
-            if all_matched:
-                return dict(latest)
+                if math.isfinite(actual) and abs(actual - target) <= tolerance_us:
+                    matched[device] = actual
+                else:
+                    mismatches[device] = (target, actual)
+            if not mismatches:
+                return matched
             if time.monotonic() >= deadline:
-                details = ", ".join(
-                    f"{device.upper()}="
-                    + (
-                        f"{latest[device]:g}"
-                        if device in latest
-                        else "unavailable"
-                    )
-                    for device in DEVICES
-                )
+                details = []
+                for device, (target, actual) in mismatches.items():
+                    observed = "readback unavailable"
+                    if math.isfinite(actual):
+                        observed = (
+                            f"readback={actual:.12g}, delta={actual - target:+.6g}"
+                        )
+                    details.append(f"{device.upper()} target={target:.12g}, {observed}")
                 raise RuntimeError(
-                    "Timing readback verification failed: "
-                    f"{details}; tolerance={self.request.readback_tolerance_us:g} us."
+                    "Timing readback verification failed · "
+                    f"{' · '.join(details)} (us). "
+                    f"Tolerance={tolerance_us:g} us, timeout={timeout_s:g} s."
                 )
             time.sleep(
                 min(

@@ -25,6 +25,7 @@ class TimingEnergyScanSettings:
     energy_high_mev: float = 2450.0
     minimum_delay_us: float = 0.0
     min_relative_brightness: float = 0.05
+    delay_clock_mhz: float | None = None
 
     def __post_init__(self) -> None:
         numeric = {
@@ -71,6 +72,12 @@ class TimingEnergyScanSettings:
             raise ValueError("Minimum delay must not be negative.")
         if not 0 <= self.min_relative_brightness <= 1:
             raise ValueError("Minimum relative brightness must be in [0, 1].")
+        clock = self.delay_clock_mhz
+        if clock is not None:
+            if not math.isfinite(clock) or clock <= 0:
+                raise ValueError("Timing clock frequency must be finite and positive.")
+            if max(-self.low_offset_us, self.high_offset_us) * clock < 1:
+                raise ValueError("Timing scan range must include a nonzero clock tick.")
 
     def offsets(self) -> tuple[float, ...]:
         positive_count = int(round(self.high_offset_us / self.step_us))
@@ -83,7 +90,17 @@ class TimingEnergyScanSettings:
             float(-index * self.step_us)
             for index in range(1, negative_count + 1)
         )
-        return (0.0, *positive, *negative)
+        offsets = (0.0, *positive, *negative)
+        clock = self.delay_clock_mhz
+        if clock is None:
+            return offsets
+        first_tick = math.ceil(self.low_offset_us * clock)
+        last_tick = math.floor(self.high_offset_us * clock)
+        ticks = dict.fromkeys(
+            min(max(round(offset * clock), first_tick), last_tick)
+            for offset in offsets
+        )
+        return tuple(tick / clock for tick in ticks)
 
 
 @dataclass(frozen=True)
@@ -175,16 +192,31 @@ def delay_targets(
     offset_us: float,
     *,
     minimum_us: float,
+    delay_clock_mhz: float | None = None,
 ) -> dict[str, float]:
     missing = [device for device in DEVICES if device not in initial_delays_us]
     if missing:
         raise ValueError(
             "Initial delay is unavailable for " + ", ".join(item.upper() for item in missing)
         )
-    targets = {
-        device: float(initial_delays_us[device]) + float(offset_us)
-        for device in DEVICES
-    }
+    initial = {device: float(initial_delays_us[device]) for device in DEVICES}
+    if not all(math.isfinite(value) for value in initial.values()):
+        raise ValueError("Initial delays must be finite.")
+    if delay_clock_mhz is None:
+        targets = {device: value + float(offset_us) for device, value in initial.items()}
+    else:
+        offset_ticks = round(offset_us * delay_clock_mhz)
+        targets = {}
+        for device, value in initial.items():
+            initial_tick = round(value * delay_clock_mhz)
+            if not math.isclose(
+                value, initial_tick / delay_clock_mhz, rel_tol=0.0, abs_tol=1e-6
+            ):
+                raise ValueError(
+                    f"{device.upper()} initial delay {value:.12g} us is off "
+                    f"the {delay_clock_mhz:g} MHz timing grid."
+                )
+            targets[device] = (initial_tick + offset_ticks) / delay_clock_mhz
     invalid = {
         device: value for device, value in targets.items() if value < float(minimum_us)
     }
@@ -300,22 +332,21 @@ class TimingEnergyScanner:
         restore_readbacks: dict[str, float] = {}
         status = "FAILED"
         message = None
+        scan_started = False
 
         try:
             initial_delays = {
                 device: self._finite(value, f"{device.upper()} initial delay")
                 for device, value in self.read_delays().items()
             }
-            delay_targets(
-                initial_delays,
-                self.settings.low_offset_us,
-                minimum_us=self.settings.minimum_delay_us,
-            )
-            delay_targets(
-                initial_delays,
-                self.settings.high_offset_us,
-                minimum_us=self.settings.minimum_delay_us,
-            )
+            offsets = self.settings.offsets()
+            for offset in (min(offsets), max(offsets)):
+                delay_targets(
+                    initial_delays,
+                    offset,
+                    minimum_us=self.settings.minimum_delay_us,
+                    delay_clock_mhz=self.settings.delay_clock_mhz,
+                )
             initial_energy = self._finite(self.read_energy(), "Initial energy")
             self._emit(
                 "start",
@@ -328,8 +359,9 @@ class TimingEnergyScanner:
             positive_started = False
             center_returned = False
 
-            for acquisition_index, offset in enumerate(self.settings.offsets()):
+            for acquisition_index, offset in enumerate(offsets):
                 self._raise_if_cancelled()
+                scan_started = True
                 if offset > 0:
                     positive_started = True
                 elif offset < 0 and positive_started and not center_returned:
@@ -337,6 +369,7 @@ class TimingEnergyScanner:
                         initial_delays,
                         0.0,
                         minimum_us=self.settings.minimum_delay_us,
+                        delay_clock_mhz=self.settings.delay_clock_mhz,
                     )
                     self._emit(
                         "center_return",
@@ -360,6 +393,7 @@ class TimingEnergyScanner:
                     initial_delays,
                     offset,
                     minimum_us=self.settings.minimum_delay_us,
+                    delay_clock_mhz=self.settings.delay_clock_mhz,
                 )
                 readbacks = dict(self.set_delays(targets))
                 self._wait(self.settings.timing_settle_time_s)
@@ -470,7 +504,7 @@ class TimingEnergyScanner:
             status = "FAILED"
             message = str(exc)
         finally:
-            if initial_delays:
+            if scan_started:
                 try:
                     restored = dict(self.set_delays(initial_delays))
                     restore_readbacks = dict(restored)
@@ -481,7 +515,7 @@ class TimingEnergyScanner:
                     timing_restored = all(device in restored for device in DEVICES)
                 except Exception as exc:
                     restore_errors["timing"] = str(exc)
-            if initial_energy is not None:
+            if scan_started and initial_energy is not None:
                 try:
                     self.set_energy(initial_energy)
                     energy_restored = True

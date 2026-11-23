@@ -1271,6 +1271,11 @@ def _validate_linked_timing_energy_scan(
             )
 
     timing = _expect_mapping(linked.get("timing"), f"{location}.timing")
+    clock = timing.get("delay_clock_mhz")
+    if clock is not None and _expect_finite_number(
+        clock, f"{location}.timing.delay_clock_mhz"
+    ) <= 0:
+        raise MachineProfileError(f"{location}.timing.delay_clock_mhz must be positive.")
     if _expect_finite_number(
         timing.get("settle_time_s"), f"{location}.timing.settle_time_s"
     ) < 0:

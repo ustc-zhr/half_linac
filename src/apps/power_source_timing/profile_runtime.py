@@ -67,6 +67,7 @@ class TimingEnergyScanConfig:
     offset_high_us: float
     offset_step_us: float
     hard_limit_us: float
+    delay_clock_mhz: float | None
     timing_settle_time_s: float
     readback_timeout_s: float
     readback_poll_interval_s: float
@@ -287,6 +288,11 @@ def _parse_linked_energy_scan(
         raise MachineProfileError(
             "power_source_timing.linked_energy_scan.timing must be a mapping."
         )
+    clock = timing.get("delay_clock_mhz")
+    delay_clock_mhz = (
+        _positive(clock, "linked_energy_scan.timing.delay_clock_mhz")
+        if clock is not None else None
+    )
     verification = timing.get("readback_verification", {})
     if not isinstance(verification, Mapping):
         raise MachineProfileError(
@@ -408,6 +414,7 @@ def _parse_linked_energy_scan(
         offset_high_us=high,
         offset_step_us=step,
         hard_limit_us=hard_limit,
+        delay_clock_mhz=delay_clock_mhz,
         timing_settle_time_s=timing_settle,
         readback_timeout_s=readback_timeout,
         readback_poll_interval_s=readback_poll,

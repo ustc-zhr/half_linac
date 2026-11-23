@@ -423,10 +423,10 @@ class LinkedTimingEnergyScanDialog(QDialog):
         scan_form.addRow("After timing change", self.timing_settle)
         scan_form.addRow("Frames per point", self.samples)
         scan_form.addRow("Frame interval", self.sample_interval)
-        limit = QLabel(
-            f"Hard limit ±{cfg.hard_limit_us:g} μs · zero is always measured first",
-            scan_box,
-        )
+        limit_text = f"Hard limit ±{cfg.hard_limit_us:g} μs · zero is measured first"
+        if cfg.delay_clock_mhz is not None:
+            limit_text += f" · offsets aligned to {1000 / cfg.delay_clock_mhz:.3f} ns ticks"
+        limit = QLabel(limit_text, scan_box)
         limit.setWordWrap(True)
         scan_form.addRow(limit)
         left_layout.addWidget(scan_box)
@@ -684,6 +684,7 @@ class LinkedTimingEnergyScanDialog(QDialog):
             energy_high_mev=self.config.energy_high_mev,
             minimum_delay_us=self.runtime.minimum_us,
             min_relative_brightness=self.config.min_relative_brightness,
+            delay_clock_mhz=self.config.delay_clock_mhz,
         )
         metadata = dict(self.background_metadata)
         metadata["path"] = (

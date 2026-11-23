@@ -30,6 +30,7 @@
       "unit": "us"
     },
     "timing": {
+      "delay_clock_mhz": 499.8,
       "settle_time_s": 1.0,
       "readback_verification": {
         "timeout_s": 2.0,

@@ -96,6 +96,70 @@ def test_common_offset_preserves_relative_delays_and_minimum():
         delay_targets(initial, -10.1, minimum_us=0.0)
 
 
+def test_scan_offsets_stay_inside_range_and_skip_duplicate_clock_ticks():
+    settings = _settings(
+        low_offset_us=-1.0,
+        high_offset_us=1.0,
+        step_us=0.001,
+        delay_clock_mhz=499.8,
+    )
+    offsets = settings.offsets()
+    assert offsets[:3] == (0.0, 1 / 499.8, 2 / 499.8)
+    assert len(offsets) == len(set(offsets)) == 999
+    assert min(offsets) == -499 / 499.8
+    assert max(offsets) == 499 / 499.8
+
+
+@pytest.mark.parametrize("off_grid", [False, True])
+def test_scanner_aligns_kly04_targets_to_clock_ticks(off_grid):
+    initial = {
+        "hv": 228.16326530612244,
+        "llrf": 223.7454981992797,
+        "ssa": 230.16206482593037,
+        "kly": 231.31452581032414,
+    }
+    if off_grid:
+        initial["hv"] += 0.001
+    clock = 499.8
+    timing_writes = []
+    energy_writes = []
+
+    def write_delays(targets):
+        timing_writes.append(dict(targets))
+        for target in targets.values():
+            assert target * clock == pytest.approx(round(target * clock), abs=1e-8)
+        return targets
+
+    scanner = TimingEnergyScanner(
+        _settings(delay_clock_mhz=clock),
+        read_delays=lambda: initial,
+        set_delays=write_delays,
+        read_energy=lambda: 2217.292,
+        set_energy=energy_writes.append,
+        write_center_energy=lambda _value: None,
+        match_energy=lambda *_args: _match(2219.2),
+        wait_callback=lambda *_args: None,
+    )
+    result = scanner.run()
+
+    if off_grid:
+        assert result.status == "FAILED"
+        assert "HV initial delay" in result.message
+        assert "off the 499.8 MHz timing grid" in result.message
+        assert timing_writes == []
+        assert energy_writes == []
+    else:
+        assert result.status == "DONE"
+        assert result.points[1].offset_us == 50 / clock
+        assert result.points[1].targets_us == {
+            device: (round(delay * clock) + 50) / clock
+            for device, delay in initial.items()
+        }
+        assert result.timing_restored and result.energy_restored
+        assert timing_writes[-1] == initial
+        assert energy_writes == [2217.292]
+
+
 def test_scanner_returns_through_center_waits_twice_energy_settle_and_restores():
     initial = {"hv": 10.0, "llrf": 11.0, "ssa": 12.0, "kly": 13.0}
     delay_writes = []
@@ -279,6 +343,32 @@ def test_executor_verifies_all_four_readbacks():
     assert actual == {device: 10.0 for device in DEVICES}
 
 
+def test_executor_reads_live_values_instead_of_monitor_cache(monkeypatch):
+    def fake_caget(_pv, *, use_monitor=True):
+        return 9.0 if use_monitor else 10.0
+
+    monkeypatch.setattr(scan_executor, "caget", fake_caget)
+    executor = _fake_request(lambda *_args, **_kwargs: [1] * len(DEVICES), None)
+
+    actual = executor.set_delays({device: 10.0 for device in DEVICES})
+
+    assert actual == {device: 10.0 for device in DEVICES}
+
+
+def test_executor_identifies_each_readback_mismatch_on_timeout():
+    readbacks = {"hv:rb": 10.0, "llrf:rb": 10.015, "ssa:rb": None, "kly:rb": 10.0}
+    executor = _fake_request(lambda *_args, **_kwargs: [1] * len(DEVICES), readbacks.get)
+
+    with pytest.raises(RuntimeError, match="Timing readback verification failed") as exc:
+        executor.set_delays({device: 10.0 for device in DEVICES})
+
+    message = str(exc.value)
+    assert "LLRF target=10, readback=10.015, delta=+0.015" in message
+    assert "SSA target=10, readback unavailable" in message
+    assert "HV target=" not in message
+    assert "Tolerance=0.001 us" in message
+
+
 def test_executor_verifies_energy_setpoint_after_write():
     values = {"energy:set": 2200.0}
     executor = _fake_request(
@@ -396,6 +486,8 @@ def test_runtime_and_dialog_expose_linked_scan_defaults():
     try:
         request = dialog._build_request()
         assert len(request.settings.offsets()) == 21
+        assert request.settings.delay_clock_mhz == 499.8
+        assert request.settings.offsets()[1] == 50 / 499.8
         assert request.settings.energy_settle_time_s == 3.0
     finally:
         dialog.close()
@@ -550,7 +642,7 @@ def test_batch_scan_runs_in_order_and_stops_after_failed_restore_or_cancel(
         if outcome == "DONE":
             assert scanned == [groups[0].element_id, groups[2].element_id]
             assert offsets[0] == offsets[1]
-            assert offsets[0][2] == pytest.approx(0.2)
+            assert offsets[0][2] == 99 / 499.8
             assert dialog.batch_table.item(0, 2).text() == "+0.000"
             assert dialog.batch_table.item(0, 3).text() == "2201.000"
             assert dialog.batch_table.item(2, 1).text() == "No valid point"
