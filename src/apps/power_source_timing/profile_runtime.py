@@ -67,8 +67,8 @@ class TimingEnergyScanConfig:
     offset_high_us: float
     offset_step_us: float
     hard_limit_us: float
-    delay_clock_mhz: float | None
     timing_settle_time_s: float
+    readback_tolerance_us: float
     readback_timeout_s: float
     readback_poll_interval_s: float
     tracking_half_window_mev: float
@@ -288,11 +288,6 @@ def _parse_linked_energy_scan(
         raise MachineProfileError(
             "power_source_timing.linked_energy_scan.timing must be a mapping."
         )
-    clock = timing.get("delay_clock_mhz")
-    delay_clock_mhz = (
-        _positive(clock, "linked_energy_scan.timing.delay_clock_mhz")
-        if clock is not None else None
-    )
     verification = timing.get("readback_verification", {})
     if not isinstance(verification, Mapping):
         raise MachineProfileError(
@@ -300,6 +295,10 @@ def _parse_linked_energy_scan(
         )
     timing_settle = _nonnegative(
         timing.get("settle_time_s"), "linked_energy_scan.timing.settle_time_s"
+    )
+    readback_tolerance = _positive(
+        verification.get("tolerance_us", workflow.get("readback_tolerance_us")),
+        "linked_energy_scan.timing.readback_verification.tolerance_us",
     )
     readback_timeout = _positive(
         verification.get("timeout_s"),
@@ -414,8 +413,8 @@ def _parse_linked_energy_scan(
         offset_high_us=high,
         offset_step_us=step,
         hard_limit_us=hard_limit,
-        delay_clock_mhz=delay_clock_mhz,
         timing_settle_time_s=timing_settle,
+        readback_tolerance_us=readback_tolerance,
         readback_timeout_s=readback_timeout,
         readback_poll_interval_s=readback_poll,
         tracking_half_window_mev=tracking_half_window,

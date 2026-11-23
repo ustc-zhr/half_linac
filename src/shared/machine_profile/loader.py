@@ -1271,11 +1271,6 @@ def _validate_linked_timing_energy_scan(
             )
 
     timing = _expect_mapping(linked.get("timing"), f"{location}.timing")
-    clock = timing.get("delay_clock_mhz")
-    if clock is not None and _expect_finite_number(
-        clock, f"{location}.timing.delay_clock_mhz"
-    ) <= 0:
-        raise MachineProfileError(f"{location}.timing.delay_clock_mhz must be positive.")
     if _expect_finite_number(
         timing.get("settle_time_s"), f"{location}.timing.settle_time_s"
     ) < 0:
@@ -1286,6 +1281,15 @@ def _validate_linked_timing_energy_scan(
         timing.get("readback_verification"),
         f"{location}.timing.readback_verification",
     )
+    if "tolerance_us" in readback:
+        tolerance = _expect_finite_number(
+            readback["tolerance_us"],
+            f"{location}.timing.readback_verification.tolerance_us",
+        )
+        if tolerance <= 0:
+            raise MachineProfileError(
+                f"{location}.timing.readback_verification.tolerance_us must be positive."
+            )
     timeout = _expect_finite_number(
         readback.get("timeout_s"),
         f"{location}.timing.readback_verification.timeout_s",

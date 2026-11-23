@@ -323,7 +323,9 @@ class TimingEnergyScanExecutor:
                     actual = float(raw)
                 except (TypeError, ValueError):
                     actual = math.nan
-                if math.isfinite(actual) and abs(actual - target) <= tolerance_us:
+                if math.isfinite(actual) and (
+                    target - tolerance_us <= actual <= target + tolerance_us
+                ):
                     matched[device] = actual
                 else:
                     mismatches[device] = (target, actual)
