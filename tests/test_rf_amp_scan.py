@@ -238,6 +238,49 @@ def test_peak_qualification(amp_setup, tmp_path, curve, status, reason):
     assert all(reason in record.get("error", "") for record in result["stations"])
 
 
+def test_apply_measured_peak_after_baseline_drift(amp_setup, tmp_path):
+    def drift_after_scan(amp, index):
+        return 100 - 8 * (amp - 50.5) ** 2 + (2 if index > 30 else 0)
+
+    path = tmp_path / "run.json"
+    scan, simulator = make_runner(amp_setup, path, drift_after_scan)
+    first, second = scan.run()["stations"]
+    assert first["status"] == second["status"] == "undetermined"
+    assert first["measured_peak"] == {"amp": 50.5, "output": 100}
+    assert simulator.amps == {"LLRF02": 50, "LLRF03": 50}
+    with pytest.raises(RuntimeError, match="verified AMP suggestions"):
+        scan.apply(["LLRF02"])
+    count = len(simulator.writes)
+
+    result = scan.apply_measured_peak("LLRF02")
+
+    assert result["status"] == "completed"
+    assert simulator.writes[count:] == [("LLRF02", 50.5)]
+    assert not scan.can_apply_measured_peak("LLRF02")
+    assert scan.can_apply_measured_peak("LLRF03")
+    saved = json.loads(path.read_text())["stations"][0]
+    assert saved["applied"] == 50.5
+    assert saved["apply_source"] == "measured_peak"
+    assert saved["scan_status"] == "undetermined"
+    assert "baseline drift" in saved["scan_error"]
+    assert "suggestion" not in saved
+
+
+def test_apply_measured_peak_restores_original_after_readback_failure(amp_setup, tmp_path):
+    scan, simulator = make_runner(amp_setup, tmp_path / "run.json")
+    scan.run()
+    simulator.readback = lambda _element: 50
+    count = len(simulator.writes)
+
+    result = scan.apply_measured_peak("LLRF02")
+
+    assert result["status"] == "failed"
+    assert result["stations"][0]["status"] == "apply_failed"
+    assert result["stations"][0]["apply_restored"]
+    assert simulator.writes[count:] == [("LLRF02", 50.5), ("LLRF02", 50)]
+    assert simulator.amps == {"LLRF02": 50, "LLRF03": 50}
+
+
 def test_duplicate_timestamps_and_out_of_range_do_not_write(amp_setup, tmp_path):
     scan, simulator = make_runner(amp_setup, tmp_path / "run.json")
     simulator.stale = True
@@ -245,6 +288,8 @@ def test_duplicate_timestamps_and_out_of_range_do_not_write(amp_setup, tmp_path)
     first, second = scan.run()["stations"]
     assert "Insufficient new KLY power" in first["error"]
     assert "approved AMP window" in second["error"]
+    with pytest.raises(RuntimeError, match="completed Power Scan"):
+        scan.apply_measured_peak("LLRF02")
     assert simulator.writes == []
 
 
@@ -356,7 +401,8 @@ def test_shared_lock_blocks_scan_and_manual_amp_write(amp_setup, tmp_path):
     assert "busy" in completed[0][3]
 
 
-def test_offscreen_amp_scan_review_apply_and_phase_handoff(amp_setup, tmp_path, monkeypatch):
+@pytest.mark.parametrize("manual_peak", [False, True])
+def test_offscreen_amp_scan_review_apply_and_phase_handoff(amp_setup, tmp_path, monkeypatch, manual_peak):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("HALF_LINAC_MACHINE_ID", "half")
     monkeypatch.setenv("HALF_LINAC_CONTROL_BACKEND", "real")
@@ -366,6 +412,8 @@ def test_offscreen_amp_scan_review_apply_and_phase_handoff(amp_setup, tmp_path, 
     from half_linac.src.apps.rf_phase_scan.main import RFPhaseScanWindow
 
     mock_scan, simulator = make_runner(amp_setup, tmp_path / "unused.json")
+    if manual_peak:
+        simulator.curve = lambda amp, index: 100 - 8 * (amp - 50.5) ** 2 + (2 if index > 28 else 0)
     monkeypatch.setattr(amp_scan_ui, "discover_amp_stations", lambda *_: tuple(mock_scan.stations.values()))
     monkeypatch.setattr(amp_scan_ui, "AmpScan", lambda **kwargs: AmpScan(
         **kwargs, client_factory=lambda: simulator, lock_factory=lambda *_: nullcontext(),
@@ -411,7 +459,7 @@ def test_offscreen_amp_scan_review_apply_and_phase_handoff(amp_setup, tmp_path, 
         assert not window.tuning_tabs.isTabEnabled(1)
         assert all(not widget.isEnabled() for widget in page.parameter_inputs)
         finish()
-        assert page.records["LLRF02"]["status"] == "candidate"
+        assert page.records["LLRF02"]["status"] == ("undetermined" if manual_peak else "candidate")
         assert page.plot.axes.get_ylabel() == "KLY forward power (MW)"
         assert page.progress.value() == page.progress.maximum() == 2
         assert page.runner.settings == page._scan_settings()
@@ -421,8 +469,20 @@ def test_offscreen_amp_scan_review_apply_and_phase_handoff(amp_setup, tmp_path, 
         assert not page.selectors[0].isChecked()
         assert not page.apply_button.isEnabled()
         assert simulator.amps == {"LLRF02": 50, "LLRF03": 50}
-        page.selectors[0].setChecked(True)
-        page.apply_button.click()
+        if manual_peak:
+            page.table.selectRow(page.rows["LLRF02"])
+            assert page.apply_peak_button.isEnabled()
+            count = len(simulator.writes)
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.Cancel) as question:
+                page.apply_peak_button.click()
+            assert "50 → 50.5 %" in question.call_args.args[2]
+            assert "baseline drift" in question.call_args.args[2]
+            assert question.call_args.args[4] == QMessageBox.Cancel
+            assert len(simulator.writes) == count
+            page.apply_peak_button.click()
+        else:
+            page.selectors[0].setChecked(True)
+            page.apply_button.click()
         finish()
         assert page.progress.value() == page.progress.maximum() == 1
         assert simulator.amps == {"LLRF02": 50.5, "LLRF03": 50}

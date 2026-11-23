@@ -97,18 +97,23 @@ class AmpScanPage(QWidget):
         self.start_button.setObjectName("startButton")
         self.stop_button = QPushButton("Stop", self)
         self.stop_button.setObjectName("stopButton")
-        self.apply_button = QPushButton("Apply Selected", self)
+        self.apply_button = QPushButton("Apply Suggestions", self)
+        self.apply_peak_button = QPushButton("Apply Measured Peak", self)
+        self.apply_peak_button.setToolTip("Apply the highest measured point for the highlighted station.")
         actions, self.progress = scan_actions(
-            self, (self.start_button, self.stop_button, self.apply_button), len(self.stations)
+            self, (self.start_button, self.stop_button, self.apply_button, self.apply_peak_button),
+            len(self.stations),
         )
         root.addLayout(actions)
 
         self.all_button.clicked.connect(lambda: self._select_all(True))
         self.clear_button.clicked.connect(lambda: self._select_all(False))
         self.table.currentCellChanged.connect(lambda *_: self._redraw())
+        self.table.currentCellChanged.connect(self._refresh_controls)
         self.start_button.clicked.connect(self._start)
         self.stop_button.clicked.connect(self.stop)
         self.apply_button.clicked.connect(self._apply)
+        self.apply_peak_button.clicked.connect(self._apply_measured_peak)
         if not self.stations:
             self.status.setText("Power Scan requires KLY forward power channels in this backend.")
         elif not self.write_enabled:
@@ -214,6 +219,14 @@ class AmpScanPage(QWidget):
             if self.records.get(station.element_id, {}).get("status") == "candidate"
         ]
 
+    def _selected_peak_station(self):
+        row = self.table.currentRow()
+        if row >= 0 and self.runner is not None:
+            station = self.stations[row]
+            if self.runner.can_apply_measured_peak(station.element_id):
+                return station
+        return None
+
     def _select_all(self, checked):
         for station, selector in zip(self.stations, self.selectors):
             with QSignalBlocker(selector):
@@ -236,6 +249,7 @@ class AmpScanPage(QWidget):
             allowed and self.runner is not None and self.runner.status == "completed"
             and bool(self._selected_candidates())
         )
+        self.apply_peak_button.setEnabled(allowed and self._selected_peak_station() is not None)
         self.stop_button.setEnabled(busy)
 
     def _start(self):
@@ -292,6 +306,32 @@ class AmpScanPage(QWidget):
         ) == QMessageBox.Yes:
             self._launch(lambda: self.runner.apply(selected), "Applying AMP…", selected, applying=True)
 
+    def _apply_measured_peak(self):
+        if self.is_running() or not self.write_enabled:
+            return
+        station = self._selected_peak_station()
+        if station is None:
+            return
+        element_id = station.element_id
+        record = self.records[element_id]
+        peak = record["measured_peak"]
+        power_unit = f" {self.settings.power_unit}" if self.settings.power_unit else ""
+        message = (
+            f"{station.display_name}  {record['initial']:g} → {peak['amp']:g} {self.settings.unit}\n"
+            f"Measured KLY forward power {peak['output']:.6g}{power_unit}.\n"
+            f"Scan status is {self.table.item(self.rows[element_id], 5).text()}."
+        )
+        if record.get("error"):
+            message += f"\n{record['error']}"
+        if QMessageBox.question(
+            self, "Apply Measured Peak", f"{message}\n\nWrite this AMP value?",
+            QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel,
+        ) == QMessageBox.Yes:
+            self._launch(
+                lambda: self.runner.apply_measured_peak(element_id),
+                "Applying measured AMP peak…", (element_id,), applying=True,
+            )
+
     def _launch(self, operation, message, stations, *, applying=False):
         self.progress_stations = tuple(stations)
         self.applying = applying
@@ -347,6 +387,8 @@ class AmpScanPage(QWidget):
             "stopped": "Stopped", "failed": "Scan failed", "restore_failed": "Restore unverified",
             "applying": "Applying", "apply_failed": "Apply failed",
         }[record["status"]]
+        if record["status"] == "applied" and record.get("apply_source") == "measured_peak":
+            status = f"Applied peak {record['applied']:g} {self.settings.unit}"
         self.table.item(row, 5).setText(status)
         self.table.item(row, 5).setToolTip(record.get("error") or status)
         follow_scan = self.runner.settings.execution_mode == "serial" and record["status"] == "scanning"
@@ -393,6 +435,12 @@ class AmpScanPage(QWidget):
                 power_label += f" ({self.settings.power_unit})"
             axes.set_ylabel(power_label, color=palette["muted"])
             axes.plot(*zip(*points), "o-", color=palette["trace"], linewidth=1.8, markersize=5)
+            peak = record.get("measured_peak")
+            if peak is not None:
+                axes.plot(
+                    peak["amp"], peak["output"], "D", color=palette["accent"], markersize=7,
+                    label=f"Measured peak ({peak['amp']:g} {self.settings.unit})",
+                )
             for key, label, color in (
                 ("initial", "Original", "muted"), ("suggestion", "Suggested", "accent"),
             ):

@@ -379,11 +379,19 @@ class AmpScan:
                 raise StationUnavailable("KLY forward power is zero or invalid.")
             readings = {value: measure(value, "scan") for value in grid}
             last = measure(initial, "baseline_repeat")
+            scan_peak_amp = min(
+                readings, key=lambda amp: (-readings[amp], abs(amp - initial), amp),
+            )
+            peak = readings[scan_peak_amp]
+            measured_peak = (
+                {"amp": initial, "output": first} if first >= peak
+                else {"amp": scan_peak_amp, "output": peak}
+            )
+            self._update(station, measured_peak=measured_peak)
             tolerance = first * self.settings.relative_output_tolerance
             if abs(last - first) > tolerance:
                 raise StationUnavailable("KLY power baseline drift exceeded the output tolerance.")
             baseline = (first + last) / 2
-            peak = max(readings.values())
             if peak - baseline <= tolerance:
                 self._update(station, status="keep", initial_output=baseline)
                 return
@@ -413,41 +421,47 @@ class AmpScan:
                     raise RuntimeError(f"{station.element_id}: AMP restore could not be verified. {exc}") from exc
                 self._update(station, restored=True)
 
-    def _apply_station(self, client, station) -> None:
+    def _apply_station(self, client, station, apply_source) -> None:
         record = self.records[station.element_id]
-        initial, suggestion = record["initial"], record["suggestion"]
-        self._update(station, status="applying")
+        initial = record["initial"]
+        target = (
+            record["measured_peak"]["amp"] if apply_source == "measured_peak" else record["suggestion"]
+        )
+        self._update(
+            station, status="applying", apply_source=apply_source, apply_target=target,
+            scan_status=record["status"], scan_error=record.get("error", ""), error="",
+        )
         try:
             self._verify(client, station, initial)
             self._check_stop()
-            self._check_write(client, station, suggestion, initial)
+            self._check_write(client, station, target, initial)
         except Exception as exc:
             self._update(station, status="apply_failed", error=str(exc))
             raise
         try:
-            client.write(station.set_pv, suggestion)
-            self._verify(client, station, suggestion)
+            client.write(station.set_pv, target)
+            self._verify(client, station, target)
         except Exception as exc:
             try:
-                self._restore(client, station, initial, (initial, suggestion))
+                self._restore(client, station, initial, (initial, target))
             except Exception as restore_error:
                 self._update(station, status="restore_failed", error=str(restore_error))
                 raise RuntimeError(f"{station.element_id}: AMP apply restore failed. {restore_error}") from exc
             self._update(station, status="apply_failed", error=str(exc), apply_restored=True)
             raise
-        self._update(station, status="applied", applied=suggestion)
+        self._update(station, status="applied", applied=target)
 
-    def _run_station(self, client, station, *, apply=False):
+    def _run_station(self, client, station, *, apply_source=None):
         self._check_stop()
         try:
-            if apply:
-                self._apply_station(client, station)
+            if apply_source is not None:
+                self._apply_station(client, station, apply_source)
             else:
                 self._scan_station(client, station)
         except StationUnavailable as exc:
             self._update(station, status="undetermined", error=str(exc))
         except ScanStopped:
-            if not apply:
+            if apply_source is None:
                 self._update(station, status="stopped")
             raise
         except Exception as exc:
@@ -488,8 +502,12 @@ class AmpScan:
         if error is not None:
             raise error
 
-    def _execute(self, ids, *, apply: bool) -> dict:
-        operation = "Apply AMP suggestions" if apply else "Power Scan"
+    def _execute(self, ids, *, apply_source=None) -> dict:
+        apply = apply_source is not None
+        operation = {
+            None: "Power Scan", "suggestion": "Apply AMP suggestions",
+            "measured_peak": "Apply measured AMP peak",
+        }[apply_source]
         self.status, self.error = ("applying" if apply else "scanning"), ""
         try:
             require_workflow_write_allowed(self.context, "rf_phase_scan", operation)
@@ -502,7 +520,7 @@ class AmpScan:
                         self._scan_parallel(tuple(ids))
                     else:
                         for element_id in ids:
-                            self._run_station(client, self.stations[element_id], apply=apply)
+                            self._run_station(client, self.stations[element_id], apply_source=apply_source)
                 self._check_stop()
             self.status = "completed"
         except ScanStopped as exc:
@@ -516,7 +534,7 @@ class AmpScan:
     def run(self) -> dict:
         if self.status != "pending":
             raise RuntimeError("Start a new Power Scan to acquire a new result.")
-        return self._execute(self.stations, apply=False)
+        return self._execute(self.stations)
 
     def apply(self, selected) -> dict:
         if self.status != "completed":
@@ -528,4 +546,21 @@ class AmpScan:
         }
         if not selected or not selected <= eligible:
             raise RuntimeError("Select verified AMP suggestions.")
-        return self._execute((key for key in self.stations if key in selected), apply=True)
+        return self._execute((key for key in self.stations if key in selected), apply_source="suggestion")
+
+    def can_apply_measured_peak(self, element_id) -> bool:
+        record = self.records.get(element_id, {})
+        peak = record.get("measured_peak")
+        return (
+            self.status == "completed"
+            and record.get("status") in {"candidate", "keep", "undetermined"}
+            and record.get("restored") is True
+            and peak is not None
+            and self.stations[element_id].contains(peak["amp"])
+            and not self._same(peak["amp"], record["initial"])
+        )
+
+    def apply_measured_peak(self, element_id) -> dict:
+        if not self.can_apply_measured_peak(element_id):
+            raise RuntimeError("Select a measured peak from a completed Power Scan with verified AMP restore.")
+        return self._execute((element_id,), apply_source="measured_peak")
