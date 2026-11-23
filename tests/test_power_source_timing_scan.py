@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 import json
 import os
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -11,7 +13,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
@@ -22,6 +25,7 @@ from half_linac.src.shared.machine_profile.loader import (
     _validate_linked_timing_energy_scan,
 )
 from half_linac.src.apps.power_source_timing.main import TimingWindow
+from half_linac.src.apps.power_source_timing import scan_executor
 from half_linac.src.apps.power_source_timing.model import DEVICES
 from half_linac.src.apps.power_source_timing.profile_runtime import (
     TimingGroup,
@@ -397,7 +401,9 @@ def test_runtime_and_dialog_expose_linked_scan_defaults():
         dialog.close()
 
 
-def test_main_window_disables_scan_for_prebuncher_and_enables_complete_group():
+def test_main_window_disables_scan_for_prebuncher_and_enables_complete_group(
+    monkeypatch,
+):
     with patch.dict(
         os.environ,
         {
@@ -407,18 +413,27 @@ def test_main_window_disables_scan_for_prebuncher_and_enables_complete_group():
     ):
         runtime = load_timing_runtime()
     app = QApplication.instance() or QApplication([])
-    with patch(
+    monkeypatch.setattr(
         "half_linac.src.apps.power_source_timing.main.GroupMonitor.bind",
-        return_value=None,
-    ), patch(
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
         "half_linac.src.apps.power_source_timing.waveform_view.WaveformMonitor.bind",
-        return_value=None,
-    ):
-        window = TimingWindow(runtime)
+        lambda *_args: None,
+    )
+    window = TimingWindow(runtime)
+    opened = []
+    monkeypatch.setattr(
+        LinkedTimingEnergyScanDialog, "exec_", lambda dialog: opened.append(dialog)
+    )
     try:
         window._select_group("PREBUNCHER")
         assert not window.scan_button.isEnabled()
         assert "complete" in window.scan_button.toolTip().lower()
+        assert window.batch_scan_button.isEnabled()
+        window.batch_scan_button.click()
+        assert opened[-1].batch_groups
+        assert all(group.devices == DEVICES for group in opened[-1].batch_groups)
 
         window._select_group("KLY01")
         for device in DEVICES:
@@ -428,9 +443,133 @@ def test_main_window_disables_scan_for_prebuncher_and_enables_complete_group():
             window._on_pv_value(device, "delay_readback", 10.0)
             window._on_pv_value(device, "enable", 1)
         assert window.scan_button.isEnabled()
+        window.scan_button.click()
+        assert not opened[-1].batch_groups
+        assert opened[-1].group.element_id == "KLY01"
     finally:
         window.close()
 
+
+@pytest.mark.parametrize("outcome", ["DONE", "RESTORE_FAILED", "CANCELLED"])
+def test_batch_scan_runs_in_order_and_stops_after_failed_restore_or_cancel(
+    outcome, monkeypatch, tmp_path,
+):
+    monkeypatch.setenv("HALF_LINAC_MACHINE_ID", "half")
+    monkeypatch.setenv("HALF_LINAC_CONTROL_BACKEND", "real")
+    runtime = load_timing_runtime()
+    groups = tuple(group for group in runtime.groups if group.devices == DEVICES)
+    active_locks = []
+    started = Event()
+    finish_scan = Event()
+    scanned = []
+    offsets = []
+
+    @contextmanager
+    def lock(name):
+        active_locks.append(name)
+        try:
+            yield
+        finally:
+            assert active_locks.pop() == name
+
+    def executor(request, *, cancel_requested, callbacks, runs_dir, manage_locks):
+        def run():
+            assert active_locks == ["timing", "energy"]
+            assert runs_dir == tmp_path
+            assert not manage_locks
+            scanned.append(request.group.element_id)
+            offsets.append(request.settings.offsets())
+            started.set()
+            if outcome == "CANCELLED":
+                assert finish_scan.wait(5)
+                assert cancel_requested()
+            best = None
+            if outcome == "DONE" and request.group == groups[0]:
+                best = TimingEnergyScanPoint(
+                    index=0,
+                    acquisition_index=0,
+                    offset_us=0.0,
+                    status="ok",
+                    targets_us={device: 10.0 for device in DEVICES},
+                    readbacks_us={device: 10.0 for device in DEVICES},
+                    search_low_mev=2150.0,
+                    search_high_mev=2250.0,
+                    matched_energy_mev=2201.0,
+                )
+                callbacks.point(best.to_mapping())
+            return TimingEnergyScanResult(
+                status="CANCELLED" if outcome == "CANCELLED" else "DONE",
+                initial_delays_us={device: 10.0 for device in DEVICES},
+                initial_energy_mev=2200.0,
+                points=(best,) if best else (),
+                best_point=best,
+                timing_restored=outcome != "RESTORE_FAILED",
+                energy_restored=True,
+                restore_errors={},
+                json_path=str(tmp_path / "scan.json"),
+            )
+
+        return SimpleNamespace(run=run)
+
+    monkeypatch.setattr(
+        scan_executor.TimingControlLock, "for_machine", lambda *_: lock("timing")
+    )
+    monkeypatch.setattr(
+        scan_executor.EnergyControlLock, "for_machine", lambda *_: lock("energy")
+    )
+    monkeypatch.setattr(scan_executor.epics.ca, "use_initial_context", lambda: None)
+    monkeypatch.setattr(
+        scan_executor, "new_app_run_dir", lambda *_args, **_kwargs: tmp_path
+    )
+    monkeypatch.setattr(scan_executor, "TimingEnergyScanExecutor", executor)
+    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.Yes)
+
+    app = QApplication.instance() or QApplication([])
+    dialog = LinkedTimingEnergyScanDialog(runtime, None, batch_groups=groups)
+    dialog.show()
+    try:
+        assert not dialog.start.isEnabled()
+        assert not dialog.apply_best.isVisible()
+        dialog.batch_table.item(2, 0).setCheckState(Qt.Checked)
+        dialog.batch_table.item(0, 0).setCheckState(Qt.Checked)
+        dialog.high.setValue(0.2)
+        dialog.start.click()
+        worker = dialog.worker
+        assert worker is not None
+        if outcome == "CANCELLED":
+            assert started.wait(5)
+            dialog.reject()
+            assert dialog.isVisible()
+            finish_scan.set()
+        assert worker.wait(5000)
+        app.processEvents()
+
+        assert not active_locks
+        assert dialog.worker is None
+        assert dialog.batch_table.item(1, 1).text() == "—"
+        if outcome == "DONE":
+            assert scanned == [groups[0].element_id, groups[2].element_id]
+            assert offsets[0] == offsets[1]
+            assert offsets[0][2] == pytest.approx(0.2)
+            assert dialog.batch_table.item(0, 2).text() == "+0.000"
+            assert dialog.batch_table.item(0, 3).text() == "2201.000"
+            assert dialog.batch_table.item(2, 1).text() == "No valid point"
+            assert dialog.table.rowCount() == 0
+        else:
+            assert scanned == [groups[0].element_id]
+            assert dialog.batch_table.item(2, 1).text() == "Not run"
+            if outcome == "RESTORE_FAILED":
+                assert dialog.batch_table.item(0, 1).text() == "Restore failed"
+                assert "RESTORE FAILED" in dialog.machine_state.text()
+            else:
+                assert dialog.batch_table.item(0, 1).text() == "Cancelled"
+                assert not dialog.isVisible()
+    finally:
+        finish_scan.set()
+        if dialog.worker is not None:
+            dialog.worker.wait(5000)
+            app.processEvents()
+        dialog.close()
 
 
 def test_machine_profile_rejects_invalid_linked_scan_grid_and_hard_limit():

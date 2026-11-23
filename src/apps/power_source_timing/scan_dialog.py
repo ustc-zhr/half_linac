@@ -8,7 +8,7 @@ from typing import Any
 import epics
 import numpy as np
 from epics import PV, caget
-from PyQt5.QtCore import QThread, Qt, pyqtSignal
+from PyQt5.QtCore import QSignalBlocker, QThread, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QSpinBox,
     QSplitter,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -54,6 +55,7 @@ from .scan_executor import (
     TimingEnergyScanCallbacks,
     TimingEnergyScanExecutor,
     TimingEnergyScanRequest,
+    run_timing_energy_batch,
 )
 
 
@@ -101,10 +103,20 @@ class TimingScanWorker(QThread):
     progress = pyqtSignal(int, int)
     match_state = pyqtSignal(object)
     done = pyqtSignal(object)
+    group_started = pyqtSignal(int, str)
+    group_finished = pyqtSignal(str, object)
+    batch_done = pyqtSignal(str, str)
 
-    def __init__(self, request: TimingEnergyScanRequest, parent=None):
+    def __init__(
+        self,
+        request: TimingEnergyScanRequest,
+        parent=None,
+        *,
+        batch_groups: tuple[TimingGroup, ...] = (),
+    ):
         super().__init__(parent)
         self.request = request
+        self.batch_groups = batch_groups
         self.executor: TimingEnergyScanExecutor | None = None
 
     def run(self) -> None:
@@ -115,6 +127,17 @@ class TimingScanWorker(QThread):
             progress=self.progress.emit,
             match_state=self.match_state.emit,
         )
+        if self.batch_groups:
+            status, message = run_timing_energy_batch(
+                self.request,
+                self.batch_groups,
+                cancel_requested=self.isInterruptionRequested,
+                callbacks=callbacks,
+                group_started=self.group_started.emit,
+                group_finished=self.group_finished.emit,
+            )
+            self.batch_done.emit(status, message)
+            return
         self.executor = TimingEnergyScanExecutor(
             self.request,
             cancel_requested=self.isInterruptionRequested,
@@ -264,16 +287,23 @@ class LinkedTimingEnergyScanDialog(QDialog):
     def __init__(
         self,
         runtime: TimingRuntime,
-        group: TimingGroup,
+        group: TimingGroup | None,
         *,
+        batch_groups: tuple[TimingGroup, ...] = (),
         theme: str = "dark",
         parent=None,
     ) -> None:
         super().__init__(parent)
         if runtime.linked_energy_scan is None:
             raise ValueError("Linked timing-energy scan is not configured.")
+        if group is None and not batch_groups:
+            raise ValueError("Select a power-source group first.")
         self.runtime = runtime
         self.group = group
+        self.batch_groups = batch_groups
+        self.batch_rows = {
+            group.element_id: row for row, group in enumerate(batch_groups)
+        }
         self.config = runtime.linked_energy_scan
         self.theme = theme
         self.points_data: list[dict[str, Any]] = []
@@ -299,7 +329,8 @@ class LinkedTimingEnergyScanDialog(QDialog):
         )
 
         self.setWindowTitle(
-            f"{group.element_id} · Linked Timing Energy Scan"
+            "Linked Timing Energy Batch Scan" if batch_groups
+            else f"{group.element_id} · Linked Timing Energy Scan"
         )
         self.setModal(True)
         self.resize(1420, 900)
@@ -330,12 +361,13 @@ class LinkedTimingEnergyScanDialog(QDialog):
         root.setSpacing(8)
 
         heading = QHBoxLayout()
-        title = QLabel(
-            f"{self.group.element_id} · HV / LLRF / SSA / KLY",
+        self.scan_title = QLabel(
+            "Batch Scan" if self.batch_groups
+            else f"{self.group.element_id} · HV / LLRF / SSA / KLY",
             self,
         )
-        title.setStyleSheet("font-size: 18px; font-weight: 700;")
-        heading.addWidget(title)
+        self.scan_title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        heading.addWidget(self.scan_title)
         heading.addStretch(1)
         self.machine_state = QLabel("Machine state will be restored after scanning", self)
         heading.addWidget(self.machine_state)
@@ -483,7 +515,15 @@ class LinkedTimingEnergyScanDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setMaximumHeight(235)
-        root.addWidget(self.table)
+        if self.batch_groups:
+            self.batch_tabs = QTabWidget(self)
+            self.batch_tabs.setMaximumHeight(235)
+            self.batch_panel = self._build_batch_panel()
+            self.batch_tabs.addTab(self.batch_panel, "Groups")
+            self.batch_tabs.addTab(self.table, "Scan Points")
+            root.addWidget(self.batch_tabs)
+        else:
+            root.addWidget(self.table)
 
         bottom = QHBoxLayout()
         self.status = QLabel("Ready", self)
@@ -497,6 +537,7 @@ class LinkedTimingEnergyScanDialog(QDialog):
         self.close_button = QPushButton("Close", self)
         self.stop.setEnabled(False)
         self.apply_best.setEnabled(False)
+        self.apply_best.setVisible(not self.batch_groups)
         self.start.clicked.connect(self._start_scan)
         self.stop.clicked.connect(self._stop_scan)
         self.apply_best.clicked.connect(self._apply_best)
@@ -513,8 +554,55 @@ class LinkedTimingEnergyScanDialog(QDialog):
             lambda: self._read_image("background")
         )
         self.preview.clicked.connect(lambda: self._read_image("preview"))
+        self._refresh_start_button()
         self._redraw_energy_plot()
         self._draw_image(None)
+
+    def _build_batch_panel(self) -> QWidget:
+        panel = QWidget(self)
+        layout = QVBoxLayout(panel)
+        self.batch_choices = QWidget(panel)
+        controls = QHBoxLayout(self.batch_choices)
+        controls.setContentsMargins(0, 0, 0, 0)
+        select_all = QPushButton("Select All", self.batch_choices)
+        clear = QPushButton("Clear", self.batch_choices)
+        select_all.clicked.connect(lambda: self._check_batch_groups(Qt.Checked))
+        clear.clicked.connect(lambda: self._check_batch_groups(Qt.Unchecked))
+        controls.addWidget(select_all)
+        controls.addWidget(clear)
+        controls.addStretch()
+        layout.addWidget(self.batch_choices)
+
+        table = QTableWidget(len(self.batch_groups), 4, panel)
+        table.setHorizontalHeaderLabels(
+            ("Group", "Status", "Best Offset (μs)", "Measured Energy (MeV)")
+        )
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().hide()
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        table.horizontalHeader().setStretchLastSection(True)
+        for row, group in enumerate(self.batch_groups):
+            item = QTableWidgetItem(group.element_id)
+            item.setCheckState(Qt.Unchecked)
+            table.setItem(row, 0, item)
+            for column in range(1, table.columnCount()):
+                table.setItem(row, column, QTableWidgetItem("—"))
+        self.batch_table = table
+        table.itemChanged.connect(self._refresh_start_button)
+        layout.addWidget(table)
+        return panel
+
+    def _check_batch_groups(self, state: Qt.CheckState) -> None:
+        with QSignalBlocker(self.batch_table):
+            for row in range(self.batch_table.rowCount()):
+                self.batch_table.item(row, 0).setCheckState(state)
+        self._refresh_start_button()
+
+    def _selected_batch_groups(self) -> tuple[TimingGroup, ...]:
+        return tuple(
+            group for row, group in enumerate(self.batch_groups)
+            if self.batch_table.item(row, 0).checkState() == Qt.Checked
+        )
 
     def _show_energy_settings(self) -> None:
         self.energy_settings_dialog.exec_()
@@ -577,7 +665,12 @@ class LinkedTimingEnergyScanDialog(QDialog):
             },
         }
 
-    def _build_request(self) -> TimingEnergyScanRequest:
+    def _build_request(
+        self, group: TimingGroup | None = None
+    ) -> TimingEnergyScanRequest:
+        group = group or self.group
+        if group is None:
+            raise ValueError("Select a power-source group first.")
         settings_values = self.energy_settings_dialog.values()
         settings = TimingEnergyScanSettings(
             low_offset_us=self.low.value(),
@@ -605,7 +698,7 @@ class LinkedTimingEnergyScanDialog(QDialog):
         )
         return TimingEnergyScanRequest(
             context=self.runtime.context,
-            group=self.group,
+            group=group,
             settings=settings,
             scan=self._match_settings(),
             image_pv=self.config.flag_image_pv,
@@ -633,42 +726,136 @@ class LinkedTimingEnergyScanDialog(QDialog):
         )
 
     def _start_scan(self) -> None:
+        if not self.start.isEnabled():
+            return
+        groups = self._selected_batch_groups()
         try:
-            request = self._build_request()
+            request = self._build_request(groups[0] if groups else self.group)
         except Exception as exc:
             QMessageBox.warning(self, "Invalid Scan Settings", str(exc))
             return
+        target = request.group.element_id
+        sequence = (
+            "HV, LLRF, SSA, and KLY delays will move together. "
+            "The initial timing and energy will be restored at the end."
+        )
+        if groups:
+            target = ", ".join(group.element_id for group in groups)
+            sequence = (
+                "Groups will run in beamline order. Initial timing and energy will be "
+                "restored after each group. Best points are saved for review."
+            )
         answer = QMessageBox.question(
             self,
             "Start Linked Timing Energy Scan",
-            f"Scan {self.group.element_id} from {request.settings.low_offset_us:g} "
+            f"Scan {target} from {request.settings.low_offset_us:g} "
             f"to {request.settings.high_offset_us:g} μs in "
-            f"{request.settings.step_us:g} μs steps?\n\n"
-            "HV, LLRF, SSA, and KLY delays will move together. "
-            "The initial timing and energy will be restored at the end.",
+            f"{request.settings.step_us:g} μs steps?\n\n{sequence}",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
             return
-        self.points_data.clear()
         self.result = None
+        self.last_executor = None
         self.status.setStyleSheet("")
-        self._latest_fit_center_mm = None
-        self.table.setRowCount(0)
-        self.progress.setRange(0, len(request.settings.offsets()))
-        self.progress.setValue(0)
+        self._show_status("Starting scan")
+        self.machine_state.setText("Machine state will be restored after scanning")
+        self.progress.setFormat("%p%")
         self.apply_best.setEnabled(False)
-        self._redraw_energy_plot()
-        self.worker = TimingScanWorker(request, self)
+        self._reset_scan_points(len(request.settings.offsets()))
+        self.worker = TimingScanWorker(request, self, batch_groups=groups)
         self.worker.point.connect(self._point_received)
         self.worker.diagnostic.connect(self._diagnostic_received)
         self.worker.state.connect(self._show_status)
         self.worker.progress.connect(self._progress_received)
         self.worker.match_state.connect(self._match_state_received)
-        self.worker.done.connect(self._scan_done)
+        if groups:
+            selected = {group.element_id for group in groups}
+            for group in self.batch_groups:
+                state = "Queued" if group.element_id in selected else "—"
+                self._set_batch_row(group.element_id, state)
+            self.scan_title.setText("Batch Scan")
+            self.batch_tabs.setCurrentWidget(self.batch_panel)
+            self.worker.group_started.connect(self._batch_group_started)
+            self.worker.group_finished.connect(self._batch_group_finished)
+            self.worker.batch_done.connect(self._batch_done)
+        else:
+            self.worker.done.connect(self._scan_done)
+        self.worker.finished.connect(self.worker.deleteLater)
         self._set_running(True)
         self.worker.start()
+
+    def _reset_scan_points(self, total: int) -> None:
+        self.points_data.clear()
+        self._latest_fit_center_mm = None
+        self.table.setRowCount(0)
+        self.progress.setRange(0, total)
+        self.progress.setValue(0)
+        self._redraw_energy_plot()
+
+    def _set_batch_row(
+        self,
+        group_id: str,
+        status: str,
+        offset: str = "—",
+        energy: str = "—",
+        tooltip: str = "",
+    ) -> None:
+        row = self.batch_rows[group_id]
+        for column, text in enumerate((status, offset, energy), start=1):
+            self.batch_table.item(row, column).setText(text)
+        self.batch_table.item(row, 1).setToolTip(tooltip)
+
+    def _batch_group_started(self, index: int, group_id: str) -> None:
+        self.scan_title.setText(f"{group_id} · HV / LLRF / SSA / KLY")
+        total_groups = len(self.worker.batch_groups)
+        self.progress.setFormat(f"Group {index + 1}/{total_groups} · %v/%m points")
+        self._reset_scan_points(self.progress.maximum())
+        self._latest_image = None
+        self._draw_image(None)
+        self._set_batch_row(group_id, "Scanning")
+        self.batch_table.scrollToItem(
+            self.batch_table.item(self.batch_rows[group_id], 0)
+        )
+
+    def _batch_group_finished(
+        self, group_id: str, result: TimingEnergyScanResult
+    ) -> None:
+        best = result.best_point if result.status == "DONE" else None
+        status = result.status.replace("_", " ").capitalize()
+        if result.status == "DONE":
+            if best is None:
+                status = "No valid point"
+            elif result.best_at_boundary:
+                status = "Done · best at boundary"
+        if best is not None:
+            self._redraw_energy_plot(best.to_mapping())
+        tooltip = "\n".join(
+            detail for detail in (result.message, result.csv_path, result.json_path)
+            if detail
+        )
+        self._set_batch_row(
+            group_id,
+            status,
+            f"{best.offset_us:+.3f}" if best is not None else "—",
+            self._number(best.matched_energy_mev, 3) if best is not None else "—",
+            tooltip,
+        )
+
+    def _batch_done(self, status: str, message: str) -> None:
+        for group in self.worker.batch_groups:
+            cell = self.batch_table.item(self.batch_rows[group.element_id], 1)
+            if cell.text() == "Queued":
+                cell.setText("Not run")
+            elif cell.text() == "Scanning":
+                cell.setText(status.capitalize())
+                cell.setToolTip(message)
+        self.worker = None
+        self.batch_tabs.setCurrentWidget(self.batch_panel)
+        self._set_running(False)
+        self._show_status(message)
+        self._finish_scan_close(status)
 
     def _stop_scan(self) -> None:
         if self.worker is not None and self.worker.isRunning():
@@ -704,17 +891,17 @@ class LinkedTimingEnergyScanDialog(QDialog):
         else:
             text = result.message or result.status
         self._show_status(text)
-        if result.status == "RESTORE_FAILED":
+        self._finish_scan_close(result.status)
+
+    def _finish_scan_close(self, status: str) -> None:
+        if status == "RESTORE_FAILED":
             self.status.setStyleSheet(
                 "color: #ff5f6d; font-weight: 600;"
             )
             self.machine_state.setText("RESTORE FAILED · verify machine state")
-        if worker is not None:
-            worker.deleteLater()
         if self._close_requested:
-            if result.status == "RESTORE_FAILED":
-                self._close_requested = False
-            else:
+            self._close_requested = False
+            if status != "RESTORE_FAILED":
                 self.accept()
 
     def _apply_best(self) -> None:
@@ -754,7 +941,6 @@ class LinkedTimingEnergyScanDialog(QDialog):
         self.apply_worker.start()
 
     def _apply_done(self, payload: dict[str, Any]) -> None:
-        self.start.setEnabled(True)
         self.close_button.setEnabled(True)
         status = str(payload.get("status", "APPLY_FAILED"))
         if status == "APPLIED":
@@ -776,6 +962,7 @@ class LinkedTimingEnergyScanDialog(QDialog):
         if self.apply_worker is not None:
             self.apply_worker.deleteLater()
             self.apply_worker = None
+        self._refresh_start_button()
 
     def _point_received(self, point: dict[str, Any]) -> None:
         self.points_data.append(dict(point))
@@ -1002,6 +1189,7 @@ class LinkedTimingEnergyScanDialog(QDialog):
         self.image_worker.failed.connect(self._image_read_failed)
         self.preview.setEnabled(False)
         self.capture_background.setEnabled(False)
+        self._refresh_start_button()
         self.image_worker.start()
 
     def _image_read_done(self, image: np.ndarray) -> None:
@@ -1048,6 +1236,7 @@ class LinkedTimingEnergyScanDialog(QDialog):
         if self.image_worker is not None:
             self.image_worker.deleteLater()
             self.image_worker = None
+        self._refresh_start_button()
 
     def _load_latest_background(self, *, silent: bool = False) -> bool:
         if not self.background_path.is_file():
@@ -1111,10 +1300,26 @@ class LinkedTimingEnergyScanDialog(QDialog):
             self.roi_control,
         ):
             widget.setEnabled(not running)
-        self.start.setEnabled(not running)
+        if self.batch_groups:
+            self.batch_choices.setEnabled(not running)
+            flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            if not running:
+                flags |= Qt.ItemIsUserCheckable
+            with QSignalBlocker(self.batch_table):
+                for row in range(self.batch_table.rowCount()):
+                    self.batch_table.item(row, 0).setFlags(flags)
+        self._refresh_start_button()
         self.stop.setEnabled(running)
         self.close_button.setEnabled(True)
         self.scanActiveChanged.emit(running)
+
+    def _refresh_start_button(self) -> None:
+        self.start.setEnabled(
+            self.worker is None
+            and self.apply_worker is None
+            and self.image_worker is None
+            and (not self.batch_groups or bool(self._selected_batch_groups()))
+        )
 
     def _show_status(self, message: str) -> None:
         self.status.setText(str(message))
@@ -1133,14 +1338,22 @@ class LinkedTimingEnergyScanDialog(QDialog):
             widget.axes.yaxis.label.set_color(text)
             widget.canvas.draw_idle()
 
-    def closeEvent(self, event) -> None:
-        if self.worker is not None and self.worker.isRunning():
+    def _defer_close(self) -> bool:
+        if self.worker is not None:
             self._close_requested = True
             self._stop_scan()
-            event.ignore()
-            return
+            return True
         if self.apply_worker is not None and self.apply_worker.isRunning():
             self._show_status("Wait for Apply Best to finish before closing")
+            return True
+        return False
+
+    def reject(self) -> None:
+        if not self._defer_close():
+            super().reject()
+
+    def closeEvent(self, event) -> None:
+        if self._defer_close():
             event.ignore()
             return
         super().closeEvent(event)

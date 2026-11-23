@@ -179,6 +179,9 @@ class TimingWindow(QMainWindow):
         super().__init__()
         self.runtime = runtime
         self.groups = {group.element_id: group for group in runtime.groups}
+        self.scan_groups = tuple(
+            group for group in runtime.groups if group.devices == DEVICES
+        )
         self.current_group: TimingGroup | None = None
         self.values = TimingValues(minimum_us=runtime.minimum_us)
         self.queue = CoalescingWriteQueue()
@@ -230,6 +233,10 @@ class TimingWindow(QMainWindow):
             "Scan the selected HV/LLRF/SSA/KLY timing chain against ENY energy"
         )
         self.scan_button.clicked.connect(self._open_linked_energy_scan)
+        self.batch_scan_button = QPushButton("Batch Scan…", root)
+        self.batch_scan_button.clicked.connect(
+            lambda: self._open_linked_energy_scan(batch=True)
+        )
         self.save_button = QPushButton("Save", root)
         self.restore_button = QPushButton("Restore", root)
         self.save_button.setToolTip("Save all RF timing delay and width AO values")
@@ -237,6 +244,7 @@ class TimingWindow(QMainWindow):
         self.save_button.clicked.connect(self._save_snapshot)
         self.restore_button.clicked.connect(self._restore_snapshot)
         heading.addWidget(self.scan_button)
+        heading.addWidget(self.batch_scan_button)
         heading.addWidget(self.save_button)
         heading.addWidget(self.restore_button)
         heading.addWidget(
@@ -415,14 +423,10 @@ class TimingWindow(QMainWindow):
         self.waveform_view.apply_theme(palette)
 
 
-    def _scan_unavailable_reason(self) -> str | None:
+    def _scan_unavailable_reason(self, *, batch: bool = False) -> str | None:
         config = self.runtime.linked_energy_scan
         if config is None or not config.enabled:
             return "Linked timing-energy scan is not configured for this machine."
-        if self.current_group is None:
-            return "Select a power-source group first."
-        if tuple(self.current_group.devices) != DEVICES:
-            return "Linked scan requires a complete HV / LLRF / SSA / KLY chain."
         if self._scan_active:
             return "A linked timing-energy scan is running."
         if (
@@ -432,6 +436,14 @@ class TimingWindow(QMainWindow):
             or self._snapshot_busy()
         ):
             return "Wait for the current timing operation to finish."
+        if batch:
+            if not self.scan_groups:
+                return "Batch scan requires at least one complete timing chain."
+            return None
+        if self.current_group is None:
+            return "Select a power-source group first."
+        if self.current_group.devices != DEVICES:
+            return "Linked scan requires a complete HV / LLRF / SSA / KLY chain."
         required_fields = ("delay_set", "delay_readback", "enable")
         missing = [
             f"{device.upper()} {field}"
@@ -459,9 +471,14 @@ class TimingWindow(QMainWindow):
                 f"{self.current_group.element_id}"
             )
         )
+        batch_reason = self._scan_unavailable_reason(batch=True)
+        self.batch_scan_button.setEnabled(batch_reason is None)
+        self.batch_scan_button.setToolTip(
+            batch_reason or "Select timing chains for a sequential linked energy scan"
+        )
 
-    def _open_linked_energy_scan(self) -> None:
-        reason = self._scan_unavailable_reason()
+    def _open_linked_energy_scan(self, *, batch: bool = False) -> None:
+        reason = self._scan_unavailable_reason(batch=batch)
         if reason is not None:
             self.statusBar().showMessage(reason)
             return
@@ -472,6 +489,7 @@ class TimingWindow(QMainWindow):
         dialog = LinkedTimingEnergyScanDialog(
             self.runtime,
             self.current_group,
+            batch_groups=self.scan_groups if batch else (),
             theme=self._theme,
             parent=self,
         )

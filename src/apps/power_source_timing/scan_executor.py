@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
+from uuid import uuid4
 
 import epics
 from epics import PV, caget, caput
@@ -21,7 +22,10 @@ from half_linac.src.shared.machine_profile import (
     TimingControlLock,
     require_workflow_write_allowed,
 )
-from half_linac.src.shared.machine_profile.app_runtime import resolve_app_runtime_paths
+from half_linac.src.shared.machine_profile.app_runtime import (
+    new_app_run_dir,
+    resolve_app_runtime_paths,
+)
 
 from .model import DEVICES
 from .profile_runtime import TimingGroup
@@ -700,3 +704,63 @@ class TimingEnergyScanExecutor:
                     f"Apply result could not be logged: {exc}"
                 )
         return payload
+
+
+def run_timing_energy_batch(
+    request: TimingEnergyScanRequest,
+    groups: tuple[TimingGroup, ...],
+    *,
+    cancel_requested: Callable[[], bool],
+    callbacks: TimingEnergyScanCallbacks,
+    group_started: Callable[[int, str], None],
+    group_finished: Callable[[str, TimingEnergyScanResult], None],
+) -> tuple[str, str]:
+    context = request.context
+    operation = "Linked Timing Energy Batch Scan"
+    metadata = {"app": "power_source_timing", "operation": operation}
+    active_group = ""
+    try:
+        require_workflow_write_allowed(context, "power_source_timing", operation)
+        runs_dir = new_app_run_dir(
+            Path(__file__).resolve().parent,
+            context,
+            kind="linked_timing_batch",
+            suffix=uuid4().hex[:8],
+        )
+        with (
+            TimingControlLock.for_machine(context.machine.id, metadata),
+            EnergyControlLock.for_machine(context.machine.id, metadata),
+        ):
+            epics.ca.use_initial_context()
+            for index, group in enumerate(groups):
+                if cancel_requested():
+                    return "CANCELLED", "Batch stopped"
+                active_group = group.element_id
+                group_started(index, active_group)
+                executor = TimingEnergyScanExecutor(
+                    replace(request, group=group),
+                    cancel_requested=cancel_requested,
+                    callbacks=callbacks,
+                    runs_dir=runs_dir,
+                    manage_locks=False,
+                )
+                result = executor.run()
+                if result.status == "DONE" and not (
+                    result.timing_restored and result.energy_restored
+                ):
+                    result = replace(
+                        result,
+                        status="RESTORE_FAILED",
+                        message="Initial timing and energy were not verified after scan.",
+                    )
+                group_finished(active_group, result)
+                if result.status != "DONE":
+                    return (
+                        result.status,
+                        f"{active_group} · {result.message or result.status}",
+                    )
+                active_group = ""
+    except Exception as exc:
+        detail = f"{active_group} · {exc}" if active_group else str(exc)
+        return "FAILED", detail
+    return "DONE", "Batch complete · initial timing and energy restored after each group"
