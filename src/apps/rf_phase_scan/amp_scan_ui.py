@@ -50,7 +50,7 @@ class AmpScanPage(QWidget):
         self.stations = ()
         self.write_enabled = write_enabled
         self.progress_stations = ()
-        self.applying = False
+        self.action = "scan"
         root, self.status = scan_page_layout(self, "KLY Forward Power")
 
         try:
@@ -100,8 +100,11 @@ class AmpScanPage(QWidget):
         self.apply_button = QPushButton("Apply Suggestions", self)
         self.apply_peak_button = QPushButton("Apply Measured Peak", self)
         self.apply_peak_button.setToolTip("Apply the highest measured point for the highlighted station.")
+        self.restore_button = QPushButton("Restore Original AMP", self)
+        self.restore_button.setToolTip("Restore the Original AMP for the highlighted station.")
         actions, self.progress = scan_actions(
-            self, (self.start_button, self.stop_button, self.apply_button, self.apply_peak_button),
+            self, (self.start_button, self.stop_button, self.apply_button, self.apply_peak_button,
+                   self.restore_button),
             len(self.stations),
         )
         root.addLayout(actions)
@@ -114,6 +117,7 @@ class AmpScanPage(QWidget):
         self.stop_button.clicked.connect(self.stop)
         self.apply_button.clicked.connect(self._apply)
         self.apply_peak_button.clicked.connect(self._apply_measured_peak)
+        self.restore_button.clicked.connect(self._restore_original_amp)
         if not self.stations:
             self.status.setText("Power Scan requires KLY forward power channels in this backend.")
         elif not self.write_enabled:
@@ -196,7 +200,7 @@ class AmpScanPage(QWidget):
         return self.worker is not None
 
     def stop(self):
-        if self.is_running():
+        if self.is_running() and self.action != "restore":
             self.status.setText("Stopping AMP operation…")
             self.stop_button.setEnabled(False)
             self.runner.stop()
@@ -219,13 +223,9 @@ class AmpScanPage(QWidget):
             if self.records.get(station.element_id, {}).get("status") == "candidate"
         ]
 
-    def _selected_peak_station(self):
+    def _current_station(self):
         row = self.table.currentRow()
-        if row >= 0 and self.runner is not None:
-            station = self.stations[row]
-            if self.runner.can_apply_measured_peak(station.element_id):
-                return station
-        return None
+        return self.stations[row] if row >= 0 else None
 
     def _select_all(self, checked):
         for station, selector in zip(self.stations, self.selectors):
@@ -249,8 +249,15 @@ class AmpScanPage(QWidget):
             allowed and self.runner is not None and self.runner.status == "completed"
             and bool(self._selected_candidates())
         )
-        self.apply_peak_button.setEnabled(allowed and self._selected_peak_station() is not None)
-        self.stop_button.setEnabled(busy)
+        station = self._current_station()
+        can_write_station = allowed and self.runner is not None and station is not None
+        self.apply_peak_button.setEnabled(
+            can_write_station and self.runner.can_apply_measured_peak(station.element_id)
+        )
+        self.restore_button.setEnabled(
+            can_write_station and self.runner.can_restore_original_amp(station.element_id)
+        )
+        self.stop_button.setEnabled(busy and self.action != "restore")
 
     def _start(self):
         selected = self._selected()
@@ -304,13 +311,13 @@ class AmpScanPage(QWidget):
             self, "Apply AMP Suggestions", f"Apply these AMP values?\n\n{settings}",
             QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel,
         ) == QMessageBox.Yes:
-            self._launch(lambda: self.runner.apply(selected), "Applying AMP…", selected, applying=True)
+            self._launch(lambda: self.runner.apply(selected), "Applying AMP…", selected, action="apply")
 
     def _apply_measured_peak(self):
         if self.is_running() or not self.write_enabled:
             return
-        station = self._selected_peak_station()
-        if station is None:
+        station = self._current_station()
+        if station is None or self.runner is None or not self.runner.can_apply_measured_peak(station.element_id):
             return
         element_id = station.element_id
         record = self.records[element_id]
@@ -329,12 +336,31 @@ class AmpScanPage(QWidget):
         ) == QMessageBox.Yes:
             self._launch(
                 lambda: self.runner.apply_measured_peak(element_id),
-                "Applying measured AMP peak…", (element_id,), applying=True,
+                "Applying measured AMP peak…", (element_id,), action="apply",
             )
 
-    def _launch(self, operation, message, stations, *, applying=False):
+    def _restore_original_amp(self):
+        if self.is_running() or not self.write_enabled:
+            return
+        station = self._current_station()
+        if station is None or self.runner is None or not self.runner.can_restore_original_amp(station.element_id):
+            return
+        element_id = station.element_id
+        record = self.records[element_id]
+        if QMessageBox.question(
+            self, "Restore Original AMP",
+            f"Restore {station.display_name} to its original AMP?\n\n"
+            f"{record['applied']:g} → {record['initial']:g} {self.settings.unit}",
+            QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel,
+        ) == QMessageBox.Yes:
+            self._launch(
+                lambda: self.runner.restore_original_amp(element_id),
+                "Restoring original AMP…", (element_id,), action="restore",
+            )
+
+    def _launch(self, operation, message, stations, *, action="scan"):
         self.progress_stations = tuple(stations)
-        self.applying = applying
+        self.action = action
         self.progress.setRange(0, len(self.progress_stations))
         self.progress.setValue(0)
         self.worker = AmpScanWorker(operation, self)
@@ -355,11 +381,13 @@ class AmpScanPage(QWidget):
                 self._update(record)
             if result["error"]:
                 text = result["error"]
+            elif self.action == "restore":
+                text = "Original AMP restored."
             else:
                 text = "AMP operation complete."
             self.status.setText(f"{text}  ·  {result['path']}")
             applied = tuple(row["station"] for row in result["stations"] if row["status"] == "applied")
-            if applied:
+            if applied or self.action == "restore":
                 self.applied.emit(applied)
         else:
             self.status.setText(worker.error or "AMP operation did not finish.")
@@ -385,10 +413,12 @@ class AmpScanPage(QWidget):
             "pending": "Pending", "scanning": "Scanning", "candidate": "Suggestion ready",
             "keep": "Keep original", "undetermined": "No suggestion", "applied": "Applied",
             "stopped": "Stopped", "failed": "Scan failed", "restore_failed": "Restore unverified",
-            "applying": "Applying", "apply_failed": "Apply failed",
+            "applying": "Applying", "apply_failed": "Apply failed", "restoring": "Restoring original",
         }[record["status"]]
         if record["status"] == "applied" and record.get("apply_source") == "measured_peak":
             status = f"Applied peak {record['applied']:g} {self.settings.unit}"
+        elif record.get("original_restored"):
+            status = "Original restored"
         self.table.item(row, 5).setText(status)
         self.table.item(row, 5).setToolTip(record.get("error") or status)
         follow_scan = self.runner.settings.execution_mode == "serial" and record["status"] == "scanning"
@@ -399,16 +429,19 @@ class AmpScanPage(QWidget):
         self._update_progress()
 
     def _update_progress(self):
-        if self.applying:
-            complete = {"applied", "apply_failed", "restore_failed"}
-        else:
-            complete = {"undetermined", "stopped", "failed", "restore_failed"}
+        complete = {
+            "apply": {"applied", "apply_failed", "restore_failed"},
+            "restore": {"restore_failed"},
+            "scan": {"undetermined", "stopped", "failed", "restore_failed"},
+        }[self.action]
         finished = 0
         for station in self.progress_stations:
             record = self.records.get(station, {})
             status = record.get("status")
             if status in complete or (
-                not self.applying and status in {"candidate", "keep"} and record.get("restored")
+                self.action == "scan" and status in {"candidate", "keep"} and record.get("restored")
+            ) or (
+                self.action == "restore" and record.get("original_restored")
             ):
                 finished += 1
         self.progress.setValue(finished)

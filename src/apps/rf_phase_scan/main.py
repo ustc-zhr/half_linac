@@ -1016,7 +1016,7 @@ class RFPhaseScanWindow(QMainWindow):
                 self.tuning_tabs.setTabEnabled(self.tuning_tabs.indexOf(page), not busy)
 
     def _queue_phase_selection(self, stations):
-        self._phase_selection = stations
+        self._phase_selection = stations or None
 
     def _select_phase_targets(self, _index):
         if self.crest_page is None or self.tuning_tabs.currentWidget() not in (

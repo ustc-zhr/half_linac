@@ -361,6 +361,54 @@ def test_partial_apply_leaves_external_change_as_found(amp_setup, tmp_path):
     assert simulator.writes[count:] == [("LLRF02", 50.5)]
     assert simulator.amps["LLRF03"] == 51.5
 
+    restored = scan.restore_original_amp("LLRF02")
+    assert restored["status"] == "completed"
+    assert restored["stations"][0]["status"] == "candidate"
+    assert restored["stations"][0]["original_restored"]
+    assert restored["stations"][1]["status"] == "apply_failed"
+    assert simulator.writes[count:] == [("LLRF02", 50.5), ("LLRF02", 50)]
+    assert simulator.amps == {"LLRF02": 50, "LLRF03": 51.5}
+
+
+def test_restore_original_amp_refuses_to_overwrite_external_change(amp_setup, tmp_path):
+    scan, simulator = make_runner(amp_setup, tmp_path / "run.json")
+    scan.run()
+    with pytest.raises(RuntimeError, match="applied from this Power Scan"):
+        scan.restore_original_amp("LLRF02")
+    scan.apply_measured_peak("LLRF02")
+    simulator.amps["LLRF02"] = 51.5
+    count = len(simulator.writes)
+
+    result = scan.restore_original_amp("LLRF02")
+
+    assert result["status"] == "failed"
+    assert result["stations"][0]["status"] == "restore_failed"
+    assert "AMP changed externally" in result["error"]
+    assert simulator.amps["LLRF02"] == 51.5
+    assert len(simulator.writes) == count
+
+
+def test_restore_original_amp_can_retry_unverified_readback(amp_setup, tmp_path):
+    path = tmp_path / "run.json"
+    scan, simulator = make_runner(amp_setup, path)
+    scan.run()
+    scan.apply_measured_peak("LLRF02")
+    simulator.readback = lambda _element: 50.5
+    count = len(simulator.writes)
+
+    result = scan.restore_original_amp("LLRF02")
+    assert result["stations"][0]["status"] == "restore_failed"
+    assert scan.can_restore_original_amp("LLRF02")
+    assert simulator.writes[count:] == [("LLRF02", 50)]
+
+    simulator.readback = simulator.amps.__getitem__
+    result = scan.restore_original_amp("LLRF02")
+    assert result["status"] == "completed"
+    assert simulator.writes[count:] == [("LLRF02", 50)]
+    assert not scan.can_restore_original_amp("LLRF02")
+    assert scan.can_apply_measured_peak("LLRF02")
+    assert json.loads(path.read_text())["stations"][0]["original_restored"]
+
 
 def test_external_change_to_candidate_during_apply_is_not_rolled_back(amp_setup, tmp_path):
     scan, simulator = make_runner(amp_setup, tmp_path / "run.json")
@@ -468,6 +516,7 @@ def test_offscreen_amp_scan_review_apply_and_phase_handoff(amp_setup, tmp_path, 
         assert len(page.records["LLRF02"]["points"][0]["samples"]) == 3
         assert not page.selectors[0].isChecked()
         assert not page.apply_button.isEnabled()
+        assert not page.restore_button.isEnabled()
         assert simulator.amps == {"LLRF02": 50, "LLRF03": 50}
         if manual_peak:
             page.table.selectRow(page.rows["LLRF02"])
@@ -498,6 +547,27 @@ def test_offscreen_amp_scan_review_apply_and_phase_handoff(amp_setup, tmp_path, 
             window.batch_dialog.devices[row].element_id for row in window.batch_dialog._rows()
         ] == ["LLRF02"]
         assert not window._phase_busy()
+
+        window.tuning_tabs.setCurrentWidget(page)
+        page.table.selectRow(page.rows["LLRF03"])
+        assert not page.restore_button.isEnabled()
+        page.table.selectRow(page.rows["LLRF02"])
+        assert page.restore_button.isEnabled()
+        count = len(simulator.writes)
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.Cancel) as question:
+            page.restore_button.click()
+        assert "50.5 → 50 %" in question.call_args.args[2]
+        assert question.call_args.args[4] == QMessageBox.Cancel
+        assert len(simulator.writes) == count
+
+        page.restore_button.click()
+        finish()
+        assert simulator.writes[count:] == [("LLRF02", 50)]
+        assert page.table.item(page.rows["LLRF02"], 5).text() == "Original restored"
+        assert page.progress.value() == page.progress.maximum() == 1
+        assert not page.restore_button.isEnabled()
+        assert page.apply_peak_button.isEnabled()
+        assert window._phase_selection is None
     finally:
         window.close()
         app.processEvents()
