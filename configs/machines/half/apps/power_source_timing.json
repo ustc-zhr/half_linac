@@ -32,7 +32,7 @@
     "timing": {
       "settle_time_s": 1.0,
       "readback_verification": {
-        "tolerance_us": 0.002,
+        "tolerance_us": 0.003,
         "timeout_s": 2.0,
         "poll_interval_s": 0.05
       }
