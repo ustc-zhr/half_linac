@@ -1048,23 +1048,27 @@ class LinkedTimingEnergyScanDialog(QDialog):
     ) -> None:
         axes = self.energy_plot.axes
         axes.clear()
-        valid = [
-            point
-            for point in self.points_data
-            if point.get("status") == "ok"
-            and point.get("matched_energy_mev") is not None
-        ]
-        if valid:
-            x = [float(point["offset_us"]) for point in valid]
-            y = [float(point["matched_energy_mev"]) for point in valid]
-            error = [
-                float(point.get("energy_standard_error_mev") or 0.0)
-                for point in valid
-            ]
+        points_by_offset = sorted(
+            self.points_data, key=lambda point: float(point["offset_us"])
+        )
+        offsets = []
+        energies = []
+        errors = []
+        for point in points_by_offset:
+            offsets.append(float(point["offset_us"]))
+            energy = point.get("matched_energy_mev")
+            if point.get("status") == "ok" and energy is not None:
+                energies.append(float(energy))
+                errors.append(float(point.get("energy_standard_error_mev") or 0.0))
+            else:
+                energies.append(math.nan)
+                errors.append(math.nan)
+        has_valid_points = any(math.isfinite(energy) for energy in energies)
+        if has_valid_points:
             axes.errorbar(
-                x,
-                y,
-                yerr=error,
+                offsets,
+                energies,
+                yerr=errors,
                 marker="o",
                 color="#45d0bc",
                 ecolor="#90a1ad",
@@ -1114,7 +1118,7 @@ class LinkedTimingEnergyScanDialog(QDialog):
         axes.set_xlabel("Linked timing offset (μs)")
         axes.set_ylabel("Measured beam energy (MeV)")
         axes.grid(True, alpha=0.25)
-        if valid or excluded or current or best:
+        if has_valid_points or excluded or current or best:
             axes.legend(loc="best")
         self.energy_plot.canvas.draw_idle()
 

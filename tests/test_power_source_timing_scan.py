@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from matplotlib.figure import Figure
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -418,6 +419,42 @@ def test_apply_best_rolls_back_both_resources_on_energy_failure():
     assert energies == [2204.0, 2200.0]
 
 
+def test_energy_plot_connects_by_offset_and_leaves_gaps_at_invalid_points():
+    points = [
+        {"offset_us": offset, "matched_energy_mev": energy, "status": status}
+        for offset, energy, status in (
+            (0.0, 2219.0, "ok"),
+            (0.1, 2210.0, "ok"),
+            (-0.1, 2214.0, "ok"),
+            (-0.2, 2195.0, "low_signal"),
+            (-0.3, 2180.0, "ok"),
+            (-0.4, None, "failed"),
+            (-0.5, 2170.0, "ok"),
+        )
+    ]
+    figure = Figure()
+    axes = figure.subplots()
+    dialog = SimpleNamespace(
+        points_data=points,
+        energy_plot=SimpleNamespace(axes=axes, canvas=figure.canvas),
+    )
+
+    LinkedTimingEnergyScanDialog._redraw_energy_plot(dialog, best=points[0])
+
+    line = axes.containers[0].lines[0]
+    np.testing.assert_array_equal(
+        line.get_xdata(orig=False), [-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1]
+    )
+    np.testing.assert_array_equal(
+        line.get_ydata(orig=False),
+        [2170.0, np.nan, 2180.0, np.nan, 2214.0, 2219.0, 2210.0],
+    )
+    markers = {artist.get_label(): artist for artist in axes.collections}
+    np.testing.assert_array_equal(markers["Excluded"].get_offsets(), [[-0.2, 2195.0]])
+    np.testing.assert_array_equal(markers["Current"].get_offsets(), [[-0.5, 2170.0]])
+    np.testing.assert_array_equal(markers["Best"].get_offsets(), [[0.0, 2219.0]])
+
+
 def test_runtime_and_dialog_expose_linked_scan_defaults():
     with patch.dict(
         os.environ,
@@ -441,7 +478,7 @@ def test_runtime_and_dialog_expose_linked_scan_defaults():
         request = dialog._build_request()
         assert len(request.settings.offsets()) == 21
         assert request.settings.offsets()[1] == 0.1
-        assert request.readback_tolerance_us == 0.002
+        assert request.readback_tolerance_us == config.readback_tolerance_us
         assert request.settings.energy_settle_time_s == 3.0
     finally:
         dialog.close()
@@ -503,6 +540,8 @@ def test_batch_scan_runs_in_order_and_stops_after_failed_restore_or_cancel(
     monkeypatch.setenv("HALF_LINAC_MACHINE_ID", "half")
     monkeypatch.setenv("HALF_LINAC_CONTROL_BACKEND", "real")
     runtime = load_timing_runtime()
+    config = runtime.linked_energy_scan
+    assert config is not None
     groups = tuple(group for group in runtime.groups if group.devices == DEVICES)
     active_locks = []
     started = Event()
@@ -523,7 +562,7 @@ def test_batch_scan_runs_in_order_and_stops_after_failed_restore_or_cancel(
             assert active_locks == ["timing", "energy"]
             assert runs_dir == tmp_path
             assert not manage_locks
-            assert request.readback_tolerance_us == 0.002
+            assert request.readback_tolerance_us == config.readback_tolerance_us
             scanned.append(request.group.element_id)
             offsets.append(request.settings.offsets())
             started.set()
