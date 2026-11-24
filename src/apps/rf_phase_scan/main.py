@@ -994,9 +994,7 @@ class RFPhaseScanWindow(QMainWindow):
         return self.amp_page is not None and self.amp_page.is_running()
 
     def _recovery_busy(self):
-        return self.recovery_page is not None and (
-            self.recovery_page.worker is not None or self.recovery_page.restore_worker is not None
-        )
+        return self.recovery_page is not None and self.recovery_page.is_busy()
 
     def _phase_busy(self):
         return (
@@ -2672,8 +2670,7 @@ class RFPhaseScanWindow(QMainWindow):
             if not self.recovery_page.stop_and_wait(15000):
                 self._set_scan_status(
                     "Restoring",
-                    "Transmission Recovery phase restore is still in progress; "
-                    "close deferred.",
+                    "Transmission Recovery is still restoring device settings. Close deferred.",
                 )
                 event.ignore()
                 return
@@ -2693,6 +2690,8 @@ class RFPhaseScanWindow(QMainWindow):
                 self._set_scan_status("Restoring", "Machine state restore is still in progress; close deferred.")
                 event.ignore()
                 return
+        if self.recovery_page is not None:
+            self.recovery_page.stop_phase_monitors()
         super().closeEvent(event)
 
     def _background_toggled(self, enabled):

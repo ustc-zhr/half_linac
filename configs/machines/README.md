@@ -152,6 +152,29 @@ optional `low` and `high` values to narrow the scan window. A
 the scan page. Power Scan and Transmission Recovery use the
 `rf_phase_scan` workflow's `write_control` policy for the active backend.
 
+Transmission Recovery can also check the gain direction at an applied phase.
+Set `acceleration_check` on an individual stage after validating that increasing
+momentum decreases the magnitude of the orbit response on that path. HALF ships
+with the `LLRF02` candidate path `XC10 → BPM10` disabled. The check uses BPM10
+position and SUM for paired measurements. The recovery stage uses BPM08 SUM.
+
+An enabled check uses these calibration values:
+
+| Field | Meaning |
+| --- | --- |
+| `bpm`, `corrector` | Profile element IDs for the position BPM and horizontal corrector. |
+| `amplitude`, `current` | Each contains a calibrated `window` of two limits, a positive `step`, and a readback `tolerance`. Use percent for amplitude and amperes for current. |
+| `conditions` | List of required readback ranges, each with an `element`, logical `channel`, and two-value `window`. For the HALF candidate include the validated QL16 readback range and any relevant downstream RF conditions. |
+| `samples_per_state`, `settle_time_s`, `sample_timeout_s` | Sample count, settling time, and sampling deadline per setting. |
+| `pair_tolerance_s` | Maximum source timestamp difference for X and SUM from the same pulse. Validate timestamp alignment at the BPM's operating pulse rate. |
+| `minimum_sum`, `maximum_relative_sum_change` | Beam presence floor and maximum fractional change in SUM from the preflight median. |
+| `minimum_response_difference`, `maximum_baseline_drift` | Measured slope difference required for a decision and allowed difference between nominal repeats, in native BPM position units per ampere. |
+
+Set `enabled` to true once the station's calibration and perturbations have
+been verified, including that the amplitude step changes the effective RF
+field at the fixed phase. Each check writes a separate `acceleration_check_*.json`
+next to the recovery run's `run.json`.
+
 `calibrations/*.json` contains tracked runtime calibration data that converts a physical
 quantity into a machine-native setpoint. Keep original measurements in `references/`; do not
 duplicate machine current limits in calibration files, because `machine.json` remains the

@@ -195,7 +195,7 @@ class EpicsAmpClient:
 
     def write(self, name, value) -> None:
         if self._pv(name).put(value, wait=True, timeout=READBACK_TIMEOUT_S) != 1:
-            raise RuntimeError(f"{name}: AMP write was not confirmed.")
+            raise RuntimeError(f"{name}: write was not confirmed.")
 
     def close(self) -> None:
         for pv in self.pvs.values():

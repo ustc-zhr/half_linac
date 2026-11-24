@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QThread, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QDoubleSpinBox,
     QHBoxLayout,
@@ -19,6 +20,11 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from half_linac.src.apps.rf_phase_scan.acceleration_check import (
+    AccelerationCheck,
+    discover_acceleration_checks,
+)
+from half_linac.src.apps.rf_phase_scan.phase_energy_scan import phase_difference_deg
 from half_linac.src.apps.rf_phase_scan.scan_widgets import (
     parameter_card, prepare_scan_axes, scan_actions, scan_page_layout,
     scan_workspace, station_selector,
@@ -80,7 +86,28 @@ class TransmissionRecoveryRestoreThread(QThread):
             self.done.emit(None, str(exc))
 
 
+class AccelerationCheckThread(QThread):
+    state = pyqtSignal(str)
+
+    def __init__(self, row, **options):
+        super().__init__()
+        self.row = row
+        self.check = AccelerationCheck(on_state=self.state.emit, **options)
+        self.result = None
+
+    def run(self):
+        try:
+            self.result = self.check.run()
+        except Exception as exc:
+            self.result = dict(self.check.result, error=str(exc))
+            self.result["status"] = "undetermined"
+
+    def stop(self):
+        self.check.stop()
+
+
 class TransmissionRecoveryPage(QWidget):
+    acceleration_phase_changed = pyqtSignal(int, object, object, object)
     COLUMNS = (
         "Use",
         "LLRF",
@@ -90,7 +117,14 @@ class TransmissionRecoveryPage(QWidget):
         "Peak SUM",
         "Applied",
         "Status",
+        "Acceleration",
     )
+    ACCELERATION_COLUMN = len(COLUMNS) - 1
+    ACCELERATION_LABELS = {
+        "accelerating": "Accelerating",
+        "decelerating": "Decelerating",
+        "undetermined": "Undetermined",
+    }
 
     def __init__(
         self,
@@ -127,8 +161,15 @@ class TransmissionRecoveryPage(QWidget):
             context, self.config, mode=resolution_mode
         )
         self.default_settings = settings_from_config(self.config)
+        self.check_configs, self.check_unavailable = discover_acceleration_checks(
+            context, self.config, {stage.rf_element: stage for stage in self.candidates},
+            self.default_settings,
+        )
         self.worker = None
         self.restore_worker = None
+        self.check_worker = None
+        self.phase_monitors = {}
+        self.closing = False
         self.selected_rows: list[int] = []
         self.current_task_index = None
         self.current_points: list[dict[str, Any]] = []
@@ -181,9 +222,10 @@ class TransmissionRecoveryPage(QWidget):
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
         splitter, self.plot, self.plot_title = scan_workspace(
             self, self.table, f"Stages · {len(self.candidates)} configured",
-            (46, 78, 112, 82, 82, 98, 94), (self.all_button, self.clear_button),
+            (42, 68, 86, 65, 65, 89, 70, 96), (self.all_button, self.clear_button),
             "Current phase scan",
         )
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.stage_checkboxes: list[QCheckBox] = []
         for row, stage in enumerate(self.candidates):
             selector = station_selector(self.table, row, checked=True)
@@ -193,6 +235,7 @@ class TransmissionRecoveryPage(QWidget):
             self.table.setItem(row, 2, QTableWidgetItem(stage.target_bpm))
             for column in range(3, len(self.COLUMNS)):
                 self.table.setItem(row, column, QTableWidgetItem("—"))
+            self._reset_check(row)
         root.addWidget(splitter, 1)
 
         self.start_button = QPushButton("Start Selected", self)
@@ -200,10 +243,13 @@ class TransmissionRecoveryPage(QWidget):
         self.stop_button = QPushButton("Stop", self)
         self.stop_button.setObjectName("stopButton")
         self.restore_button = QPushButton("Restore Snapshot", self)
+        self.check_button = QPushButton("Check Acceleration", self)
+        self.check_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.restore_button.setEnabled(False)
         actions, self.progress = scan_actions(
-            self, (self.start_button, self.stop_button, self.restore_button), len(self.candidates)
+            self, (self.start_button, self.check_button, self.stop_button, self.restore_button),
+            len(self.candidates),
         )
         root.addLayout(actions)
 
@@ -212,6 +258,9 @@ class TransmissionRecoveryPage(QWidget):
         self.start_button.clicked.connect(self._start)
         self.stop_button.clicked.connect(self.stop)
         self.restore_button.clicked.connect(self._restore_snapshot)
+        self.check_button.clicked.connect(self._start_acceleration_check)
+        self.table.itemSelectionChanged.connect(self._update_check_button)
+        self.acceleration_phase_changed.connect(self._check_phase_changed, Qt.QueuedConnection)
         for control in (
             self.half_range,
             self.points,
@@ -308,10 +357,10 @@ class TransmissionRecoveryPage(QWidget):
         self.summary.setText(detail)
         self.start_button.setEnabled(
             bool(rows)
-            and self.worker is None
-            and self.restore_worker is None
+            and not self.is_busy()
             and self.write_enabled
         )
+        self._update_check_button()
 
     def _set_running(self, running):
         self.table.setEnabled(not running)
@@ -329,17 +378,17 @@ class TransmissionRecoveryPage(QWidget):
             not running and bool(self._selected_rows()) and self.write_enabled
         )
         self.stop_button.setEnabled(
-            running and self.worker is not None
+            running and (self.worker is not None or self.check_worker is not None)
         )
         self.restore_button.setEnabled(
             not running and self.last_result is not None
         )
         self.window._set_recovery_running(running)
+        self._update_check_button()
 
     def _start(self):
         if (
-            self.worker is not None
-            or self.restore_worker is not None
+            self.is_busy()
             or not self.write_enabled
             or self.window._amp_busy()
             or self.window.thread is not None
@@ -378,8 +427,9 @@ class TransmissionRecoveryPage(QWidget):
         self.current_task_index = None
         self.current_points = []
         for row in range(len(self.candidates)):
-            for column in range(3, len(self.COLUMNS)):
+            for column in range(3, self.ACCELERATION_COLUMN):
                 self.table.item(row, column).setText("—")
+            self._reset_check(row)
             if row not in rows:
                 self.table.item(row, 7).setText("Not Selected")
         self.progress.setRange(0, len(stages))
@@ -412,7 +462,11 @@ class TransmissionRecoveryPage(QWidget):
         self.worker.start()
 
     def stop(self):
-        if self.worker is not None:
+        if self.check_worker is not None:
+            self.check_worker.stop()
+            self.stop_button.setEnabled(False)
+            self.summary.setText("Stopping · restoring RF amplitude and corrector current…")
+        elif self.worker is not None:
             self.worker.stop()
             self.stop_button.setEnabled(False)
             self.summary.setText(
@@ -420,6 +474,9 @@ class TransmissionRecoveryPage(QWidget):
             )
 
     def stop_and_wait(self, timeout_ms):
+        if self.check_worker is not None and self.check_worker.isRunning():
+            self.check_worker.stop()
+            return self.check_worker.wait(timeout_ms)
         if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
             return self.worker.wait(timeout_ms)
@@ -428,13 +485,136 @@ class TransmissionRecoveryPage(QWidget):
         return True
 
     def is_running(self):
-        return (
-            self.worker is not None
-            and self.worker.isRunning()
-        ) or (
-            self.restore_worker is not None
-            and self.restore_worker.isRunning()
+        return any(
+            worker is not None and worker.isRunning()
+            for worker in (self.worker, self.restore_worker, self.check_worker)
         )
+
+    def is_busy(self):
+        return any(worker is not None for worker in (self.worker, self.restore_worker, self.check_worker))
+
+    def _selected_check_item(self):
+        rows = self.table.selectionModel().selectedRows()
+        if len(rows) != 1 or not self.last_result:
+            return None
+        row = rows[0].row()
+        rf = self.candidates[row].rf_element
+        for record in self.last_result.get("items", ()):
+            if record["rf_element"] == rf and record["status"] == "applied":
+                return row, record
+        return None
+
+    def _update_check_button(self):
+        selection = self._selected_check_item()
+        reason = "Select one RF with an applied phase."
+        if selection is not None:
+            rf = selection[1]["rf_element"]
+            reason = self.check_unavailable.get(rf, "")
+        self.check_button.setEnabled(
+            bool(selection and not reason and self.write_enabled and not self.is_busy())
+        )
+        self.check_button.setToolTip(reason or "Check the gain direction at the applied phase.")
+
+    def _reset_check(self, row, reason=None):
+        monitor = self.phase_monitors.pop(row, None)
+        if monitor is not None:
+            monitor[1].disconnect()
+        rf = self.candidates[row].rf_element
+        item = self.table.item(row, self.ACCELERATION_COLUMN)
+        item.setText(self.ACCELERATION_LABELS["undetermined"])
+        item.setToolTip(reason or self.check_unavailable.get(rf, "Check has not been run."))
+
+    def _start_acceleration_check(self):
+        selection = self._selected_check_item()
+        if (
+            selection is None or not self.check_button.isEnabled()
+            or self.window._amp_busy() or self.window.thread is not None
+            or (self.window.batch_dialog is not None and self.window.batch_dialog.worker is not None)
+        ):
+            return
+        row, record = selection
+        self._reset_check(row, "Check running.")
+        run_path = Path(self.last_result["json_path"])
+        path = run_path.parent / f"acceleration_check_{uuid4().hex}.json"
+        self.check_worker = AccelerationCheckThread(
+            row,
+            context=self.context,
+            config=self.check_configs[record["rf_element"]],
+            applied_phase=record["applied_phase_deg"],
+            recovery_path=run_path,
+            path=path,
+        )
+        self.check_worker.state.connect(self._state)
+        self.check_worker.finished.connect(self._acceleration_done)
+        self._set_running(True)
+        self.summary.setText(f"Preparing acceleration check · {record['rf_element']}")
+        self.check_worker.start()
+
+    def _acceleration_done(self):
+        worker = self.check_worker
+        self.check_worker = None
+        result = worker.result
+        row = worker.row
+        item = self.table.item(row, self.ACCELERATION_COLUMN)
+        label = self.ACCELERATION_LABELS[result["status"]]
+        item.setText(label)
+        detail = result["reason"] or "No usable result."
+        if result.get("error"):
+            detail = f"{detail}\nLog error: {result['error']}"
+        if result["restore_errors"]:
+            restore_detail = "\n".join(result["restore_errors"].values())
+            detail = f"{detail}\nRestore failed:\n{restore_detail}"
+        if result.get("measured_phase_deg") is not None:
+            detail = f"{detail}\nMeasured phase: {result['measured_phase_deg']:.3f}°"
+        item.setToolTip(detail)
+        self._set_running(False)
+        self.summary.setText(f"{result['rf_element']} · {label} · {detail.splitlines()[0]}")
+        if result["restore_errors"]:
+            QMessageBox.warning(self, "Acceleration Check Restore", detail)
+        if result["status"] != "undetermined" and not self.closing:
+            self._watch_checked_phase(row, result)
+        worker.deleteLater()
+
+    def _watch_checked_phase(self, row, result):
+        import epics
+
+        config = self.check_configs[result["rf_element"]]
+        token = object()
+
+        def readback_changed(value=None, severity=None, **_):
+            self.acceleration_phase_changed.emit(row, token, value, severity)
+
+        def connection_changed(conn=None, **_):
+            if not conn:
+                readback_changed()
+
+        try:
+            pv = epics.PV(
+                config.phase_readback_pv, form="time", auto_monitor=True,
+                callback=readback_changed, connection_callback=connection_changed,
+            )
+        except Exception as exc:
+            self._reset_check(row, f"Phase monitor is unavailable: {exc}")
+            return
+        self.phase_monitors[row] = (token, pv, result["applied_phase_deg"], config.phase_tolerance_deg)
+
+    def _check_phase_changed(self, row, token, value, severity):
+        monitor = self.phase_monitors.get(row)
+        if monitor is None or monitor[0] is not token:
+            return
+        try:
+            value = float(value)
+        except (TypeError, ValueError, OverflowError):
+            value = math.nan
+        if severity != 0 or not math.isfinite(value):
+            self._reset_check(row, "Current RF phase is unavailable.")
+        elif abs(phase_difference_deg(value, monitor[2])) > monitor[3]:
+            self._reset_check(row, "RF phase changed after the check.")
+
+    def stop_phase_monitors(self):
+        self.closing = True
+        for row in tuple(self.phase_monitors):
+            self._reset_check(row)
 
     @staticmethod
     def _number(value, suffix="", precision=2):
@@ -505,8 +685,7 @@ class TransmissionRecoveryPage(QWidget):
             self.last_result is None
             or not self.last_stages
             or self.last_settings is None
-            or self.worker is not None
-            or self.restore_worker is not None
+            or self.is_busy()
             or self.window._amp_busy()
         ):
             return
@@ -518,6 +697,8 @@ class TransmissionRecoveryPage(QWidget):
             QMessageBox.Cancel,
         ) != QMessageBox.Yes:
             return
+        for row in self.selected_rows:
+            self._reset_check(row, "Phase snapshot restore requested.")
 
         snapshot = self.last_result.get("initial_snapshot")
         expected = dict(self.last_result.get("expected_phases_deg") or {})
@@ -559,6 +740,7 @@ class TransmissionRecoveryPage(QWidget):
             )
             self.restore_button.setEnabled(False)
             self.last_result = None
+            self._update_check_button()
         if worker is not None:
             worker.deleteLater()
 

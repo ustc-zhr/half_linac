@@ -139,7 +139,11 @@
       "min_valid_samples": 2
     },
     "stages": [
-      {"rf_element": "LLRF02", "target_bpm": "BPM08"},
+      {
+        "rf_element": "LLRF02",
+        "target_bpm": "BPM08",
+        "acceleration_check": {"enabled": false, "corrector": "XC10", "bpm": "BPM10"}
+      },
       {"rf_element": "LLRF03", "target_bpm": "BPM12"},
       {"rf_element": "LLRF04", "target_bpm": "BPM12"},
       {"rf_element": "LLRF05", "target_bpm": "BPM13"},
