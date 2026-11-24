@@ -1,4 +1,4 @@
-"""Check the gain direction at an applied phase with a local orbit response."""
+"""Measure a local orbit response for RF gain checks and commissioning."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class ReadbackCondition:
     element: str
     channel: str
     pv: str
-    limits: tuple[float, float]
+    limits: tuple[float, float] | None
 
 
 @dataclass(frozen=True)
@@ -55,15 +55,16 @@ class AccelerationCheckConfig:
     corrector: Perturbation
     conditions: tuple[ReadbackCondition, ...]
     samples_per_state: int
-    minimum_sum: float
-    maximum_relative_sum_change: float
+    minimum_sum: float | None
+    maximum_relative_sum_change: float | None
     sample_timeout_s: float
-    pair_tolerance_s: float
+    pair_tolerance_s: float | None
     settle_time_s: float
-    minimum_response_difference: float
-    maximum_baseline_drift: float
+    minimum_response_difference: float | None
+    maximum_baseline_drift: float | None
     phase_tolerance_deg: float
     readback_timeout_s: float
+    capture_only: bool = False
 
 
 def _number(value, name, *, minimum=None):
@@ -85,7 +86,7 @@ def _range(values, name):
     return low, high
 
 
-def resolve_acceleration_check(context, stage, settings, spec):
+def resolve_acceleration_check(context, stage, settings, spec, *, capture_only=False):
     """Resolve the approved diagnostic path independently of the SUM scan."""
     bpm = context.profile.get_element(spec["bpm"])
     corrector = context.profile.get_element(spec["corrector"])
@@ -96,7 +97,12 @@ def resolve_acceleration_check(context, stage, settings, spec):
     def perturbation(element, channel, readback, name):
         config = spec[name]
         target = resolve_write_target(context, element, logical_channel=channel)
-        limits = _range(config["window"], f"{name}.window")
+        if capture_only:
+            limits = _range(
+                (target.machine_limit.low, target.machine_limit.high), f"{name} machine limits"
+            )
+        else:
+            limits = _range(config["window"], f"{name}.window")
         if not all(target.machine_limit.contains(value) for value in limits):
             raise ValueError(f"{name}.window is outside machine limits.")
         step = _number(config["step"], f"{name}.step", minimum=0)
@@ -110,12 +116,13 @@ def resolve_acceleration_check(context, stage, settings, spec):
 
     raw_conditions = spec["conditions"]
     if not isinstance(raw_conditions, list):
-        raise ValueError("conditions must be a list of readback ranges.")
+        raise ValueError("conditions must be a list of readbacks.")
     conditions = tuple(
         ReadbackCondition(
             item["element"], item["channel"],
             resolve_channel(context, item["element"], item["channel"]),
-            _range(item["window"], "conditions.window"),
+            None if item["channel"] == "K1_total" and "window" not in item
+            else _range(item["window"], "conditions.window"),
         )
         for item in raw_conditions
     )
@@ -125,8 +132,11 @@ def resolve_acceleration_check(context, stage, settings, spec):
     settle = _number(spec["settle_time_s"], "settle_time_s")
     if settle < 0 or settings.readback_timeout_s <= 0:
         raise ValueError("Settle time must be nonnegative and readback timeout positive.")
-    sum_change = _number(spec["maximum_relative_sum_change"], "maximum_relative_sum_change", minimum=0)
-    if sum_change >= 1:
+    def threshold(name):
+        return None if capture_only else _number(spec[name], name, minimum=0)
+
+    sum_change = threshold("maximum_relative_sum_change")
+    if sum_change is not None and sum_change >= 1:
         raise ValueError("maximum_relative_sum_change must be less than 1.")
     config = AccelerationCheckConfig(
         rf_element=stage.rf_element,
@@ -139,19 +149,16 @@ def resolve_acceleration_check(context, stage, settings, spec):
         corrector=perturbation(corrector.id, "current_set", "current_readback", "current"),
         conditions=conditions,
         samples_per_state=samples,
-        minimum_sum=_number(spec["minimum_sum"], "minimum_sum", minimum=0),
+        minimum_sum=threshold("minimum_sum"),
         maximum_relative_sum_change=sum_change,
         sample_timeout_s=_number(spec["sample_timeout_s"], "sample_timeout_s", minimum=0),
-        pair_tolerance_s=_number(spec["pair_tolerance_s"], "pair_tolerance_s", minimum=0),
+        pair_tolerance_s=threshold("pair_tolerance_s"),
         settle_time_s=settle,
-        minimum_response_difference=_number(
-            spec["minimum_response_difference"], "minimum_response_difference", minimum=0
-        ),
-        maximum_baseline_drift=_number(
-            spec["maximum_baseline_drift"], "maximum_baseline_drift", minimum=0
-        ),
+        minimum_response_difference=threshold("minimum_response_difference"),
+        maximum_baseline_drift=threshold("maximum_baseline_drift"),
         phase_tolerance_deg=settings.readback_tolerance_deg,
         readback_timeout_s=settings.readback_timeout_s,
+        capture_only=capture_only,
     )
     signals = (
         config.amplitude.setpoint, config.amplitude.readback, config.corrector.setpoint,
@@ -163,6 +170,21 @@ def resolve_acceleration_check(context, stage, settings, spec):
     ):
         raise ValueError("Check controls, BPM signals, and read-only conditions must be distinct.")
     return config
+
+
+def resolve_acceleration_capture(context, stage, settings, spec, *, amplitude_step, current_step):
+    """Use operator-selected perturbations to gather unclassified commissioning data."""
+    if spec.get("capture_enabled") is not True:
+        raise ValueError(f"{stage.rf_element}: test data capture is disabled.")
+    capture = {
+        **spec,
+        "amplitude": {"step": amplitude_step, "tolerance": amplitude_step / 4},
+        "current": {"step": current_step, "tolerance": current_step / 4},
+        "samples_per_state": settings.samples_per_point,
+        "settle_time_s": settings.settle_time_s,
+        "sample_timeout_s": 5.0 + settings.samples_per_point * settings.sample_interval_s,
+    }
+    return resolve_acceleration_check(context, stage, settings, capture, capture_only=True)
 
 
 def discover_acceleration_checks(context, recovery, stages, settings):
@@ -205,7 +227,10 @@ class AccelerationCheck:
                  monotonic=time.monotonic, sleep=time.sleep):
         self.context = context
         self.config = config
-        self.applied_phase = _number(applied_phase, "Applied phase")
+        self.phase_reference = (
+            None if config.capture_only and applied_phase is None
+            else _number(applied_phase, "Applied phase")
+        )
         self.path = Path(path)
         self.on_state = on_state
         self.client_factory = client_factory
@@ -221,13 +246,15 @@ class AccelerationCheck:
             "machine_id": context.machine.id,
             "backend": context.control_backend.name,
             "rf_element": config.rf_element,
-            "recovery_path": str(recovery_path),
+            "recovery_path": str(recovery_path) if recovery_path is not None else None,
             "json_path": str(path),
-            "applied_phase_deg": self.applied_phase,
+            "applied_phase_deg": self.phase_reference,
+            "mode": "capture" if config.capture_only else "check",
             "configuration": asdict(config),
             "status": "undetermined",
             "reason": "",
             "groups": [],
+            "condition_readbacks": [],
             "restore_errors": {},
         }
 
@@ -292,12 +319,20 @@ class AccelerationCheck:
         self._check_stop()
         config = self.config
         values = [self._read(pv).value for pv in (config.phase_pv, config.phase_readback_pv)]
-        if any(abs(phase_difference_deg(value, self.applied_phase)) > config.phase_tolerance_deg
+        if self.phase_reference is None:
+            self.phase_reference = values[0]
+        if any(abs(phase_difference_deg(value, self.phase_reference)) > config.phase_tolerance_deg
                for value in values):
-            raise RuntimeError(f"{config.rf_element}: phase differs from the applied phase.")
+            raise RuntimeError(f"{config.rf_element}: phase differs from the reference phase.")
         for condition in config.conditions:
-            value = self._read(condition.pv).value
-            if not condition.limits[0] <= value <= condition.limits[1]:
+            reading = self._read(condition.pv)
+            self.result["condition_readbacks"].append({
+                "element": condition.element,
+                "channel": condition.channel,
+                **asdict(reading),
+            })
+            limits = condition.limits
+            if limits is not None and not limits[0] <= reading.value <= limits[1]:
                 raise RuntimeError(f"{condition.element} {condition.channel} is outside the calibrated range.")
         return values[1]
 
@@ -306,6 +341,9 @@ class AccelerationCheck:
         while (remaining := deadline - self.monotonic()) > 0:
             self._check_stop()
             self.sleep(min(POLL_INTERVAL_S, remaining))
+
+    def _sample_buffer(self):
+        return {"x": [], "sum": []} if self.config.capture_only else []
 
     def _sample(self, samples, reference_sum=None):
         config = self.config
@@ -320,12 +358,27 @@ class AccelerationCheck:
             watermark.append(self._read(pv, timeout=min(0.5, remaining)).timestamp)
         if any(value is None or not math.isfinite(value) for value in watermark):
             raise RuntimeError(f"{config.bpm}: BPM source timestamps unavailable.")
-        while len(samples) < config.samples_per_state:
+        while True:
             self._check_stop()
             remaining = deadline - self.monotonic()
             if remaining <= 0:
-                raise RuntimeError(f"{config.bpm}: insufficient fresh, paired X and SUM samples.")
-            x, signal = (self._read(pv, timeout=min(POLL_INTERVAL_S, remaining)) for pv in pvs)
+                qualifier = "fresh" if config.capture_only else "fresh, paired"
+                raise RuntimeError(f"{config.bpm}: insufficient {qualifier} X and SUM samples.")
+            readings = tuple(self._read(pv, timeout=min(0.5, remaining)) for pv in pvs)
+            if config.capture_only:
+                for index, (channel, reading) in enumerate(zip(("x", "sum"), readings)):
+                    if (
+                        len(samples[channel]) < config.samples_per_state
+                        and reading.timestamp is not None and math.isfinite(reading.timestamp)
+                        and reading.timestamp > watermark[index]
+                    ):
+                        samples[channel].append(asdict(reading))
+                        watermark[index] = reading.timestamp
+                if all(len(values) == config.samples_per_state for values in samples.values()):
+                    return
+                self.sleep(min(POLL_INTERVAL_S, remaining))
+                continue
+            x, signal = readings
             if (
                 x.timestamp is not None and signal.timestamp is not None
                 and math.isfinite(x.timestamp) and math.isfinite(signal.timestamp)
@@ -338,8 +391,9 @@ class AccelerationCheck:
                     raise RuntimeError(f"{config.bpm}: beam SUM is below the minimum.")
                 if reference_sum is not None:
                     self._check_sum_stability(signal.value, reference_sum)
-            if len(samples) < config.samples_per_state:
-                self.sleep(min(POLL_INTERVAL_S, remaining))
+            if len(samples) == config.samples_per_state:
+                return
+            self.sleep(min(POLL_INTERVAL_S, remaining))
 
     def _check_sum_stability(self, signal, reference):
         if abs(signal / reference - 1) > self.config.maximum_relative_sum_change:
@@ -363,15 +417,17 @@ class AccelerationCheck:
             self._settle()
             self._check_conditions()
             actual = self._verify_readback(config.corrector, target)
-            point = {"current_setpoint": target, "current": actual, "samples": []}
+            point = {"current_setpoint": target, "current": actual, "samples": self._sample_buffer()}
             group["points"].append(point)
             self._sample(point["samples"], reference_sum)
             self._check_conditions()
             self._verify_readback(config.amplitude, amplitude)
             self._verify_readback(config.corrector, target)
-            point["median_x"] = statistics.median(
-                sample["x"]["value"] for sample in point["samples"]
+            positions = (
+                point["samples"]["x"] if config.capture_only
+                else [sample["x"] for sample in point["samples"]]
             )
+            point["median_x"] = statistics.median(reading["value"] for reading in positions)
         self._move(config.corrector, current)
         minus, plus = group["points"]
         slope = (plus["median_x"] - minus["median_x"]) / (plus["current"] - minus["current"])
@@ -389,7 +445,10 @@ class AccelerationCheck:
             self._readback(actuator, self.initial[actuator])
         amplitude, current = (self.initial[item] for item in (config.amplitude, config.corrector))
         lower = amplitude - config.amplitude.step
-        self.result.update(initial_amplitude=amplitude, initial_current=current, preflight_samples=[])
+        self.result.update(
+            initial_amplitude=amplitude, initial_current=current,
+            preflight_samples=self._sample_buffer(),
+        )
         for actuator, values in (
             (config.amplitude, (lower, amplitude)),
             (config.corrector, (current - config.corrector.step, current + config.corrector.step)),
@@ -397,14 +456,18 @@ class AccelerationCheck:
             if not all(actuator.limits[0] <= value <= actuator.limits[1] for value in values):
                 raise RuntimeError(f"{actuator.element}: perturbation exceeds its calibrated window.")
         self._sample(self.result["preflight_samples"])
-        signals = [sample["sum"]["value"] for sample in self.result["preflight_samples"]]
-        reference_sum = statistics.median(signals)
-        for signal in signals:
-            self._check_sum_stability(signal, reference_sum)
+        reference_sum = None
+        if not config.capture_only:
+            signals = [sample["sum"]["value"] for sample in self.result["preflight_samples"]]
+            reference_sum = statistics.median(signals)
+            for signal in signals:
+                self._check_sum_stability(signal, reference_sum)
         baseline = self._group("Baseline", amplitude, current, reference_sum)
         lower_response = self._group("Lower RF amplitude", lower, current, reference_sum)
         repeat = self._group("Baseline repeat", amplitude, current, reference_sum)
         self.result["measured_phase_deg"] = self._check_conditions()
+        if config.capture_only:
+            return
         self.result["status"], self.result["reason"] = classify_response(
             baseline, lower_response, repeat, threshold=config.minimum_response_difference,
             maximum_drift=config.maximum_baseline_drift,
@@ -443,8 +506,12 @@ class AccelerationCheck:
                             self.result["measured_phase_deg"] = self._check_conditions()
                     finally:
                         self.client.close()
+                if self.config.capture_only and not self.result["restore_errors"]:
+                    self.result.update(capture_completed=True, reason="Three test data groups captured.")
         except Exception as exc:
             self.result.update(status="undetermined", reason=str(exc) or type(exc).__name__)
+        if self.config.capture_only:
+            self.result.setdefault("capture_completed", False)
         self.result.setdefault("restore_status", "not_needed")
         self.result["finished_at"] = datetime.now().astimezone().isoformat(timespec="milliseconds")
         write_runtime_state(self.path, self.result)

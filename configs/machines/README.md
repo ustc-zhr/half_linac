@@ -154,9 +154,15 @@ the scan page. Power Scan and Transmission Recovery use the
 
 Transmission Recovery can also check the gain direction at an applied phase.
 Set `acceleration_check` on an individual stage after validating that increasing
-momentum decreases the magnitude of the orbit response on that path. HALF ships
-with the `LLRF02` candidate path `XC10 → BPM10` disabled. The check uses BPM10
-position and SUM for paired measurements. The recovery stage uses BPM08 SUM.
+momentum decreases the magnitude of the orbit response on that path. The HALF
+profile enables **Capture Test Data** for `LLRF02` on the `XC10 → BPM10` path.
+Select the station and enter the RF amplitude drop and corrector step to
+capture at the current phase. The capture uses machine limits and records X
+and SUM separately with source timestamps so the pulse alignment can be
+checked from the data. It restores the RF amplitude and corrector current.
+The summary shows the location of the capture's `run.json`. Gain direction
+remains undetermined during test captures. The classified check and the
+`BPM08` SUM recovery use their respective settings.
 
 An enabled check uses these calibration values:
 
@@ -164,7 +170,7 @@ An enabled check uses these calibration values:
 | --- | --- |
 | `bpm`, `corrector` | Profile element IDs for the position BPM and horizontal corrector. |
 | `amplitude`, `current` | Each contains a calibrated `window` of two limits, a positive `step`, and a readback `tolerance`. Use percent for amplitude and amperes for current. |
-| `conditions` | List of required readback ranges, each with an `element`, logical `channel`, and two-value `window`. For the HALF candidate include the validated QL16 readback range and any relevant downstream RF conditions. |
+| `conditions` | List of readbacks, each with an `element`, logical `channel`, and two-value `window`. The window is optional for `K1_total`. The HALF candidate records `QL16.K1_total` in 1/m². Add any relevant downstream RF conditions with their validated windows. |
 | `samples_per_state`, `settle_time_s`, `sample_timeout_s` | Sample count, settling time, and sampling deadline per setting. |
 | `pair_tolerance_s` | Maximum source timestamp difference for X and SUM from the same pulse. Validate timestamp alignment at the BPM's operating pulse rate. |
 | `minimum_sum`, `maximum_relative_sum_change` | Beam presence floor and maximum fractional change in SUM from the preflight median. |

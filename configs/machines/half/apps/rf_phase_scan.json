@@ -142,7 +142,13 @@
       {
         "rf_element": "LLRF02",
         "target_bpm": "BPM08",
-        "acceleration_check": {"enabled": false, "corrector": "XC10", "bpm": "BPM10"}
+        "acceleration_check": {
+          "enabled": false,
+          "capture_enabled": true,
+          "corrector": "XC10",
+          "bpm": "BPM10",
+          "conditions": [{"element": "QL16", "channel": "K1_total"}]
+        }
       },
       {"rf_element": "LLRF03", "target_bpm": "BPM12"},
       {"rf_element": "LLRF04", "target_bpm": "BPM12"},

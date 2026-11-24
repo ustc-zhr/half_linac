@@ -8,6 +8,7 @@ import pytest
 from half_linac.src.apps.rf_phase_scan.acceleration_check import (
     AccelerationCheck,
     discover_acceleration_checks,
+    resolve_acceleration_capture,
     resolve_acceleration_check,
 )
 from half_linac.src.apps.rf_phase_scan.amp_scan import AmpReading
@@ -30,7 +31,7 @@ def check_setup():
         "corrector": "XC10",
         "amplitude": {"window": [48, 52], "step": 1.0, "tolerance": 0.02},
         "current": {"window": [-1, 1], "step": 0.1, "tolerance": 0.01},
-        "conditions": [{"element": "QL16", "channel": "current_readback", "window": [3, 4]}],
+        "conditions": recovery["stages"][0]["acceleration_check"]["conditions"],
         "samples_per_state": 3,
         "minimum_sum": 1.0,
         "maximum_relative_sum_change": 0.2,
@@ -53,7 +54,7 @@ class SimulatedBeam:
             config.phase_readback_pv: 12.0,
             config.amplitude.setpoint: 50.0,
             config.corrector.setpoint: 0.2,
-            config.conditions[0].pv: 3.5,
+            config.conditions[0].pv: -2.7,
         }
         self.lower_response = lower_response
         self.nominal_response = 1.0
@@ -93,8 +94,13 @@ class SimulatedBeam:
         pass
 
 
-def make_check(check_setup, tmp_path, lower_response=2.0):
-    context, _, _, _, _, config = check_setup
+def make_check(check_setup, tmp_path, lower_response=2.0, *, k1_window=None):
+    context, _, stages, settings, spec, config = check_setup
+    if k1_window is not None:
+        conditions = [{**spec["conditions"][0], "window": k1_window}]
+        config = resolve_acceleration_check(
+            context, stages["LLRF02"], settings, {**spec, "conditions": conditions}
+        )
     beam = SimulatedBeam(config, lower_response)
     runner = AccelerationCheck(
         context=context, config=config, applied_phase=12.0,
@@ -105,11 +111,74 @@ def make_check(check_setup, tmp_path, lower_response=2.0):
     return runner, beam
 
 
+def make_capture(check_setup, tmp_path, *, amplitude_step=1.0):
+    context, recovery, stages, settings, _, _ = check_setup
+    config = resolve_acceleration_capture(
+        context, stages["LLRF02"], settings, recovery["stages"][0]["acceleration_check"],
+        amplitude_step=amplitude_step, current_step=0.1,
+    )
+    beam = SimulatedBeam(config)
+    runner = AccelerationCheck(
+        context=context, config=config, applied_phase=None,
+        recovery_path=None, path=tmp_path / "run.json",
+        on_state=lambda _: None, client_factory=lambda: beam,
+        lock_factory=lambda *_: nullcontext(), monotonic=lambda: beam.now, sleep=beam.wait,
+    )
+    return runner, beam
+
+
+def test_real_capture_collects_independent_samples_without_a_recovery_run(check_setup, tmp_path):
+    runner, beam = make_capture(check_setup, tmp_path)
+    beam.skew = 0.02
+    beam.sum = 0.0
+    result = runner.run()
+    assert result["status"] == "undetermined"
+    assert result["capture_completed"]
+    assert result["restore_status"] == "verified"
+    assert result["measured_phase_deg"] == 12.0
+    assert result["recovery_path"] is None
+    stored = json.loads(runner.path.read_text())
+    assert stored["mode"] == "capture"
+    assert len(stored["groups"]) == 3
+    samples = stored["groups"][0]["points"][0]["samples"]
+    assert len(samples["x"]) == len(samples["sum"]) == runner.config.samples_per_state
+    assert samples["sum"][0]["timestamp"] - samples["x"][0]["timestamp"] == pytest.approx(0.02)
+    assert samples["sum"][0]["value"] == 0.0
+    assert beam.values[runner.config.amplitude.setpoint] == 50.0
+    assert beam.values[runner.config.corrector.setpoint] == 0.2
+
+
+def test_capture_rejects_a_step_outside_machine_limits_before_writing(check_setup, tmp_path):
+    runner, beam = make_capture(check_setup, tmp_path, amplitude_step=60)
+    result = runner.run()
+    assert not result["capture_completed"]
+    assert "perturbation exceeds" in result["reason"]
+    assert beam.writes == []
+
+
+def test_cancelled_capture_restores_original_amplitude(check_setup, tmp_path):
+    runner, beam = make_capture(check_setup, tmp_path)
+    config = runner.config
+
+    def stop_after_amplitude_write(pv, value):
+        if pv == config.amplitude.setpoint and value == 49.0:
+            runner.stop()
+
+    beam.on_write = stop_after_amplitude_write
+    result = runner.run()
+    assert not result["capture_completed"]
+    assert result["restore_status"] == "verified"
+    assert beam.values[config.amplitude.setpoint] == 50.0
+    assert beam.values[config.corrector.setpoint] == 0.2
+
+
 def test_half_has_no_enabled_checks_and_bad_paths_keep_sum_recovery(check_setup):
-    context, recovery, stages, settings, spec, _ = check_setup
+    context, recovery, stages, settings, spec, config = check_setup
     configs, unavailable = discover_acceleration_checks(context, recovery, stages, settings)
     assert configs == {}
     assert "not been enabled" in unavailable["LLRF02"]
+    assert config.conditions[0].pv == "IN:MG:L002:QUAD:QL16:K1:TOTAL"
+    assert config.conditions[0].limits is None
     invalid = {"stages": [{"rf_element": "LLRF02", "acceleration_check": {**spec, "corrector": "YC10"}}]}
     configs, unavailable = discover_acceleration_checks(context, invalid, stages, settings)
     assert configs == {}
@@ -134,6 +203,25 @@ def test_measurement_classifies_and_logs_three_groups(check_setup, tmp_path, low
     stored = json.loads(runner.path.read_text())
     assert stored["status"] == status
     assert stored["recovery_path"] == str(tmp_path / "run.json")
+    assert stored["condition_readbacks"]
+    assert all(
+        (reading["element"], reading["channel"], reading["value"]) == ("QL16", "K1_total", -2.7)
+        for reading in stored["condition_readbacks"]
+    )
+
+
+def test_k1_changes_are_recorded_without_a_window(check_setup, tmp_path):
+    runner, beam = make_check(check_setup, tmp_path)
+    config = runner.config
+
+    def after_write(pv, value):
+        if pv == config.amplitude.setpoint:
+            beam.values[config.conditions[0].pv] = -2.6 if value == 49.0 else -2.7
+
+    beam.on_write = after_write
+    result = runner.run()
+    assert result["status"] == "accelerating"
+    assert {reading["value"] for reading in result["condition_readbacks"]} == {-2.7, -2.6}
 
 
 @pytest.mark.parametrize(
@@ -153,7 +241,8 @@ def test_preflight_rejects_unusable_bpm_without_writes(check_setup, tmp_path, fi
     "fault", ["stop", "drop", "sum_change", "phase", "optics", "drift", "readback", "external", "put"]
 )
 def test_measurement_stops_or_invalidates_and_restores_its_settings(check_setup, tmp_path, fault):
-    runner, beam = make_check(check_setup, tmp_path)
+    window = (-3, -2) if fault == "optics" else None
+    runner, beam = make_check(check_setup, tmp_path, k1_window=window)
     config = runner.config
 
     def after_write(pv, value):
@@ -182,6 +271,8 @@ def test_measurement_stops_or_invalidates_and_restores_its_settings(check_setup,
     beam.on_write = after_write
     result = runner.run()
     assert result["status"] == "undetermined"
+    if fault == "optics":
+        assert "outside the calibrated range" in result["reason"]
     assert result["restore_status"] == ("failed" if fault == "external" else "verified")
     assert bool(result["restore_errors"]) == (fault == "external")
     assert beam.values[config.amplitude.setpoint] == (51.0 if fault == "external" else 50.0)
@@ -222,7 +313,26 @@ def test_offscreen_check_uses_highlighted_row_and_invalidates_on_phase_change(
 
     app = QApplication.instance() or QApplication([])
     window = RFPhaseScanWindow()
+    window.resize(1280, 720)
+    window.show()
+    app.processEvents()
     page = window.recovery_page
+    assert page.check_button.isVisible()
+    assert page.check_status.isVisible()
+    parameters = page.sample_interval.parentWidget()
+    assert page.check_button.parentWidget() is parameters
+    fields = parameters.layout()
+    sample_row, sample_column, _, _ = fields.getItemPosition(fields.indexOf(page.sample_interval))
+    check_row, check_column, _, _ = fields.getItemPosition(fields.indexOf(page.check_button))
+    assert (check_row, check_column) == (sample_row, sample_column + 1)
+    assert page.check_status.mapTo(window, page.check_status.rect().bottomRight()).y() < 720
+    assert not page.check_button.isEnabled()
+    assert page.check_status.text() == "No calibrated path"
+    page.table.selectRow(0)
+    assert page.check_status.text() == "Path unavailable"
+    assert "LLRF02" in page.check_status.toolTip()
+    assert "calibrated" in page.check_status.toolTip()
+
     runner, beam = make_check(check_setup, tmp_path)
     page.write_enabled = True
     page.check_configs = {"LLRF02": runner.config}
@@ -254,6 +364,7 @@ def test_offscreen_check_uses_highlighted_row_and_invalidates_on_phase_change(
     assert not page.check_button.isEnabled()
     page.table.selectRow(0)
     assert page.check_button.isEnabled()
+    assert page.check_status.text() == "Ready"
     page.check_button.click()
     assert not window.tuning_tabs.isTabEnabled(1)
     assert not window.tuning_tabs.isTabEnabled(2)
@@ -293,4 +404,72 @@ def test_offscreen_check_uses_highlighted_row_and_invalidates_on_phase_change(
     assert page.restore_worker is None
     assert not page.check_button.isEnabled()
     assert len(list(tmp_path.glob("acceleration_check_*.json"))) == 2
+    window.close()
+
+
+def test_offscreen_real_capture_entry_without_sum_scan(check_setup, tmp_path, monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("HALF_LINAC_MACHINE_ID", "half")
+    monkeypatch.setenv("HALF_LINAC_CONTROL_BACKEND", "vm")
+    from PyQt5.QtCore import QTimer
+    from PyQt5.QtTest import QTest
+    from PyQt5.QtWidgets import QApplication, QDialogButtonBox, QDoubleSpinBox
+    from half_linac.src.apps.rf_phase_scan.main import RFPhaseScanWindow
+    from half_linac.src.apps.rf_phase_scan import transmission_recovery_ui
+
+    app = QApplication.instance() or QApplication([])
+    window = RFPhaseScanWindow()
+    window.resize(1280, 900)
+    window.show()
+    app.processEvents()
+    page = window.recovery_page
+    runner, beam = make_capture(check_setup, tmp_path)
+    assert page.capture_button.isVisible()
+    assert page.capture_button.mapTo(window, page.capture_button.rect().bottomRight()).x() < 1280
+    page.table.selectRow(0)
+    assert not page.capture_button.isEnabled()
+
+    page.context = runner.context
+    page.write_enabled = True
+    page.runtime_paths["runs_dir"] = tmp_path
+    page.table.selectRow(1)
+    assert not page.capture_button.isEnabled()
+    page.table.selectRow(0)
+    assert page.last_result is None
+    assert page.capture_button.isEnabled()
+    assert not page.check_button.isEnabled()
+
+    def build_check(**options):
+        options.update(
+            client_factory=lambda: beam, lock_factory=lambda *_: nullcontext(),
+            monotonic=lambda: beam.now, sleep=beam.wait,
+        )
+        return AccelerationCheck(**options)
+
+    dialog_state = []
+
+    def enter_steps():
+        dialog = app.activeModalWidget()
+        fields = dialog.findChildren(QDoubleSpinBox)
+        start = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Ok)
+        dialog_state.append(start.isEnabled())
+        fields[0].setValue(1.0)
+        fields[1].setValue(0.1)
+        dialog_state.append(start.isEnabled())
+        start.click()
+
+    monkeypatch.setattr(transmission_recovery_ui, "AccelerationCheck", build_check)
+    QTimer.singleShot(0, enter_steps)
+    page.capture_button.click()
+    assert dialog_state == [False, True]
+    for _ in range(100):
+        if page.check_worker is None:
+            break
+        QTest.qWait(5)
+    assert page.check_worker is None
+    assert "Test data saved" in page.summary.text()
+    assert page.table.item(0, page.ACCELERATION_COLUMN).text() == "Undetermined"
+    records = list(tmp_path.glob("acceleration_capture_*/run.json"))
+    assert len(records) == 1
+    assert json.loads(records[0].read_text())["capture_completed"]
     window.close()
