@@ -181,3 +181,81 @@ def test_library_editor_displays_current_library_and_updates_after_save_as(qt_ap
     assert dialog.windowTitle() == "PV Library Editor — copied_irfel_pvlist.json"
     assert dialog.library_label.text() == "PV Library: IRFEL — copied_irfel_pvlist.json"
     assert dialog.library_path_label.toolTip() == saved_as
+
+
+def test_library_editor_search_keeps_edit_delete_and_save_on_the_correct_objects(qt_app, monkeypatch):
+    bpm = {"id": "bpm_x", "name": "BPM X", "read_pv": "PF:BPM:X", "group": "bpm"}
+    waveguide = {
+        "id": "waveguide_02",
+        "name": "Probe 02",
+        "read_pv": "PF:WC:PBBD02_T001:ai",
+        "group": "rf_temp",
+        "tags": ["klystron"],
+    }
+    saved = []
+    dialog = editor_module.PVLibraryEditorDialog(
+        objects=[bpm, waveguide],
+        groups=[{"id": "bpm", "label": "BPM"}, {"id": "rf_temp", "label": "RF Temperatures"}],
+        save_callback=lambda objects, _groups: saved.extend(objects),
+        save_as_callback=lambda *_args: None,
+    )
+    dialog.table.selectRow(0)
+
+    for query in (" probe 02 ", "WAVEGUIDE_02", "rf_temp", "RF Temperatures", "KLYSTRON", "pf:wc:pbbd02"):
+        dialog.search_edit.setText(query)
+        assert dialog.table.isRowHidden(0)
+        assert not dialog.table.isRowHidden(1)
+        assert dialog.search_status.text() == "1 / 2 PVs"
+        assert not dialog.edit_button.isEnabled()
+        assert not dialog.delete_button.isEnabled()
+
+    def correct_address(editor):
+        assert editor.read_pv_edit.text() == waveguide["read_pv"]
+        editor.read_pv_edit.setText("PF:WC:PPBD02_T001:ai")
+        editor.accept()
+        return editor.result()
+
+    monkeypatch.setattr(editor_module.PVObjectEditorDialog, "exec_", correct_address)
+    dialog.table.selectRow(1)
+    dialog.edit_button.click()
+
+    assert dialog.search_edit.text() == "pf:wc:pbbd02"
+    assert dialog.search_status.text() == "0 / 2 PVs"
+    assert not dialog.edit_button.isEnabled()
+    dialog.save_button.click()
+    assert saved[0] == bpm
+    assert saved[1]["read_pv"] == "PF:WC:PPBD02_T001:ai"
+
+    dialog.search_edit.setText("PPBD02")
+    dialog.table.selectRow(1)
+    message_box = editor_module.QtWidgets.QMessageBox
+    monkeypatch.setattr(message_box, "question", lambda *_args: message_box.Yes)
+    dialog.delete_button.click()
+    assert dialog.objects() == [bpm]
+    assert dialog.search_status.text() == "0 / 1 PVs"
+
+    dialog.search_edit.clear()
+    assert not dialog.table.isRowHidden(0)
+    assert dialog.search_status.text() == "1 / 1 PVs"
+
+
+def test_library_editor_enter_in_search_focuses_results_without_saving(qt_app):
+    from PyQt5 import QtCore, QtTest
+
+    saved = []
+    dialog = editor_module.PVLibraryEditorDialog(
+        objects=[],
+        groups=[],
+        save_callback=lambda *_args: saved.append(True),
+        save_as_callback=lambda *_args: None,
+    )
+    dialog.show()
+    try:
+        for key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+            dialog.search_edit.setFocus()
+            qt_app.processEvents()
+            QtTest.QTest.keyClick(dialog.search_edit, key)
+            assert dialog.table.hasFocus()
+        assert saved == []
+    finally:
+        dialog.close()

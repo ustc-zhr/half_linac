@@ -6,9 +6,10 @@ from pathlib import Path
 import re
 
 try:
-    from PyQt5 import QtCore, QtWidgets
+    from PyQt5 import QtCore, QtGui, QtWidgets
 except ImportError:  # pragma: no cover - optional runtime dependency
     QtCore = None
+    QtGui = None
     QtWidgets = None
 
 
@@ -399,6 +400,16 @@ if QtWidgets is not None:
             )
             layout.addWidget(self.library_path_label)
 
+            filters = QtWidgets.QHBoxLayout()
+            self.search_edit = QtWidgets.QLineEdit(self)
+            self.search_edit.setAccessibleName("Search PVs")
+            self.search_edit.setPlaceholderText("Search name, ID, PV, group, or tags")
+            self.search_edit.setClearButtonEnabled(True)
+            self.search_status = QtWidgets.QLabel(self)
+            filters.addWidget(self.search_edit, 1)
+            filters.addWidget(self.search_status)
+            layout.addLayout(filters)
+
             self.table = QtWidgets.QTableWidget(0, 6)
             self.table.setHorizontalHeaderLabels(
                 ["Name", "ID", "Read PV", "Group", "Value Type", "Analysis"]
@@ -439,6 +450,12 @@ if QtWidgets is not None:
             self.save_as_button.clicked.connect(self._save_as)
             self.close_button.clicked.connect(self.reject)
             self.table.itemSelectionChanged.connect(self._sync_actions)
+            self.search_edit.textChanged.connect(self._apply_filter)
+            for key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                QtWidgets.QShortcut(
+                    QtGui.QKeySequence(key), self.search_edit,
+                    self.table.setFocus, context=QtCore.Qt.WidgetShortcut,
+                )
             self._refresh_library_identity()
             self._refresh_table()
 
@@ -502,7 +519,9 @@ if QtWidgets is not None:
 
         def _selected_row(self) -> int:
             rows = self.table.selectionModel().selectedRows()
-            return rows[0].row() if rows else -1
+            if rows and not self.table.isRowHidden(rows[0].row()):
+                return rows[0].row()
+            return -1
 
         def _add_object(self) -> None:
             dialog = PVObjectEditorDialog(
@@ -562,6 +581,7 @@ if QtWidgets is not None:
                 self._refresh_table(max(0, row - 1))
 
         def _refresh_table(self, select_row: int = -1) -> None:
+            self.table.clearSelection()
             self.table.setRowCount(len(self._objects))
             for row, item in enumerate(self._objects):
                 analysis = item.get("analysis", {})
@@ -584,8 +604,27 @@ if QtWidgets is not None:
                 for col, value in enumerate(values):
                     self.table.setItem(row, col, QtWidgets.QTableWidgetItem(str(value)))
             self.table.resizeColumnsToContents()
-            if 0 <= select_row < self.table.rowCount():
+            self._apply_filter()
+            if 0 <= select_row < self.table.rowCount() and not self.table.isRowHidden(select_row):
                 self.table.selectRow(select_row)
+
+        def _apply_filter(self) -> None:
+            query = self.search_edit.text().strip().casefold()
+            selected_row = self._selected_row()
+            visible_count = 0
+            for row, item in enumerate(self._objects):
+                group = str(item.get("group", ""))
+                fields = (
+                    item.get("name", ""), item.get("id", ""), item.get("read_pv", ""),
+                    group, self._groups.get(group, ""), *item.get("tags", []),
+                )
+                matches = query in " ".join(str(field) for field in fields).casefold()
+                self.table.setRowHidden(row, not matches)
+                visible_count += matches
+
+            if selected_row >= 0 and self.table.isRowHidden(selected_row):
+                self.table.clearSelection()
+            self.search_status.setText(f"{visible_count} / {len(self._objects)} PVs")
             self._sync_actions()
 
         def _sync_actions(self) -> None:
