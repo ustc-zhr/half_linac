@@ -4,6 +4,7 @@
   "config": {
     "optics_working_dir": "runtime/model_backend/half/simulation/optics",
     "source_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
+    "tracking_ini_ele": "src/virtual_machine/half_elegant/elegant/one_ini.ele",
     "optics_ini_ele": "configs/machines/half/model_backends/elegant/optics_ini.ele",
     "optics_lte": "runtime/model_backend/half/simulation/optics/optics.lte",
     "optics_ele": "runtime/model_backend/half/simulation/optics/optics.ele",

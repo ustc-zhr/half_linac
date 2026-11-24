@@ -14,7 +14,8 @@ def main():
         os.setsid()
     (job_dir / "worker.pgid").write_text(str(os.getpgrp()))
     arguments = sys.argv[2:]
-    if not arguments or arguments[0] not in {"replay", "run-vm", "demo-real", "run-real"}:
+    if not arguments or arguments[0] not in {"replay", "run-vm", "demo-real", "run-real", "run-model",
+                                              "capture-particle-snapshot", "follow-particle"}:
         raise ValueError("Unsupported shadow worker mode")
     if arguments[0] == "replay":
         snapshot_path = Path(arguments[arguments.index("--snapshot") + 1])
@@ -24,7 +25,7 @@ def main():
             machine["control_backend"] == "real" and "--real-evidence" not in arguments
         ):
             raise ValueError("Real or non-HALF snapshots are view-only in this GUI")
-    elif arguments[arguments.index("--machine") + 1] != "half":
+    elif arguments[0] in {"run-vm", "demo-real", "run-real"} and arguments[arguments.index("--machine") + 1] != "half":
         raise ValueError("This GUI supports HALF only")
     if arguments[0] == "run-real" and "--connect-real" not in arguments:
         raise ValueError("Real reads require explicit --connect-real")

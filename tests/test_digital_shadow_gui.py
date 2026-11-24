@@ -15,7 +15,10 @@ from PyQt5.QtWidgets import QApplication
 from half_linac.src.apps.digital_shadow.forms import moments_to_twiss, twiss_to_moments
 from half_linac.src.apps.digital_shadow.main import DigitalShadowWindow
 from half_linac.src.shared.digital_shadow.example import write_example
+from half_linac.src.shared.digital_shadow.impact_model import IMPACT_L01B_PROBE, IMPACT_NOMINAL
 from half_linac.src.shared.digital_shadow.models import Diagnostic, ShadowRequest
+from half_linac.src.shared.digital_shadow.particle_model import PARTICLE_REQUEST_SCHEMA, ParticleModelRequest
+from half_linac.src.shared.digital_shadow.session import file_digest
 from half_linac.src.shared.runtime_state import read_runtime_state, write_runtime_state
 
 
@@ -141,6 +144,153 @@ def test_input_changes_do_not_start_task(window):
     window.mode.setCurrentIndex(1)
     assert window.run_button.text() == "Capture VM & predict"
     assert not window.controller.busy
+
+
+def test_particle_controls_keep_legacy_replay_inputs(window, tmp_path):
+    window.load_example()
+    replay_path = window.snapshot_edit.text()
+    request_file = tmp_path / "request.json"
+    write_runtime_state(request_file, {
+        "schema": PARTICLE_REQUEST_SCHEMA, "beam_source": "sdds", "beam_path": "input.bun",
+        "parameter_source": "snapshot", "snapshot_path": "snapshot.json", "model_timeout_s": 18.5,
+    })
+    window.load_request_file(request_file)
+    assert window.mode.currentData() == "run-model"
+    assert window._current_request() == ParticleModelRequest(
+        beam_source="sdds", beam_path=str(tmp_path / "input.bun"),
+        parameter_source="snapshot", snapshot_path=str(tmp_path / "snapshot.json"), model_timeout_s=18.5,
+    )
+    assert not window.particle_path_row.isHidden()
+    assert not window.particle_snapshot_row.isHidden()
+    assert window.snapshot_edit.text() == replay_path
+    assert window.run_button.isEnabled()
+    assert not window.controller.busy
+
+
+def test_coupled_request_uses_fresh_upstream_particles_and_saved_vm_inputs(window, tmp_path):
+    request_path = tmp_path / "coupled.json"
+    write_runtime_state(request_path, {
+        "schema": PARTICLE_REQUEST_SCHEMA, "scope": "coupled", "parameter_source": "snapshot",
+        "snapshot_path": "vm.json", "impact_benchmark_dir": "benchmark",
+        "impact_library_dir": "lib", "model_timeout_s": 7300, "elegant_timeout_s": 210,
+    })
+    window.load_request_file(request_path)
+    assert window.run_button.text() == "Run coupled model"
+    assert "IMPACT-T → ELEGANT" in window.context_label.text()
+    assert "Physical datum pending verification" in window.particle_hint.text()
+    assert not (window.impact_benchmark_row.isHidden() or window.impact_library_row.isHidden())
+    assert not window.impact_variant.isHidden()
+    assert window.impact_variant.currentData() == IMPACT_NOMINAL
+    assert not window.particle_snapshot_row.isHidden()
+    assert window.particle_path_row.isHidden() and window.particle_handoff_row.isHidden()
+    assert window._current_request() == ParticleModelRequest(
+        scope="coupled", parameter_source="snapshot", snapshot_path=str(tmp_path / "vm.json"),
+        impact_benchmark_dir=str(tmp_path / "benchmark"), impact_library_dir=str(tmp_path / "lib"),
+        model_timeout_s=7300, elegant_timeout_s=210,
+    )
+    window.impact_variant.setCurrentIndex(window.impact_variant.findData(IMPACT_L01B_PROBE))
+    probe_request = window._current_request()
+    assert probe_request.impact_variant == IMPACT_L01B_PROBE
+    write_runtime_state(request_path, probe_request.as_metadata())
+    window.impact_variant.setCurrentIndex(window.impact_variant.findData(IMPACT_NOMINAL))
+    window.load_request_file(request_path)
+    assert window._current_request() == probe_request
+    window.particle_scope.setCurrentIndex(window.particle_scope.findData("downstream"))
+    assert window.impact_variant.isHidden()
+    assert window._current_request().model_timeout_s == 120
+    assert not window.controller.busy
+
+
+def test_preinjector_import_keeps_its_paths_and_timeout_separate(window, tmp_path):
+    request_path = tmp_path / "p0.json"
+    write_runtime_state(request_path, {
+        "schema": PARTICLE_REQUEST_SCHEMA, "scope": "preinjector",
+        "impact_benchmark_dir": "final-benchmark", "impact_library_dir": "lib",
+    })
+    window.load_request_file(request_path)
+    assert window.run_button.text() == "Run IMPACT-T"
+    assert "IMPACT-T" in window.context_label.text()
+    assert not window.impact_benchmark_row.isHidden() and not window.impact_library_row.isHidden()
+    assert window.particle_path_row.isHidden() and window.particle_snapshot_row.isHidden()
+    assert window._current_request() == ParticleModelRequest(
+        scope="preinjector", impact_benchmark_dir=str(tmp_path / "final-benchmark"),
+        impact_library_dir=str(tmp_path / "lib"), model_timeout_s=7200,
+    )
+    window.particle_scope.setCurrentIndex(window.particle_scope.findData("downstream"))
+    assert window.run_button.text() == "Run particle model"
+    assert "ELEGANT" in window.context_label.text()
+    assert window.impact_benchmark_row.isHidden() and window.impact_library_row.isHidden()
+    assert window._current_request() == ParticleModelRequest()
+
+
+def test_particle_archive_history_opens_predictions_and_loads_saved_inputs(window, tmp_path):
+    directory = Path(window.output_edit.text()) / "shadow_particle"
+    directory.mkdir(parents=True)
+    beam = directory / "input.sdds"
+    beam.write_text("offline fixture")
+    write_runtime_state(directory / "request.json",
+                        ParticleModelRequest(beam_source="sdds", beam_path=beam.name).as_metadata())
+    write_runtime_state(directory / "manifest.json", {
+        "schema": "digital_shadow_run_v1", "kind": "particle_model", "status": "complete", "input_hash": "fixture",
+        "artifacts": {beam.name: file_digest(beam)},
+    })
+    write_runtime_state(directory / "result.json", {
+        "kind": "particle_model", "input_hash": "fixture", "status": "complete", "comparisons": [],
+        "predictions": [{"key": "PRF06/sigx", "predicted": 1.25, "unit": "mm", "status": "predicted"}],
+    })
+    window.refresh_history()
+    window.history.setCurrentRow(0)
+    assert window.results.item(0, 1).text() == "1.25"
+    assert window.results.isColumnHidden(2) and window.results.isColumnHidden(3)
+    assert window.use_inputs_button.isEnabled()
+    window.use_inputs_button.click()
+    assert window.mode.currentData() == "run-model"
+    assert window._current_request().beam_path == str(beam)
+
+    optical = write_example(tmp_path / "legacy", vm=True)
+    window.show_archive(optical)
+    assert not window.results.isColumnHidden(2) and not window.results.isColumnHidden(3)
+
+
+def test_impact_handoff_survives_request_import_and_archive_replay(window):
+    directory = write_example(Path(window.output_edit.text()) / "shadow_impact", vm=True)
+    snapshot = directory / "machine_snapshot.json"
+    snapshot_id = read_runtime_state(snapshot)["snapshot_id"]
+    beam = directory / "entrance.json"
+    handoff = directory / "impact-handoff.json"
+    write_runtime_state(beam, {})
+    write_runtime_state(handoff, {"extra_drift_m": 0})
+    request_path = directory / "request.json"
+    request = ParticleModelRequest(beam_source="archived", beam_path=beam.name, parameter_source="snapshot",
+                                   snapshot_path=snapshot.name, handoff_path=handoff.name)
+    write_runtime_state(request_path, request.as_metadata())
+    expected = replace(request, beam_path=str(beam), snapshot_path=str(snapshot), handoff_path=str(handoff))
+
+    window.load_request_file(request_path)
+    assert not window.particle_handoff_row.isHidden()
+    assert window._current_request() == expected
+    window.particle_parameter_source.setCurrentIndex(window.particle_parameter_source.findData("design"))
+    assert window.particle_handoff_row.isHidden()
+    assert window._current_request().handoff_path is None
+
+    write_runtime_state(directory / "manifest.json", {
+        "schema": "digital_shadow_run_v1", "kind": "particle_model", "status": "complete",
+        "input_hash": "fixture", "snapshot_id": snapshot_id, "impact_handoff": read_runtime_state(handoff),
+        "artifacts": {path.name: file_digest(path) for path in (beam, handoff, snapshot, request_path)},
+    })
+    window.refresh_history()
+    window.history.setCurrentRow(0)
+    assert "0 mm nominal handoff · Physical datum pending verification" in window.result_banner.text()
+    assert f"VM snapshot ID {snapshot_id}" in window.result_banner.text()
+    assert window.use_inputs_button.isEnabled()
+    window.use_inputs_button.click()
+    assert window._current_request() == expected
+
+    without_handoff = directory / "without-handoff.json"
+    write_runtime_state(without_handoff, replace(request, handoff_path=None).as_metadata())
+    window.load_request_file(without_handoff)
+    assert window.particle_handoff.text() == ""
+    assert window._current_request().handoff_path is None
 
 
 def test_partial_comparison_leaves_residual_empty(window, tmp_path):

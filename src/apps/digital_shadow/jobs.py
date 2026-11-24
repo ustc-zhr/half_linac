@@ -1,6 +1,6 @@
 """One asynchronous CLI worker, immutable inputs, and owned process-tree cleanup."""
 from datetime import datetime, timezone
-import hashlib
+import json
 import os
 from pathlib import Path
 import signal
@@ -9,6 +9,12 @@ import uuid
 
 from PyQt5.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, pyqtSignal
 
+from half_linac.src.shared.digital_shadow.beam_state import load_beam_state
+from half_linac.src.shared.digital_shadow.impact_model import DECK
+from half_linac.src.shared.digital_shadow.particle_capture import CAPTURE_COMMAND, CAPTURE_SOURCES, EVIDENCE_FILE, FOLLOW_COMMAND
+from half_linac.src.shared.digital_shadow.particle_follow import FOLLOW_EVENT
+from half_linac.src.shared.digital_shadow.particle_model import PARTICLE_RUN_KIND, PROGRESS_PREFIX, ParticleModelRequest
+from half_linac.src.shared.digital_shadow.session import file_digest
 from half_linac.src.shared.machine_state import load_snapshot, snapshot_to_dict
 from half_linac.src.shared.runtime_state import read_runtime_state, write_runtime_state
 
@@ -20,7 +26,7 @@ def read_object(path):
     return value
 
 
-def read_archive(directory):
+def read_archive(directory, *, verify_particle_inputs=False):
     directory = Path(directory).resolve()
     if directory.is_file():
         snapshot = load_snapshot(directory)
@@ -47,16 +53,63 @@ def read_archive(directory):
         raise ValueError("Select a digital shadow archive or MachineStateSnapshot")
     request = read_object(run / "request.json") if (run / "request.json").exists() else None
     result = read_object(run / "result.json") if (run / "result.json").exists() else None
+    if job and job.get("status") == "interrupted" and (manifest or {}).get("scope") in ("preinjector", "coupled"):
+        result = None
     if result and (not manifest or result.get("input_hash") != manifest.get("input_hash")
                    or result.get("status") != manifest.get("status") or not isinstance(result.get("comparisons"), list)):
         raise ValueError("Result does not match its manifest")
     if result and any(not isinstance(row, dict) for row in result["comparisons"]):
         raise ValueError("Malformed diagnostic comparison")
+    if result and manifest.get("kind") == PARTICLE_RUN_KIND and (
+        result.get("kind") != PARTICLE_RUN_KIND or not isinstance(result.get("predictions"), list)
+        or any(not isinstance(row, dict) for row in result["predictions"])
+    ):
+        raise ValueError("Malformed particle model predictions")
     if manifest:
-        for name in ("machine_snapshot.json", "request.json", "result.json", "vm_capture_evidence.json", "real_capture_evidence.json", "image_index.json", "image_comparisons.json"):
+        for name in ("machine_snapshot.json", "request.json", "result.json", "vm_capture_evidence.json",
+                     "real_capture_evidence.json", "image_index.json", "image_comparisons.json", EVIDENCE_FILE):
             expected = manifest.get("artifacts", {}).get(name)
-            if expected and hashlib.sha256((run / name).read_bytes()).hexdigest() != expected:
+            if expected and file_digest(run / name) != expected:
                 raise ValueError(f"Archive integrity check failed: {name}")
+        if verify_particle_inputs and manifest.get("kind") == PARTICLE_RUN_KIND and request:
+            particle_request = ParticleModelRequest.from_dict(request, base=run)
+            for input_path in (particle_request.beam_path, particle_request.handoff_path, particle_request.capture_evidence_path):
+                if input_path is None:
+                    continue
+                path = Path(input_path)
+                if not path.is_relative_to(run):
+                    raise ValueError("Particle input is outside its archive")
+                expected = manifest["artifacts"].get(path.relative_to(run).as_posix())
+                if not expected or file_digest(path) != expected:
+                    raise ValueError(f"Archive integrity check failed: {path.name}")
+            if particle_request.scope == "preinjector" and result:
+                if "deck_sha256" in manifest and (
+                    manifest.get("impact_variant") != particle_request.impact_variant
+                    or file_digest(run / "impact" / DECK) != manifest["deck_sha256"]
+                ):
+                    raise ValueError(f"Archive integrity check failed: {DECK}")
+                for field in ("beam_path", "handoff_path"):
+                    path = (run / result[field]).resolve()
+                    if not path.is_relative_to(run):
+                        raise ValueError("Pre-injector output is outside its archive")
+                    expected = manifest["artifacts"].get(path.relative_to(run).as_posix())
+                    if not expected or file_digest(path) != expected:
+                        raise ValueError(f"Archive integrity check failed: {path.name}")
+                load_beam_state(run / result["beam_path"])
+            if particle_request.scope == "coupled" and result:
+                for name in ("upstream", "downstream"):
+                    stage = (run / name).resolve()
+                    key = f"{name}/manifest.json"
+                    if stage != run / name or manifest["stages"][name]["directory"] != name:
+                        raise ValueError(f"Invalid coupled stage directory: {name}")
+                    if file_digest(stage / "manifest.json") != manifest["artifacts"].get(key):
+                        raise ValueError(f"Archive integrity check failed: {key}")
+                    stage_archive = read_archive(stage, verify_particle_inputs=True)
+                    if name == "upstream" and "deck_sha256" in manifest and (
+                        stage_archive["manifest"].get("impact_variant") != particle_request.impact_variant
+                        or stage_archive["manifest"].get("deck_sha256") != manifest["deck_sha256"]
+                    ):
+                        raise ValueError(f"Archive integrity check failed: {name}/{DECK}")
     real_path = run / "real_capture_evidence.json"
     real_evidence = read_object(real_path) if real_path.exists() else None
     if real_evidence and real_evidence.get("schema") != "digital_shadow_real_capture_v1":
@@ -80,19 +133,25 @@ def read_archive(directory):
             raise ValueError("Image archive has no bound scalar snapshot")
         context = replace(load_model_context(snapshot.machine_id), control_backend=ControlBackendConfig(snapshot.backend))
         verify_image_bundle(context, snapshot, images)
-    return {"directory": str(directory), "run_dir": str(run), "backend": snapshot.backend if snapshot else (job or {}).get("backend", "unknown"),
+    backend = "offline" if (manifest or {}).get("kind") == PARTICLE_RUN_KIND else (
+        snapshot.backend if snapshot else (job or {}).get("backend", "unknown")
+    )
+    return {"directory": str(directory), "run_dir": str(run), "backend": backend,
             "machine": snapshot.machine_id if snapshot else "half", "status": (job or manifest or {}).get("status", "inputs"),
             "snapshot": read_runtime_state(snapshot_path) if snapshot else None,
             "snapshot_path": str(snapshot_path) if snapshot else None,
             "request": request, "result": result, "manifest": manifest, "job": job,
+            "particle_evidence_path": str(run / EVIDENCE_FILE) if (run / EVIDENCE_FILE).is_file() else None,
             "real_evidence_path": str(real_path) if real_evidence else None,
             "image_index": images, "image_index_path": str(image_path) if images else None}
 
 
 class ShadowJobController(QObject):
     message = pyqtSignal(str)
+    progress = pyqtSignal(str)
     state_changed = pyqtSignal(str)
     completed = pyqtSignal(object)
+    follow_update = pyqtSignal(object)
 
     def __init__(self, root, parent=None):
         super().__init__(parent)
@@ -103,6 +162,8 @@ class ShadowJobController(QObject):
         self._stopping = False
         self._cleaned = False
         self._pid = 0
+        self._progress_fragment = b""
+        self._follow_fragment = b""
         self._stop_timer = QTimer(self)
         self._stop_timer.setSingleShot(True)
         self._stop_timer.timeout.connect(self._force_stop)
@@ -112,11 +173,19 @@ class ShadowJobController(QObject):
         return self.process is not None
 
     def start(self, request, output_root, *, mode, snapshot_path=None, evidence_path=None, runtime_json=None,
-              ready_timeout=10.0, capture_timeout=5.0, save_images=False, image_limit_gib=10.0, image_backgrounds=None):
+              ready_timeout=10.0, capture_timeout=5.0, save_images=False, image_limit_gib=10.0, image_backgrounds=None,
+              capture_source=None, beam_path=None, handoff_path=None, model_timeout=120.0):
         if self.busy:
             raise ValueError("A shadow task is already running")
-        if mode not in {"replay", "run-vm", "demo-real", "run-real"}:
-            raise ValueError("Choose VM replay or VM capture")
+        particle_capture = mode in {CAPTURE_COMMAND, FOLLOW_COMMAND}
+        if mode not in {"replay", "run-vm", "demo-real", "run-real", "run-model", CAPTURE_COMMAND, FOLLOW_COMMAND}:
+            raise ValueError("Choose a supported Digital Shadow mode")
+        if particle_capture and capture_source not in CAPTURE_SOURCES:
+            raise ValueError("Choose VM or simulated Real capture")
+        if mode == FOLLOW_COMMAND and (not beam_path or not handoff_path):
+            raise ValueError("Follow requires saved six-dimensional particles and the IMPACT-T handoff JSON")
+        if mode == "run-model":
+            request = ParticleModelRequest.from_dict(request.as_metadata(), base=Path.cwd())
         if mode == "replay":
             snapshot = load_snapshot(snapshot_path)
             if snapshot.machine_id != "half" or snapshot.backend not in {"vm", "real"} or (snapshot.backend == "real" and not evidence_path):
@@ -132,8 +201,17 @@ class ShadowJobController(QObject):
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         directory = Path(output_root).resolve() / f"job_{stamp}_{uuid.uuid4().hex[:10]}"
         directory.mkdir(parents=True, exist_ok=False)
-        write_runtime_state(directory / "request.json", request.as_metadata())
-        arguments = [mode, "--request", str(directory / "request.json"), "--output-root", str(directory)]
+        arguments = [mode, "--output-root", str(directory)]
+        if particle_capture:
+            arguments.extend(["--source", capture_source, "--capture-timeout", str(capture_timeout)])
+            if capture_source == "vm" and runtime_json:
+                arguments.extend(["--vm-runtime-json", str(Path(runtime_json).expanduser().resolve())])
+            if mode == FOLLOW_COMMAND:
+                arguments.extend(["--beam-path", str(Path(beam_path).expanduser().resolve()),
+                    "--impact-handoff", str(Path(handoff_path).expanduser().resolve()), "--model-timeout", str(model_timeout)])
+        else:
+            write_runtime_state(directory / "request.json", request.as_metadata())
+            arguments.extend(["--request", str(directory / "request.json")])
         if mode == "replay":
             write_runtime_state(directory / "machine_snapshot.json", snapshot_to_dict(snapshot))
             image_path = Path(snapshot_path).resolve().parent / "image_index.json"
@@ -144,7 +222,7 @@ class ShadowJobController(QObject):
                 name = "real_capture_evidence.json" if snapshot.backend == "real" else "vm_capture_evidence.json"
                 write_runtime_state(directory / name, evidence)
                 arguments.extend(["--real-evidence" if snapshot.backend == "real" else "--vm-evidence", str(directory / name)])
-        else:
+        elif mode != "run-model" and not particle_capture:
             arguments.extend(["--machine", "half", "--capture-timeout", str(capture_timeout)])
             if save_images:
                 arguments.extend(["--save-images", "--image-limit-gib", str(image_limit_gib),
@@ -158,12 +236,20 @@ class ShadowJobController(QObject):
             if runtime_json and mode == "run-vm":
                 arguments.extend(["--vm-runtime-json", str(Path(runtime_json).resolve())])
         self.job_dir = directory
-        backend = snapshot.backend if mode == "replay" else "real" if mode in {"demo-real", "run-real"} else "vm"
+        backend = {"run-model": "offline", "run-real": "real", "demo-real": "real", "run-vm": "vm"}.get(mode)
+        if mode == "replay":
+            backend = snapshot.backend
+        if particle_capture:
+            backend = capture_source
         self.record = {"schema": "digital_shadow_gui_job_v1", "status": "running", "mode": mode, "backend": backend,
                        "started_at": datetime.now(timezone.utc).isoformat(), "run_dir": None}
+        if mode == "run-model":
+            self.record["scope"] = request.scope
         self._save()
         self._stopping = self._cleaned = False
         self._pid = 0
+        self._progress_fragment = b""
+        self._follow_fragment = b""
         process = QProcess(self)
         self.process = process
         process.setWorkingDirectory(str(self.root))
@@ -195,6 +281,38 @@ class ShadowJobController(QObject):
             with (self.job_dir / ("stderr.log" if stderr else "stdout.log")).open("ab") as stream:
                 stream.write(data)
             self.message.emit(data.decode("utf-8", errors="replace"))
+        if data and stderr and self.record.get("scope") in ("preinjector", "coupled") and not self._stopping:
+            *lines, self._progress_fragment = (self._progress_fragment + data).split(b"\n")
+            prefix = PROGRESS_PREFIX.encode()
+            for line in lines:
+                if line.startswith(prefix):
+                    self.progress.emit(line[len(prefix):].decode("utf-8", errors="replace"))
+        if data and not stderr and self.record.get("mode") == FOLLOW_COMMAND and not self._stopping:
+            *lines, self._follow_fragment = (self._follow_fragment + data).split(b"\n")
+            for line in lines:
+                self._read_follow_event(line)
+
+    def _read_follow_event(self, line):
+        try:
+            event = json.loads(line)
+            if not isinstance(event, dict) or event.get("schema") != FOLLOW_EVENT:
+                return
+            if event.get("source") != self.record["backend"]:
+                raise ValueError("Follow update has the wrong capture source")
+            result = event.get("result")
+            if result:
+                directory = Path(result["run_dir"]).resolve()
+                if not directory.is_relative_to(self.job_dir / "cycles"):
+                    raise ValueError("Follow result is outside its session")
+                if self.record.get("run_dir") != str(directory):
+                    archive = read_archive(directory)
+                    if archive["status"] != "complete" or archive["manifest"]["snapshot_id"] != result["snapshot_id"]:
+                        raise ValueError("Follow result does not match its snapshot")
+                    self.record["run_dir"] = str(directory)
+                    self._save()
+            self.follow_update.emit(event)
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self.message.emit(f"Invalid Follow update: {error}\n")
 
     def _signal_group(self, number):
         marker = self.job_dir / "worker.pgid" if self.job_dir else None
@@ -254,8 +372,14 @@ class ShadowJobController(QObject):
         if not self.busy:
             return
         self._stop_timer.stop()
-        self.record.update(status="interrupted" if self._stopping else "failed", exit_code=code,
+        mode = self.record["mode"]
+        stopped = self._stopping or (mode in {CAPTURE_COMMAND, FOLLOW_COMMAND} and code == 130)
+        self.record.update(status="interrupted" if stopped else "failed", exit_code=code,
                            finished_at=datetime.now(timezone.utc).isoformat())
+        if mode == CAPTURE_COMMAND and not stopped and code == 0:
+            captures = list(self.job_dir.glob("capture_*/machine_snapshot.json"))
+            if len(captures) == 1 and (captures[0].parent / EVIDENCE_FILE).is_file():
+                self.record.update(run_dir=str(captures[0].parent), status="complete")
         manifests = sorted(self.job_dir.glob("shadow_*/manifest.json"))
         if len(manifests) == 1:
             self.record["run_dir"] = str(manifests[0].parent)

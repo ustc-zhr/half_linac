@@ -6,7 +6,10 @@ import argparse
 from dataclasses import replace
 import json
 from pathlib import Path
+import signal
 import sys
+from threading import Event
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -14,6 +17,59 @@ if str(ROOT) not in sys.path:
 from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
+
+
+def _interrupt(_number, _frame):
+    raise KeyboardInterrupt
+
+
+def _particle_live_commands(commands):
+    for command, help_text in (("capture-particle-snapshot", "Save full-line VM or simulated Real readbacks"),
+                               ("follow-particle", "Follow full-line VM or simulated Real readbacks with ELEGANT")):
+        parser = commands.add_parser(command, help=help_text)
+        parser.add_argument("--source", choices=("vm", "demo-real"), required=True)
+        parser.add_argument("--output-root", type=Path, required=True)
+        parser.add_argument("--vm-runtime-json", type=Path)
+        parser.add_argument("--capture-timeout", type=float, default=5.0)
+        if command == "follow-particle":
+            parser.add_argument("--beam-path", type=Path, required=True)
+            parser.add_argument("--impact-handoff", type=Path, required=True)
+            parser.add_argument("--poll-interval", type=float, default=1.0)
+            parser.add_argument("--model-timeout", type=float, default=120.0)
+
+
+def _particle_live(args, context):
+    from half_linac.src.shared.digital_shadow.particle_capture import ParticleCapture, archive_particle_capture
+    from half_linac.src.shared.digital_shadow.particle_follow import run_follow
+
+    if args.source != "vm" and args.vm_runtime_json is not None:
+        raise ValueError("A VM runtime JSON applies only to the VM capture source")
+    stop = Event()
+    previous = {number: signal.signal(number, lambda *_: stop.set()) for number in (signal.SIGTERM, signal.SIGINT)}
+    following = args.command == "follow-particle"
+    ready_budget = min(0.05, args.capture_timeout / 10) if following and args.source == "vm" else None
+    try:
+        capture = ParticleCapture(context, args.source, runtime_json=args.vm_runtime_json,
+            timeout_s=args.capture_timeout - (ready_budget or 0), ready_timeout_s=ready_budget or 10.0)
+        if following:
+            run_follow(context, capture, args.output_root, beam_path=args.beam_path.expanduser(),
+                       handoff_path=args.impact_handoff.expanduser(), poll_interval=args.poll_interval,
+                       model_timeout=args.model_timeout, stop=stop,
+                       emit=lambda event: print(json.dumps(event, allow_nan=False), flush=True))
+        else:
+            snapshot, evidence = capture(stop.is_set)
+            if not stop.is_set():
+                directory = args.output_root.resolve() / f"capture_{uuid.uuid4().hex}"
+                snapshot_path, evidence_path = archive_particle_capture(directory, snapshot, evidence)
+                print(json.dumps({"status": "complete", "snapshot_id": snapshot.snapshot_id,
+                                  "snapshot_path": str(snapshot_path), "evidence_path": str(evidence_path)}))
+    except (RuntimeError, ValueError, OSError):
+        if not stop.is_set():
+            raise
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+    return 130 if stop.is_set() else 0
 
 
 def main(argv=None):
@@ -31,6 +87,13 @@ def main(argv=None):
     replay.add_argument("--vm-evidence", type=Path, help="Saved evidence from a verified VM capture; no reconnection")
     replay.add_argument("--real-evidence", type=Path, help="Saved real capture metadata; offline, no reconnection")
     replay.add_argument("--image-index", type=Path, help="Saved image references; defaults to image_index.json beside snapshot")
+    particle = commands.add_parser("run-model", help="Run the offline HALF particle model")
+    particle.add_argument("--request", type=Path, required=True)
+    particle.add_argument("--output-root", type=Path, required=True)
+    particle.add_argument("--beam-path", type=Path, help="Override the particle input path from the request")
+    particle.add_argument("--impact-handoff", type=Path,
+                          help="IMPACT-T native-plane metadata for archived beam and VM snapshot replay")
+    _particle_live_commands(commands)
     capture = commands.add_parser("run-vm", help="Read a VM working point once, then calculate and compare; never access real PV mappings")
     capture.add_argument("--machine", default="half")
     capture.add_argument("--request", type=Path, required=True)
@@ -71,6 +134,34 @@ def main(argv=None):
         from half_linac.src.shared.machine_profile.loader import load_model_context
         from half_linac.src.shared.machine_profile.models import ControlBackendConfig
         from half_linac.src.shared.machine_state import load_snapshot
+
+        if args.command in {"capture-particle-snapshot", "follow-particle"}:
+            return _particle_live(args, load_model_context("half"))
+
+        if args.command == "run-model":
+            from half_linac.src.shared.digital_shadow.particle_model import (
+                PROGRESS_PREFIX, ParticleModelRequest, run_particle_model,
+            )
+            request = ParticleModelRequest.from_dict(json.loads(args.request.read_text(encoding="utf-8")),
+                                                     base=args.request.resolve().parent)
+            if args.beam_path is not None:
+                request = replace(request, beam_path=str(args.beam_path.expanduser().resolve()))
+            if args.impact_handoff is not None:
+                request = replace(request, handoff_path=str(args.impact_handoff.expanduser().resolve()))
+            if request.scope in ("preinjector", "coupled"):
+                previous = signal.signal(signal.SIGTERM, _interrupt)
+                try:
+                    context = load_model_context("half") if request.scope == "coupled" else None
+                    result = run_particle_model(context, request, args.output_root,
+                        progress=lambda message: print(PROGRESS_PREFIX + message, file=sys.stderr, flush=True))
+                finally:
+                    signal.signal(signal.SIGTERM, previous)
+            else:
+                result = run_particle_model(load_model_context("half"), request, args.output_root)
+            print(json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False))
+            if result["status"] == "interrupted":
+                return 130
+            return 0 if result["status"] == "complete" else 2
 
         request = ShadowRequest.from_dict(json.loads(args.request.read_text(encoding="utf-8")))
         real_evidence = None

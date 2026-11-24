@@ -18,12 +18,15 @@ def demo_request():
 
 
 class SimulatedRealReader:
-    def __init__(self, context, request):
-        points, _ = build_real_capture_plan(context, request)
-        state, _ = prepare_model(context, request)
+    def __init__(self, context, request=None, *, points=None, state=None, record_reads=True):
+        if request is not None:
+            points, _ = build_real_capture_plan(context, request)
+            state, _ = prepare_model(context, request)
         self.values, self.reads = {}, []
+        self.record_reads = record_reads
         self.images = {resolve_channel(context, d.element, "image", "real"):
-                       context.profile.get_element(d.element).image_geometry["real"] for d in request.diagnostics}
+                       context.profile.get_element(d.element).image_geometry["real"]
+                       for d in (request.diagnostics if request is not None else ())}
         for index, point in enumerate(points):
             endpoint = point.endpoint
             if endpoint.element_kind == "quad":
@@ -39,7 +42,8 @@ class SimulatedRealReader:
             count = int(np.prod(owner.images[name]["shape"])) if name in owner.images else 1
             def get_with_metadata(self, **kwargs):
                 assert kwargs["use_monitor"] is False
-                owner.reads.append(name)
+                if owner.record_reads:
+                    owner.reads.append(name)
                 if name in owner.images:
                     w, h = owner.images[name]["shape"]
                     x, y = np.arange(w)[None, :], np.arange(h)[:, None]

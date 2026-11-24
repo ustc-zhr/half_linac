@@ -36,6 +36,21 @@ python3 src/apps/digital_shadow/main.py --machine half
 
 线路、参考元件和 VM 诊断由模型与 profile 推导。部分线路包含 RF/弯转，仍由现有 prepare_model 检查所选局部段，不代表整条线路均可用于首版预测。
 
+**Offline particle model** 提供 **Pre-injector only**（P0 IMPACT‑T）、**Downstream only**（ELEGANT）和 **Coupled**（IMPACT‑T → ELEGANT）。**Coupled** 读取 P0 算例与保存的 HALF VM 快照，自动把本次上游粒子送入 `ALL_MAIN`。输入路径、名义交接和逐屏验收见[全线离线运行](IMPACT_ELEGANT_DIGITAL_SHADOW_HANDOFF_20261119.md#8-全线离线运行)。
+
+## 全线快照与 Follow
+
+在 **Offline particle model → Downstream only** 将 **Model parameters** 设为 **Saved quadrupole snapshot**，然后选择 **Capture source**。
+
+- **VM** 使用当前工作树的 VM runtime JSON，也可指定独立 VM 的 runtime JSON。采集核对 `ALL_MAIN`、同一个 `Ready` 版本和全部 63 个 `K1`。
+- **Real · simulated · NO PV** 使用注入式模拟读取器，在一次有界采集内复核两次 `K1_total`。结果和归档显示模拟来源。全线实机采集需单独现场验收。
+
+**Capture snapshot** 保存快照与证据，并填入快照栏。可以先采集，再选束流并点 **Run particle model**。**Follow** 要求 **Saved six-dimensional particles** 及匹配的 **IMPACT-T handoff JSON**。会话冻结入口束流、格架、跟踪模板和资源，以 0 mm 名义接法运行 ELEGANT。
+
+采集和计算并行，默认每秒检查一次，单次采集预算 5 秒。每次只运行一个模型，未启动的工况保留最新一份。状态栏显示结果年龄、计算耗时、待算状态和错误。采集或跟踪失败时继续显示上一次有效结果及其状态。**Stop** 或关闭窗口结束跟随。每次启动的计算保存在作业的 `cycles/` 下，包含独立模型归档、`cycle.json` 时序以及 GUI 的 `presentation.json`。History 支持逐轮打开，并恢复本轮快照、证据和束流做离线回放。
+
+CLI 与 GUI 共用 `scripts/run_digital_shadow.py` 的 `capture-particle-snapshot` 和 `follow-particle`。二者接受 `--source vm|demo-real`、`--output-root` 和可选的 `--vm-runtime-json`。Follow 另需 `--beam-path` 和 `--impact-handoff`，每次使用新的会话输出目录。命令的 `--help` 列出超时和间隔参数。 [全线 Follow 实测](IMPACT_ELEGANT_DIGITAL_SHADOW_HANDOFF_20261119.md#10-全线快照采集与-follow-验收)
+
 ## VM 一次采集
 
 准备已有的虚拟 IOC 和更新后的 VM 计算进程，选择 **VM · capture once and predict**，显式点击 **Capture VM & predict**。GUI 不自动启动、重启或修改 VM。

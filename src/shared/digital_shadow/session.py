@@ -26,7 +26,8 @@ def digest(payload):
 
 
 def file_digest(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    with Path(path).open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def run_once(context, snapshot, request, output_root, *, vm_evidence=None, real_evidence=None, image_bundle=None):

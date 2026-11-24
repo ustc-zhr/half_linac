@@ -1,6 +1,6 @@
 # HALF 数字影子下一窗口交接
 
-整理日期：2026-11-18。下一步为**现有模型链输入输出契约与 L01B 出口六维束流接口的设计评审**，先交付文档，审阅后再实施。三屏重建明确延期，不作为前置条件。
+整理日期：2026-11-18。现有模型链接口评审及六维接口首版合成验收已完成。L01B 历史粒子导出面和 ELEGANT 模型入口已溯源，正式绑定等待**指定出口法兰端面、ELEGANT 零点和末端场归属**。三屏重建继续延期。
 
 ## 工作位置与版本
 
@@ -14,6 +14,8 @@
 
 初始架构审查、单次快照驱动局部 ELEGANT、real 读取器的离线演练、VM 一次采集与版本核验、GUI/Launcher、归档重放、单帧无损图片池、背景复用、独立图像 ROI RMS 比较均已交付。用户已多次报告手动测试，最近一次对应下拉框交互修复。
 
+Digital Shadow 新增 **Offline particle model** 和 CLI `run-model`。首版仅下游，支持模板束团、原生 SDDS 和匹配 `ALL_MAIN / C#1 entrance` 的六维粒子归档。三条入口已由独立 ELEGANT 跟踪验证，每次产出 13 屏横纵 RMS。运行使用设计参数，或离线加载已保存快照并覆盖四极铁 K1。预注入器和串联继续等待各自验收条件，VM 接入在 IMPACT-T 对照完成后另评估。 [使用与验收](MODEL_PIPELINE_CONTRACT_DRAFT.md#9-digital-shadow-首版调用与验收)
+
 原 SIZE 与图像比较来源独立。图像残差只对通过工作点、发布和图像条件检查的 VM 生成；real/合成演练为 unverified，残差留空。没有进行真实机器采集或物理精度验收。
 
 最近下拉框修复有 121 项定向回归及静态检查；图像比较阶段有 9 项 ELEGANT/GUI/私有 loopback IOC 集成。它们不是全仓库测试通过或实机验收的声明。既有验收不必为纯文档设计重复执行。
@@ -25,6 +27,7 @@
 | 请求 | `src/shared/digital_shadow/models.py` / `ShadowRequest` |
 | 一次会话 | `session.py` / `run_once()` |
 | 当前模型链 | `pipeline.py` / `prepare_model()`、`predict()` |
+| 离线粒子跟踪 | `particle_model.py` / `ParticleModelRequest`、`run_particle_model()` |
 | 原始到模型输入 | `src/shared/machine_profile/model_snapshot.py` / `build_model_snapshot_from_machine_state()` |
 | 模型后端 | `src/shared/machine_profile/model_backend.py` / `ElegantModelBackend`、`build_model_backend()` |
 | 采集与核验 | `real_capture.py`、`vm_capture.py` |
@@ -42,13 +45,13 @@
 - 三屏重建 PRF06/07/08 → PRF06 exit、留出 PRF09 仅记录为可选后续功能，**本轮不实现**。
 - 当前物理路线为 `IMPACT-T / NN → L01B 出口 → ELEGANT，未来 Cheetah`。旧 HALF_DT_HANDOFF 中的 Cheetah 优先顺序为历史讨论。
 - 当前 ShadowRequest 仅含动能和独立横向二阶矩。pipeline 拒绝 RF/弯转段和耦合/色散，6×6 传输矩阵不等于六维束流接口。
-- 尚未明确 L01B 加速管出口在当前格架中的唯一位置。`BL01B` 是弯铁，不能代替该边界；L1 等 RF 定义重复，需核对 occurrence/edge。
+- 已将 `HALF_pre_1A_all.dat` 和 `HALF_pre_1A_main.dat` 逐粒子溯源到历史 PARMELA L01B 后 10 cm 导出面。当前 ELEGANT 模型从 `C#1 entrance` 开始，`ICT01` 和 `BPM02` 同在模型 `s=0.25 m`。2025-07-02 设备总图的热阴极方案为两台设备分别标注引线，法兰到模型零点的物理距离仍待确认，见草案第 2 节。
 
 ## 下一步范围与交付
 
-允许读源码和更新评审文档；本轮不改源码/机器配置，不连接 real PV，不启动 IOC/VM，不安装或实现 IMPACT-T/NN/Cheetah，不做三屏重建或调束闭环。
+初始评审以源码核对和文档为范围。经授权实施后，六维载荷读写、边界解析和等权粒子 SDDS 适配已通过定向测试及独立 ELEGANT 恒等、漂移和准直损失验收。正式绑定等待物理证据。现场/IOC/VM 运行、其他引擎和三屏重建仍独立安排。
 
-先交付一份契约草案，建议文件 `docs/DT/MODEL_PIPELINE_CONTRACT_DRAFT.md`（目前尚未创建），包括：
+设计评审见 [模型链与 L01B 出口六维束流接口草案](MODEL_PIPELINE_CONTRACT_DRAFT.md)。审阅范围包括：
 
 1. 现有 ShadowRequest、MachineStateSnapshot、ModelSnapshot、session/result/manifest 的接口对照与复用清单，避免平行数据体系。
 2. L01B 边界位置的代码证据、未定事项，以及六维统计量/粒子表示的坐标、单位、参考粒子、时间、RF 相位、电荷、权重和损失约定。候选定义标明待评审，缺失信息不猜测。

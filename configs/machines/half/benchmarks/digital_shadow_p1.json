@@ -1,0 +1,17 @@
+{
+  "id": "half-p0-gauss-0522nc-pic72",
+  "impact_version": "IMPACT-T 3.1.5 P0 serial diagnostics",
+  "inputs_manifest_sha256": "6da2a13cc01058dc56a8b4bcb7a929bf03264064b46c829c95ff9fb98bf05ee8",
+  "engine_sha256": "5cdb6ab0d949f4bbb5656516da1a5d453b0ea7f43b372fc67cd51bdffc03de80",
+  "handoff_sha256": "b74168d93950deb47ecaad1b8905dbd219f49d2c2a87fcb230b214559d369c42",
+  "beam_metadata_sha256": "5145dc19b44dec98fe6475624d229ced2fd122b02796ffcdfe3a39543f49f862",
+  "vm_snapshot_id": "vm_capture_c6d2f3e6a2ea4223b0011465fd784389",
+  "l01b_probe": {
+    "start_m": "6.1565863",
+    "end_m": "9.1994809",
+    "frequency_hz": 2856000000,
+    "field_map_ids": [28, 29, 30, 31, 32, 33, 34, 35],
+    "cards": 172,
+    "amplitude_scale": "1.01"
+  }
+}

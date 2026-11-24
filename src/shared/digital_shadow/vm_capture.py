@@ -29,8 +29,14 @@ def build_vm_capture_plan(context, request):
     if context.control_backend.name != "vm":
         raise ValueError("VM capture requires control_backend='vm'; real capture is not available")
     _, fields = prepare_model(context, request)
+    return vm_capture_points(context, fields, request.diagnostics)
+
+
+def vm_capture_points(context, fields, diagnostics=()):
+    if context.control_backend.name != "vm":
+        raise ValueError("VM capture requires control_backend='vm'; real capture is not available")
     channels = [(name, "K1", "1/m^2", StateClass.SETTING) for name, _ in fields]
-    for diagnostic in request.diagnostics:
+    for diagnostic in diagnostics:
         if diagnostic.unit != "mm":
             raise ValueError("VM particle RMS publication uses mm; declare diagnostics in mm")
         channels.append((diagnostic.element, diagnostic.channel, "mm", StateClass.OBSERVATION))
@@ -73,9 +79,9 @@ def _ready_observation(runtime_json):
     return status, result, digest(result)
 
 
-def _wait_ready(runtime_json, timeout_s):
+def _wait_ready(runtime_json, timeout_s, stop_requested):
     deadline = time.monotonic() + positive(timeout_s, "VM ready timeout")
-    while True:
+    while not stop_requested():
         try:
             return _ready_observation(runtime_json)
         except (OSError, ValueError, KeyError, RuntimeError) as exc:
@@ -83,11 +89,16 @@ def _wait_ready(runtime_json, timeout_s):
             if remaining <= 0:
                 raise RuntimeError(f"VM did not become ready: {exc}") from exc
             time.sleep(min(0.05, remaining))
+    raise RuntimeError("VM capture stopped")
 
 
 def verify_vm_evidence(context, snapshot, request, evidence):
     """Verify saved evidence too; replay never reconnects to the VM."""
-    points, units = build_vm_capture_plan(context, request)
+    return verify_vm_samples(snapshot, evidence, build_vm_capture_plan(context, request))
+
+
+def verify_vm_samples(snapshot, evidence, plan):
+    points, units = plan
     if snapshot.backend != "vm" or evidence.get("schema") != "digital_shadow_vm_capture_v1":
         raise ValueError("VM capture evidence requires a VM snapshot")
     if evidence.get("snapshot_hash") != digest(snapshot_to_dict(snapshot)):
@@ -131,18 +142,27 @@ def verify_vm_evidence(context, snapshot, request, evidence):
 
 def capture_vm_once(context, request, *, runtime_json=None, timeout_s=5.0,
                     ready_timeout_s=10.0, pv_factory=None, poll_function=None, image_capture=None):
-    points, units = build_vm_capture_plan(context, request)
     if image_capture is not None and (image_capture.backend != "vm" or image_capture.machine_id != context.machine.id
             or image_capture.request != request):
         raise ValueError("Image capture context/request differs from VM scalar capture")
+    return capture_vm_plan(context, build_vm_capture_plan(context, request),
+        runtime_json=runtime_json, timeout_s=min(timeout_s, request.max_capture_duration_s),
+        ready_timeout_s=ready_timeout_s, pv_factory=pv_factory, poll_function=poll_function,
+        image_capture=image_capture)
+
+
+def capture_vm_plan(context, plan, *, runtime_json=None, timeout_s=5.0, ready_timeout_s=10.0,
+                    pv_factory=None, poll_function=None, image_capture=None, stop_requested=None):
+    points, units = plan
+    should_stop = stop_requested or (lambda: False)
     runtime_json = Path(runtime_json or resolve_vm_runtime(context.profile).runtime_json).resolve()
-    before, result, result_hash = _wait_ready(runtime_json, ready_timeout_s)
+    before, result, result_hash = _wait_ready(runtime_json, ready_timeout_s, should_stop)
     started = datetime.now(timezone.utc)
-    bound = min(positive(timeout_s, "capture timeout"), request.max_capture_duration_s)
+    bound = positive(timeout_s, "capture timeout")
     deadline = time.monotonic() + bound - (min(0.05, bound / 10) if image_capture is not None else 0)
     sampled = sample_capture_points(
         points, max(0.001, deadline - time.monotonic()),
-        pv_factory=pv_factory, poll_function=poll_function,
+        pv_factory=pv_factory, poll_function=poll_function, stop_requested=should_stop,
     )
     if image_capture is not None:
         image_capture.sample(deadline, pv_factory=pv_factory, poll_function=poll_function)
@@ -168,7 +188,7 @@ def capture_vm_once(context, request, *, runtime_json=None, timeout_s=5.0,
         capture_status=sampled.status, hostname=socket.gethostname(),
         consistency="vm_result_matched", requested_count=sampled.requested_count, entries=tuple(entries),
     )
-    selected = {diagnostic.element for diagnostic in request.diagnostics}
+    selected = {p.endpoint.element_id for p in points if p.state_class == StateClass.OBSERVATION}
     screens = {}
     for screen in result["screens"].values():
         if screen.get("name") in selected:
@@ -179,5 +199,7 @@ def capture_vm_once(context, request, *, runtime_json=None, timeout_s=5.0,
     evidence = {"schema": "digital_shadow_vm_capture_v1", "snapshot_hash": digest(snapshot_to_dict(snapshot)),
                 "status": before, "input_state": result["input_state"], "screens": screens,
                 "vm_result_hash": result_hash, "runtime_json": str(runtime_json)}
-    verify_vm_evidence(context, snapshot, request, evidence)
+    if should_stop():
+        raise RuntimeError("VM capture stopped")
+    verify_vm_samples(snapshot, evidence, plan)
     return snapshot, evidence
