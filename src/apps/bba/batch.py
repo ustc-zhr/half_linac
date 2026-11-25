@@ -2,22 +2,24 @@ from __future__ import annotations
 
 import json
 import math
-import numpy as np
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
+import numpy as np
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QAbstractItemView, QDialog, QHBoxLayout, QHeaderView, QLabel,
     QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
-    QComboBox, QGridLayout, QGroupBox, QLineEdit, QMessageBox, QFileDialog,
+    QComboBox, QGridLayout, QGroupBox, QLineEdit, QMessageBox, QFileDialog, QStackedWidget,
 )
 
 from half_linac.src.shared.machine_profile.app_runtime import sanitize_runtime_token
 from half_linac.src.shared.machine_profile.loader import machine_root, load_bba_workflow
+from half_linac.src.shared.machine_profile.models import BBAScanConfig
 from half_linac.src.apps.bba.fit_quality import (
     analyze_bba1_inner_fit,
     build_bba1_scan_guidance,
@@ -27,6 +29,7 @@ from half_linac.src.apps.bba.fit_quality import (
 
 
 BBA1_SLOPE_LABEL = r"$d\,\mathrm{BPM}_2/dK_1$ (m$^3$)"
+BBA1_PRESET_FIELDS = ("plane", "quad", "corr", "bpm1", "bpm2")
 
 
 def _display_unit(unit):
@@ -154,7 +157,13 @@ class BBABatchThread(QThread):
         self.active = None
         self.stopping = False
         self.records = [
-            {"preset_id": task.preset_id, "status": "pending", "archive": str(task.archive_dir)}
+            {
+                "preset_id": task.preset_id,
+                "status": "pending",
+                "archive": str(task.archive_dir),
+                **{name: getattr(task, name) for name in BBA1_PRESET_FIELDS},
+                "scan": {field.name: getattr(task, field.name) for field in fields(BBAScanConfig)},
+            }
             for task in tasks
         ]
         self.status = "pending"
@@ -239,6 +248,9 @@ class BBABatchDialog(QDialog):
         self.scan_factory = scan_factory
         self.worker = None
         self.results = {}
+        self.archive_results = {}
+        self.archive_table = None
+        self.preset_search = ""
         self.presets = list(window._bba_presets_for_family("bba1"))
         self.originals = list(self.presets)
         self.editor_row = None
@@ -248,9 +260,9 @@ class BBABatchDialog(QDialog):
         self.setWindowTitle(f"Batch BBA-1 Scans · {window.machine_profile.machine.display_name} · {window.app_context.control_backend.name}")
         self.resize(1240, 800)
         layout = QVBoxLayout(self)
-        note = QLabel("Select the presets to run, then select a row to edit its scan parameters.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        self.note = QLabel("Select the presets to run, then select a row to edit its scan parameters.")
+        self.note.setWordWrap(True)
+        layout.addWidget(self.note)
         actions = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText("Find quadrupole, corrector, or BPM…")
@@ -270,55 +282,22 @@ class BBABatchDialog(QDialog):
         self.review_button.clicked.connect(self._select_review)
         actions.addWidget(self.review_button)
         self.selection_buttons.append(self.review_button)
-        self.table = QTableWidget(len(self.presets), 10)
-        palette = window._palette()
-        self.table.setStyleSheet(
-            "QTableWidget::indicator {width: 16px; height: 16px; border-radius: 3px; "
-            f"border: 1px solid {palette['input_border']}; background: {palette['input_bg']};}}"
-            f"QTableWidget::indicator:checked {{background: {palette['metric_active_fg']};}}"
-        )
-        self.table.setHorizontalHeaderLabels(("Use", "Preset", "Corrector range", "Quadrupole range", "Sampling", "Status", "Center ± 1σ (mm)", "Archive", "Quality", "R²"))
-        self.table.hideColumn(7)
-        self.table.hideColumn(4)
-        self.table.cellDoubleClicked.connect(self._view_result)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.verticalHeader().hide()
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.Interactive)
-        header.resizeSection(1, 360)
-        for column in (2, 3):
-            header.setSectionResizeMode(column, QHeaderView.Stretch)
+        self.tables = QStackedWidget()
+        self.table = self._make_table()
+        self.table.setRowCount(len(self.presets))
+        self.tables.addWidget(self.table)
         if self.presets:
             scan = self.presets[0].scan
             self.table.horizontalHeaderItem(2).setText(f"Corrector ({_display_unit(scan.corr_unit)})")
             self.table.horizontalHeaderItem(3).setText(f"Quadrupole ({_display_unit(scan.quad_unit)})")
         for row, preset in enumerate(self.presets):
+            self._init_row(self.table, row, window._bba_preset_label(preset))
             check = QTableWidgetItem()
             check.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
             check.setCheckState(Qt.Unchecked)
             self.table.setItem(row, 0, check)
-            scan = preset.scan
-            values = (
-                window._bba_preset_label(preset),
-                f"{scan.corr_from:g} … {scan.corr_end:g} {_display_unit(scan.corr_unit)} ({_display_mode(scan.corr_mode)})",
-                f"{scan.quad_from:g} … {scan.quad_end:g} {_display_unit(scan.quad_unit)} ({_display_mode(scan.quad_mode)})",
-                f"{scan.samples} / {scan.settle_time:g}s / {scan.sample_interval:g}s",
-                "", "", "", "", "",
-            )
-            for column, value in enumerate(values, 1):
-                item = QTableWidgetItem(value)
-                item.setToolTip(value)
-                self.table.setItem(row, column, item)
-            self.table.item(row, 4).setToolTip(
-                f"Corrector × quadrupole: {scan.corr_steps} × {scan.quad_steps} points\n"
-                f"Samples per point: {scan.samples}\nSettle time: {scan.settle_time:g} s\n"
-                f"Sample interval: {scan.sample_interval:g} s"
-            )
             self._refresh_row(row)
-        layout.addWidget(self.table, 1)
+        layout.addWidget(self.tables, 1)
         self.editor = QGroupBox("Scan parameters")
         editor_layout = QGridLayout(self.editor)
         self.fields = {}
@@ -357,6 +336,11 @@ class BBABatchDialog(QDialog):
         self.summary = QLabel()
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+        self.archive_summary = QLabel()
+        self.archive_summary.setTextFormat(Qt.PlainText)
+        self.archive_summary.setWordWrap(True)
+        self.archive_summary.hide()
+        layout.addWidget(self.archive_summary)
         controls = QHBoxLayout()
         self.start_button = QPushButton("Run Selected")
         self.stop_button = QPushButton("Stop and Restore")
@@ -369,9 +353,14 @@ class BBABatchDialog(QDialog):
             button.setFixedWidth(155 if button != self.close_button else 85)
             controls.addWidget(button)
         controls.insertStretch(2, 1)
-        for label, handler in (("View Fit", self._view_result), ("Open Result…", self._load_result)):
-            button = QPushButton(label)
-            button.clicked.connect(handler)
+        self.open_button = QPushButton("Open Results…")
+        self.open_button.clicked.connect(self._load_result)
+        view_button = QPushButton("View Fit")
+        view_button.clicked.connect(self._view_result)
+        self.back_button = QPushButton("Back to Presets")
+        self.back_button.clicked.connect(self._show_presets)
+        self.back_button.hide()
+        for button in (self.open_button, view_button, self.back_button):
             controls.insertWidget(2, button)
         layout.addLayout(controls)
         self.table.itemChanged.connect(self._estimate)
@@ -384,9 +373,42 @@ class BBABatchDialog(QDialog):
         self.table.setCurrentCell(0, 1)
         self._estimate()
 
+    def _make_table(self):
+        table = QTableWidget(0, 10)
+        palette = self.window._palette()
+        table.setStyleSheet(
+            "QTableWidget::indicator {width: 16px; height: 16px; border-radius: 3px; "
+            f"border: 1px solid {palette['input_border']}; background: {palette['input_bg']};}}"
+            f"QTableWidget::indicator:checked {{background: {palette['metric_active_fg']};}}"
+        )
+        table.setHorizontalHeaderLabels(("Use", "Preset", "Corrector range", "Quadrupole range", "Sampling", "Status", "Center ± 1σ (mm)", "Archive", "Quality", "R²"))
+        table.hideColumn(7)
+        table.hideColumn(4)
+        table.cellDoubleClicked.connect(self._view_result)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SingleSelection)
+        table.verticalHeader().hide()
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Interactive)
+        header.resizeSection(1, 360)
+        for column in (2, 3):
+            header.setSectionResizeMode(column, QHeaderView.Stretch)
+        return table
+
+    @staticmethod
+    def _init_row(table, row, label):
+        for column in range(1, table.columnCount()):
+            table.setItem(row, column, QTableWidgetItem())
+        table.item(row, 1).setText(label)
+        table.item(row, 1).setToolTip(label)
+
     def _filter(self, text):
-        for row, preset in enumerate(self.presets):
-            self.table.setRowHidden(row, text.casefold() not in self.window._bba_preset_label(preset).casefold())
+        table = self.tables.currentWidget()
+        for row in range(table.rowCount()):
+            label = table.item(row, 1).text()
+            table.setRowHidden(row, text.casefold() not in label.casefold())
 
     def _edit_row(self, row, column=0, previous_row=-1, previous_column=0):
         if row < 0 or row == self.editor_row:
@@ -440,21 +462,26 @@ class BBABatchDialog(QDialog):
             return False
 
     def _refresh_row(self, row):
-        scan = self.presets[row].scan
-        self.table.blockSignals(True)
+        blocked = self.table.blockSignals(True)
+        self._render_scan(self.table, row, self.presets[row].scan)
+        self.table.blockSignals(blocked)
+
+    @staticmethod
+    def _render_scan(table, row, scan, show_units=False):
         for column, prefix in ((2, "corr"), (3, "quad")):
-            self.table.item(row, column).setText(
-                ("Δ " if getattr(scan, prefix + '_mode') == "relative" else "") +
-                f"{getattr(scan, prefix + '_from'):g} … {getattr(scan, prefix + '_end'):g} "
-            )
-            self.table.item(row, column).setToolTip(
-                f"{getattr(scan, prefix + '_steps')} points · "
-                f"{_display_mode(getattr(scan, prefix + '_mode'))} · "
-                f"{_display_unit(getattr(scan, prefix + '_unit'))}"
-            )
-        self.table.item(row, 4).setText(f"{scan.samples} / {scan.settle_time:g}s / {scan.sample_interval:g}s")
-        self.table.item(row, 4).setToolTip("Samples per point / settle time / sample interval")
-        self.table.blockSignals(False)
+            low, high = getattr(scan, f"{prefix}_from"), getattr(scan, f"{prefix}_end")
+            if low is None or high is None:
+                continue
+            mode = getattr(scan, f"{prefix}_mode")
+            unit = _display_unit(getattr(scan, f"{prefix}_unit") or "")
+            steps = getattr(scan, f"{prefix}_steps")
+            delta = "Δ " if mode == "relative" else ""
+            suffix = f" {unit}" if show_units else ""
+            table.item(row, column).setText(f"{delta}{low:g} … {high:g}{suffix}")
+            table.item(row, column).setToolTip(f"{steps} points · {_display_mode(mode)} · {unit}")
+        if None not in (scan.samples, scan.settle_time, scan.sample_interval):
+            table.item(row, 4).setText(f"{scan.samples} / {scan.settle_time:g}s / {scan.sample_interval:g}s")
+            table.item(row, 4).setToolTip("Samples per point / settle time / sample interval")
 
     def _apply_sampling(self):
         if not self._commit_editor() or self.editor_row is None:
@@ -506,7 +533,7 @@ class BBABatchDialog(QDialog):
         self.start_button.setEnabled(bool(rows))
 
     def _start(self):
-        if self.window._scan_is_running():
+        if self.window._scan_is_running() or self.tables.currentWidget() != self.table:
             return
         if not self._commit_editor():
             return
@@ -550,7 +577,7 @@ class BBABatchDialog(QDialog):
         self.editor.setEnabled(False)
         self.search.setEnabled(False)
         self.table.setEnabled(False)
-        for button in self.selection_buttons + [self.start_button, self.close_button]:
+        for button in self.selection_buttons + [self.start_button, self.close_button, self.open_button]:
             button.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.worker.start()
@@ -566,30 +593,125 @@ class BBABatchDialog(QDialog):
             self.table.item(row, 0).setCheckState(Qt.Checked if quality in ("review", "invalid") else Qt.Unchecked)
 
     def _load_result(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Load BBA-1 Result", str(self.window._bba_runtime_paths(self.window.app_context.control_backend.name)["runs_dir"]), "Metadata (metadata.json)")
+        if self.window._scan_is_running():
+            return
+        runs = self.window._bba_runtime_paths(self.window.app_context.control_backend.name)["runs_dir"]
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open BBA-1 Results", str(runs), "BBA-1 results (batch.json metadata.json)",
+        )
         if not path:
             return
+        path = Path(path)
         try:
-            metadata = json.loads(Path(path).read_text())
-            if metadata.get("family") != "bba1":
+            if path.name == "batch.json":
+                self._load_batch(path)
+                return
+            metadata = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(metadata, dict) or metadata.get("family") != "bba1":
                 raise ValueError("Select BBA-1 metadata.")
-            record = dict(metadata.get("outcome", {}), archive=str(Path(path).parent))
-            if "fit_quality" not in record:
-                data = np.loadtxt(Path(path).parent / "m1S.txt", ndmin=2)
-                record["fit_quality"] = fit_bba1_center(data[:, 0], data[:, 1])
-            self._add_inner_diagnostics_from_raw(record, Path(path).parent)
-            self._show_fit(record, metadata.get("preset_id") or "BBA-1")
-        except (OSError, ValueError, KeyError, IndexError) as exc:
-            QMessageBox.warning(self, "BBA-1 Result", str(exc))
+            record = dict(metadata.get("outcome", {}), archive=str(path.parent))
+            self._show_saved_fit(record, metadata.get("preset_id") or "BBA-1")
+        except (OSError, ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
+            QMessageBox.warning(self, "BBA-1 Results", str(exc))
+
+    def _load_batch(self, path):
+        batch = json.loads(path.read_text(encoding="utf-8"))
+        items = batch.get("items") if isinstance(batch, dict) else None
+        if not isinstance(items, list) or not items:
+            raise ValueError("Select a BBA-1 batch.json containing scan records.")
+        table = self._make_table()
+        table.hideColumn(0)
+        table.showColumn(4)
+        table.setRowCount(len(items))
+        records = {}
+        for row, item in enumerate(items):
+            if not isinstance(item, dict) or not all(
+                isinstance(item.get(key), str) and item[key] for key in ("preset_id", "status", "archive")
+            ):
+                raise ValueError(f"Invalid BBA-1 batch record at row {row + 1}.")
+            folder = Path(item["archive"].replace("\\", "/")).name
+            if not folder or folder == "..":
+                raise ValueError(f"Invalid BBA-1 archive path at row {row + 1}.")
+            directory = path.parent / folder
+            metadata = self.window._load_bba_metadata(directory / "metadata.json")
+            if metadata.get("family") != "bba1" or metadata.get("preset_id") != item["preset_id"]:
+                metadata = {}
+            details = {**metadata, **item}
+            label = item["preset_id"]
+            if all(details.get(key) for key in BBA1_PRESET_FIELDS):
+                elements = SimpleNamespace(**{key: details[key] for key in BBA1_PRESET_FIELDS})
+                label = self.window._bba_preset_label(elements)
+            self._init_row(table, row, label)
+            scan = details.get("scan")
+            if isinstance(scan, dict):
+                saved_scan = BBAScanConfig(**{field.name: scan.get(field.name) for field in fields(BBAScanConfig)})
+                self._render_scan(table, row, saved_scan, show_units=True)
+            record = dict(item, archive=str(directory))
+            outcome = metadata.get("outcome")
+            if not record.get("fit_quality") and isinstance(outcome, dict) and outcome.get("fit_quality"):
+                record["fit_quality"] = outcome["fit_quality"]
+            records[row] = record
+            self._render_result(table, row, record)
+
+        if self.tables.currentWidget() == self.table:
+            self.preset_search = self.search.text()
+        if self.archive_table is not None:
+            self.tables.removeWidget(self.archive_table)
+            self.archive_table.deleteLater()
+        self.archive_table = table
+        self.archive_results = records
+        self.tables.addWidget(table)
+        table.setCurrentCell(0, 1)
+        completed = sum(record["status"] == "success" for record in records.values())
+        self.archive_summary.setText(
+            f"{path.parent.name} · {batch.get('machine', '—')} / {batch.get('backend', '—')} · "
+            f"{_display_status(batch.get('status', 'unknown'))} · {completed}/{len(records)} completed. "
+            f"{batch.get('error') or ''}"
+        )
+        self.archive_summary.setToolTip(str(path))
+        self._show_archive_view(True)
+
+    def _show_archive_view(self, archived):
+        self.tables.setCurrentWidget(self.archive_table if archived else self.table)
+        for widget in [self.note, self.editor, self.summary, self.start_button, self.stop_button, *self.selection_buttons]:
+            widget.setVisible(not archived)
+        self.archive_summary.setVisible(archived)
+        self.back_button.setVisible(archived)
+        self.search.setText("" if archived else self.preset_search)
+        self._filter(self.search.text())
+
+    def _show_presets(self):
+        self._show_archive_view(False)
 
     def _view_result(self, row=None, column=0):
+        table = self.tables.currentWidget()
         if row is None or isinstance(row, bool):
-            row = self.table.currentRow()
+            row = table.currentRow()
+        if table is self.archive_table:
+            record = self.archive_results.get(row)
+            if record is not None:
+                self._show_saved_fit(record, record["preset_id"])
+            return
         record = self.results.get(row)
         if record is None or "fit_quality" not in record:
             self.edit_note.setText("No final fit available for this row yet.")
             return
         self._show_fit(record, self.presets[row].id)
+
+    def _show_saved_fit(self, record, title):
+        directory = Path(record["archive"])
+        try:
+            if not record.get("fit_quality"):
+                summary_path = directory / "m1S.txt"
+                if not summary_path.is_file():
+                    QMessageBox.information(self, "BBA-1 Result", "No final fit is available for this row.")
+                    return
+                data = np.loadtxt(summary_path, ndmin=2)
+                record["fit_quality"] = fit_bba1_center(data[:, 0], data[:, 1])
+            self._add_inner_diagnostics_from_raw(record, directory)
+            self._show_fit(record, title)
+        except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
+            QMessageBox.warning(self, "BBA-1 Result", str(exc))
 
     def _show_fit(self, record, title):
         from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -671,8 +793,6 @@ class BBABatchDialog(QDialog):
     def _progress(self, index, record):
         row = self.selected_rows[index]
         status = record["status"]
-        self.table.item(row, 5).setText(_display_status(status))
-        self.table.item(row, 5).setToolTip(record.get("error", ""))
         if status == "running":
             self.results.pop(row, None)
             for column in (8, 9):
@@ -682,18 +802,30 @@ class BBABatchDialog(QDialog):
             self.window._apply_bba1_preset(self.presets[row])
             self.window.bba1_loaded_source_dir = self.worker.tasks[index].archive_dir
             self.table.item(row, 6).setText("")
-        if record.get("offset_m") is not None:
-            self.table.item(row, 6).setText(f"{record['offset_m'] * 1000:.4f}")
-        quality = record.get("fit_quality")
-        if quality:
+        if record.get("fit_quality"):
             self.results[row] = dict(record)
+        self._render_result(self.table, row, record)
+        self.summary.setText(
+            f"{index + 1}/{len(self.selected_rows)} · {self.presets[row].id} · "
+            f"{_display_status(status)}"
+        )
+
+    def _render_result(self, table, row, record):
+        status = record["status"]
+        table.item(row, 5).setText(_display_status(status))
+        table.item(row, 5).setToolTip(record.get("error") or "")
+        quality = record.get("fit_quality")
+        offset = quality.get("offset_m", record.get("offset_m")) if quality else record.get("offset_m")
+        if offset is not None:
+            table.item(row, 6).setText(f"{offset * 1000:.4f}")
+        elif quality:
+            table.item(row, 6).setText("—")
+        if quality:
             sigma = quality.get("offset_sigma_m")
-            if sigma is not None:
-                self.table.item(row, 6).setText(f"{quality['offset_m'] * 1000:.4f} ± {sigma * 1000:.4f}")
-            elif quality.get("offset_m") is None:
-                self.table.item(row, 6).setText("—")
-            self.table.item(row, 8).setText(_display_quality(quality["quality"]))
-            self.table.item(row, 8).setForeground(QColor(self.window._palette()["metric_active_fg" if quality["quality"] == "good" else "metric_warning_fg"]))
+            if sigma is not None and offset is not None:
+                table.item(row, 6).setText(f"{offset * 1000:.4f} ± {sigma * 1000:.4f}")
+            table.item(row, 8).setText(_display_quality(quality["quality"]))
+            table.item(row, 8).setForeground(QColor(self.window._palette()["metric_active_fg" if quality["quality"] == "good" else "metric_warning_fg"]))
             summary = quality.get("inner_summary")
             tooltip = "; ".join(quality["reasons"]) or "No review flags. Double-click to inspect fit."
             if summary:
@@ -703,15 +835,11 @@ class BBABatchDialog(QDialog):
                 )
                 guidance = quality.get("scan_guidance") or build_bba1_scan_guidance(quality)
                 tooltip += "\nGuidance: " + guidance[0]
-            self.table.item(row, 8).setToolTip(tooltip)
+            table.item(row, 8).setToolTip(tooltip)
             score = quality.get("r_squared")
-            self.table.item(row, 9).setText("—" if score is None else f"{score:.3f}")
-        self.table.item(row, 7).setText("Saved" if status == "success" else "")
-        self.table.item(row, 7).setToolTip(record.get("archive", ""))
-        self.summary.setText(
-            f"{index + 1}/{len(self.selected_rows)} · {self.presets[row].id} · "
-            f"{_display_status(status)}"
-        )
+            table.item(row, 9).setText("—" if score is None else f"{score:.3f}")
+        table.item(row, 7).setText("Saved" if status == "success" else "")
+        table.item(row, 7).setToolTip(record.get("archive", ""))
 
     @staticmethod
     def _add_inner_diagnostics_from_raw(record, directory):
@@ -757,7 +885,7 @@ class BBABatchDialog(QDialog):
         self.editor.setEnabled(True)
         self.search.setEnabled(True)
         self.table.setEnabled(True)
-        for button in self.selection_buttons + [self.start_button, self.close_button]:
+        for button in self.selection_buttons + [self.start_button, self.close_button, self.open_button]:
             button.setEnabled(True)
         self.stop_button.setEnabled(False)
         completed = sum(record["status"] == "success" for record in self.worker.records)

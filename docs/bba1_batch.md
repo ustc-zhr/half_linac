@@ -51,7 +51,7 @@ BPM1 的 Scan average / Initial K1 模式取自开始批次时主窗口的选择
 ## 结果
 
 批次保存在 `src/apps/bba/runtime/<machine>/<backend>/runs/batch_<时间>_<唯一标识>/`。
-`batch.json` 记录执行顺序、状态、offset（米）、错误和子目录路径。
+`batch.json` 记录执行顺序、扫描参数、状态、offset（米）、错误和子目录路径。
 每个子目录带序号和 preset ID，保存原始点、扫描参数、恢复状态与拟合输入；
 停止或失败也保留已采集的点。将鼠标移到 Archive 或失败状态列可查看路径或原因。
 
@@ -77,5 +77,9 @@ Normal 表示未触发当前复核条件，不是机器精度合格证明。
 
 双击结果行或点击 **View Fit**，查看最终拟合、中心及 ±1σ 区域和原始 K1 扫描点。
 **Select Needs Review** 勾选 Review/Invalid 项，便于修改参数后重测。
-**Load Result…** 可选择历史子目录的 `metadata.json` 查看结果，所有查看操作均为离线。
+**Open Results…** 选择批次目录中的 `batch.json`，上方表格会按归档顺序显示整批结果，
+包括失败、停止和未执行的项。双击一行可查看已有的拟合和原始点，**Back to Presets**
+返回当前预设及勾选状态。旧批次也可打开，扫描参数从各子目录的 `metadata.json` 读取。
+整批移到其他位置时，请保留 `batch.json` 和子目录的结构。直接选择 `metadata.json`
+可查看单项拟合。结果查看均为离线操作。
 质量指标、原因和最终拟合点随 `metadata.json` 和 `batch.json` 保存。

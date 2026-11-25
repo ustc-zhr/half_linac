@@ -193,6 +193,71 @@ class BbaBatchTests(unittest.TestCase):
             dialog.close()
             window.close()
 
+    def test_open_results_restores_batch_from_moved_archive(self):
+        window = myWindow()
+        dialog = BBABatchDialog(window, BBAScanThread)
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                archive = root / "001_old_preset"
+                archive.mkdir()
+                metadata_path = archive / "metadata.json"
+                positions = np.linspace(-0.001, 0.001, 5)
+                quality = fit_bba1_center(positions, positions - 0.0003)
+                scan = {"corr_from": -0.5, "corr_end": 0.5, "corr_mode": "relative",
+                        "corr_steps": 5, "corr_unit": "A"}
+                metadata_path.write_text(json.dumps({
+                    "family": "bba1", "preset_id": "old_preset", "plane": "X",
+                    "quad": "Q_OLD", "corr": "XC_OLD", "bpm1": "BPM01", "bpm2": "BPM02",
+                    "scan": scan, "outcome": {"fit_quality": quality},
+                }))
+                batch_path = root / "batch.json"
+                batch_path.write_text(json.dumps({
+                    "machine": "half", "backend": "real", "status": "stopped",
+                    "items": [
+                        {"preset_id": "old_preset", "status": "success",
+                         "archive": f"/original/batch/{archive.name}", "fit_quality": quality},
+                        {"preset_id": "pending_preset", "status": "not_run",
+                         "archive": "/original/batch/002_pending_preset", "scan": scan},
+                    ],
+                }))
+                dialog.table.item(0, 0).setCheckState(2)
+                dialog.search.setText(dialog.presets[0].quad)
+                with patch("half_linac.src.apps.bba.batch.QFileDialog.getOpenFileName",
+                           side_effect=[(str(batch_path), ""), (str(metadata_path), "")]), \
+                     patch.object(window, "_require_write_allowed") as write_check, \
+                     patch.object(dialog, "_show_fit") as show_fit:
+                    dialog.open_button.click()
+                    table = dialog.tables.currentWidget()
+                    self.assertEqual(table.rowCount(), 2)
+                    self.assertIn("Q_OLD", table.item(0, 1).text())
+                    self.assertEqual(table.item(0, 2).text(), "Δ -0.5 … 0.5 A")
+                    self.assertEqual(table.item(0, 5).text(), "Completed")
+                    self.assertIn("0.3000", table.item(0, 6).text())
+                    self.assertEqual(table.item(0, 8).text(), "Good")
+                    self.assertEqual(table.item(0, 9).text(), "1.000")
+                    self.assertEqual(table.item(1, 5).text(), "Not run")
+                    self.assertEqual(table.item(1, 2).text(), table.item(0, 2).text())
+                    self.assertIn("half / real", dialog.archive_summary.text())
+                    self.assertTrue(dialog.start_button.isHidden())
+                    dialog._start()
+                    write_check.assert_not_called()
+
+                    table.cellDoubleClicked.emit(0, 1)
+                    record, title = show_fit.call_args.args
+                    self.assertEqual((Path(record["archive"]), title), (archive, "old_preset"))
+
+                    dialog.back_button.click()
+                    self.assertIs(dialog.tables.currentWidget(), dialog.table)
+                    self.assertEqual(dialog._rows(), [0])
+                    self.assertEqual(dialog.search.text(), dialog.presets[0].quad)
+                    dialog.open_button.click()
+                    self.assertEqual(show_fit.call_count, 2)
+                    self.assertIs(dialog.tables.currentWidget(), dialog.table)
+        finally:
+            dialog.close()
+            window.close()
+
     def test_scan_persists_final_quality(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
