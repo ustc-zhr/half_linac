@@ -110,6 +110,12 @@ BBA1_SCAN_POINT_COLUMNS = (
     "BPM 1 position (mm)",
     "BPM 2 position (mm)",
 )
+BBA1_FIT_STATUS = {
+    "good": "Good",
+    "weak": "Weak signal",
+    "review": "Needs review",
+    "invalid": "Invalid",
+}
 BBA2_SCAN_POINT_COLUMNS = {
     "quad": ("Use", "K₁L_eff (m⁻¹)", "BPM 2 position (mm)"),
     "bpm1": ("Use", "BPM 1 position (mm)"),
@@ -1861,12 +1867,54 @@ class myWindow(QWidget, Ui_Form):
         label.setText(f"{active} active / {total} total")
 
     def _clear_bba1_diagnostics(self):
-        self.bba1_inner_diagnostics_text = "Inner diagnostics are unavailable."
-        self.bba1_scan_guidance_text = "Scan guidance is unavailable."
-        if hasattr(self, "bba1_diagnostics_button"):
-            self.bba1_diagnostics_button.setToolTip(
-                "Inner diagnostics and scan guidance are available after a BBA-1 fit."
-            )
+        self.bba1_fit_quality = {}
+        self.bba1_diagnostics_button.setToolTip("Run or recalculate BBA-1 to view fit diagnostics.")
+        self.lineEdit_10.setToolTip("")
+
+    @staticmethod
+    def _bba1_alignment_fit_text(quality):
+        offset = quality.get("offset_m")
+        sigma = quality.get("offset_sigma_m")
+        center = "Unavailable" if offset is None else f"{offset * 1e3:.4f} mm"
+        if sigma is not None:
+            center += f" ± {sigma * 1e3:.4f} mm (1σ)"
+        score = quality.get("r_squared")
+        score_text = "—" if score is None else f"{score:.4f}"
+        status = BBA1_FIT_STATUS.get(quality.get("quality"), "Invalid")
+        return f"{status} · Center {center} · R² {score_text}"
+
+    def _add_bba1_inner_fit_diagnostics(self, layout, quality):
+        inner_fits = quality.get("inner_fits")
+        if not inner_fits:
+            layout.addWidget(QLabel("Inner diagnostics are unavailable for this fit."))
+            return
+
+        summary = quality.get("inner_summary") or summarize_bba1_inner_fits(inner_fits)
+        layout.addWidget(QLabel(
+            f"{summary.get('good', 0)} good · {summary.get('weak', 0)} weak signal · "
+            f"{summary.get('review', 0)} need review · {summary.get('invalid', 0)} invalid"
+        ))
+        columns = (
+            ("Corrector", "corrector", ".6g"),
+            ("Slope (m³)", "slope", ".6g"),
+            ("R²", "r_squared", ".3f"),
+            ("S/N", "signal_to_noise", ".2f"),
+        )
+        table = QTableWidget(len(inner_fits), len(columns) + 1)
+        table.setHorizontalHeaderLabels([label for label, _, _ in columns] + ["Status"])
+        table.verticalHeader().hide()
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.setMaximumHeight(220)
+        for row, fit in enumerate(inner_fits):
+            for column, (_, key, precision) in enumerate(columns):
+                value = fit.get(key)
+                text = "—" if value is None else format(value, precision)
+                table.setItem(row, column, QTableWidgetItem(text))
+            status = QTableWidgetItem(BBA1_FIT_STATUS.get(fit.get("quality"), "Invalid"))
+            status.setToolTip(" ".join(fit.get("reasons") or []))
+            table.setItem(row, len(columns), status)
+        layout.addWidget(table)
 
     def _show_bba1_diagnostics(self):
         dialog = QDialog(self)
@@ -1877,19 +1925,28 @@ class myWindow(QWidget, Ui_Form):
         layout.setContentsMargins(16, 16, 16, 12)
         layout.setSpacing(10)
 
-        layout.addWidget(self._make_panel_title("Inner-Fit Diagnostics", dialog))
-        inner_label = QLabel(self.bba1_inner_diagnostics_text, dialog)
-        inner_label.setProperty("role", "field")
-        inner_label.setWordWrap(True)
-        inner_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        layout.addWidget(inner_label)
+        def add_text(text):
+            label = QLabel(text, dialog)
+            label.setProperty("role", "field")
+            label.setWordWrap(True)
+            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            layout.addWidget(label)
 
-        layout.addWidget(self._make_panel_title("Scan Guidance", dialog))
-        guidance_label = QLabel(self.bba1_scan_guidance_text, dialog)
-        guidance_label.setProperty("role", "field")
-        guidance_label.setWordWrap(True)
-        guidance_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        layout.addWidget(guidance_label)
+        quality = self.bba1_fit_quality
+        if quality:
+            layout.addWidget(self._make_panel_title("Alignment Fit", dialog))
+            reasons = " ".join(quality.get("reasons") or [])
+            add_text(self._bba1_alignment_fit_text(quality) + "\n" +
+                     (reasons or "No review flags at the current thresholds."))
+
+            layout.addWidget(self._make_panel_title("Quadrupole Fits by Corrector", dialog))
+            self._add_bba1_inner_fit_diagnostics(layout, quality)
+
+            layout.addWidget(self._make_panel_title("Scan Guidance", dialog))
+            guidance = quality.get("scan_guidance") or build_bba1_scan_guidance(quality)
+            add_text(" ".join(guidance))
+        else:
+            add_text(self.bba1_diagnostics_button.toolTip())
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
         buttons.rejected.connect(dialog.reject)
@@ -2831,21 +2888,9 @@ class myWindow(QWidget, Ui_Form):
             if sigma is not None:
                 value += f" ± {sigma * 1e3:.4f}"
             self.lineEdit_10.setText(value)
-            summary = quality.get("inner_summary")
-            if summary:
-                self.bba1_inner_diagnostics_text = (
-                    f"Inner fits: {summary.get('good', 0)} good · "
-                    f"{summary.get('weak', 0)} weak signal · "
-                    f"{summary.get('review', 0)} need review · "
-                    f"{summary.get('invalid', 0)} invalid"
-                )
-            else:
-                self.bba1_inner_diagnostics_text = "Inner diagnostics are unavailable."
+            self.bba1_fit_quality = quality
+            self.bba1_diagnostics_button.setToolTip(self._bba1_alignment_fit_text(quality))
             guidance = quality.get("scan_guidance") or build_bba1_scan_guidance(quality)
-            self.bba1_scan_guidance_text = " ".join(guidance)
-            self.bba1_diagnostics_button.setToolTip(
-                self.bba1_inner_diagnostics_text + "\n" + self.bba1_scan_guidance_text
-            )
             self.lineEdit_10.setToolTip(
                 "Approximate 1σ fit uncertainty. " + "; ".join(quality.get("reasons", [])) +
                 ("\nGuidance: " + " ".join(guidance) if guidance else "")

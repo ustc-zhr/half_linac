@@ -20,7 +20,7 @@ for path in (PARENT, BBA_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QTableWidget
 
 from half_linac.src.apps.bba.main import myWindow, bba1_saved_k1_sign, BBAScanThread, ScanParameters
 
@@ -185,6 +185,44 @@ class BbaLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_bba1_diagnostics_shows_alignment_and_corrector_fit_metrics(self):
+        with patch.dict(os.environ, {"HALFLINAC_MACHINE": "half", "HALFLINAC_CONTROL_BACKEND": "vm"}):
+            window = myWindow()
+
+        try:
+            quality = {
+                "quality": "review",
+                "offset_m": 0.0002,
+                "offset_sigma_m": 0.0001,
+                "r_squared": 0.9321,
+                "reasons": ["R² < 0.95."],
+                "inner_fits": [{
+                    "corrector": 0.001, "slope": 0.002, "r_squared": 0.984,
+                    "signal_to_noise": 5.25, "quality": "good",
+                }],
+                "scan_guidance": ["Inspect the scan range."],
+            }
+            window.display({"show": "m1S", "m1": [], "slope_k1": [], "yvals": [],
+                            "offset": quality["offset_m"], "fit_quality": quality})
+
+            def check_diagnostics(dialog):
+                text = "\n".join(label.text() for label in dialog.findChildren(QLabel))
+                self.assertIn("Needs review · Center 0.2000 mm ± 0.1000 mm (1σ) · R² 0.9321", text)
+                self.assertIn("R² < 0.95.", text)
+                self.assertIn("Inspect the scan range.", text)
+                table = dialog.findChild(QTableWidget)
+                self.assertEqual(table.rowCount(), 1)
+                self.assertEqual([table.item(0, col).text() for col in range(table.columnCount())],
+                                 ["0.001", "0.002", "0.984", "5.25", "Good"])
+
+            with patch.object(QDialog, "exec_", check_diagnostics):
+                window._show_bba1_diagnostics()
+
+            window.display({"clear": True})
+            self.assertIn("recalculate", window.bba1_diagnostics_button.toolTip())
+        finally:
+            window.close()
 
     def test_bba_pages_keep_left_and_right_columns_equal(self):
         with patch.dict(
