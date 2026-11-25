@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from threading import RLock
+from types import SimpleNamespace
+
+import pytest
 
 from half_linac.src.shared.machine_state import CapturePoint, SampleQuality, StateClass
 from half_linac.src.shared.pv_connection import PvEndpoint
@@ -167,3 +171,88 @@ def test_sampling_does_not_read_when_native_count_is_unknown() -> None:
     assert result.entries[0].quality == SampleQuality.READ_ERROR
     assert "element count" in result.entries[0].detail
     assert pv.read_count == 0
+
+
+@pytest.fixture
+def ca_batch(monkeypatch):
+    from epics import ca
+
+    names = ("FAST", "SLOW", "MISSING", "ARRAY", "ERROR", "PRIOR")
+    pvs = {name: FakePv(name, connected=name != "MISSING", count=2 if name == "ARRAY" else 1)
+           for name in names}
+    caches = {name: SimpleNamespace(lock=RLock(), get_results={}) for name in names}
+    for name, pv in pvs.items():
+        pv.chid = name
+    requests, completions = [], []
+    clock = SimpleNamespace(now=0.0, stop=False)
+    caches["PRIOR"].get_results["time"] = [ca.GET_PENDING]
+
+    def get(name, *, ftype, count, wait, timeout):
+        assert count == 1 and not wait and timeout == 0
+        requests.append((name, ftype))
+        caches[name].get_results[ftype] = [ca.GET_PENDING]
+
+    def flush():
+        for name, kind in requests:
+            if name == "SLOW" and kind == "ctrl":
+                continue
+            metadata = {"value": 12, "timestamp": 123.0, "severity": 0, "status": 4} if kind == "time" else {
+                "value": -1, "units": "A", "severity": 2, "status": 9,
+            }
+            caches[name].get_results[kind][0] = metadata
+
+    def complete(name, *, ftype, count, timeout):
+        assert count == 1 and timeout == 0
+        assert {(pv, form) for pv in ("FAST", "SLOW", "ERROR") for form in ("time", "ctrl")} <= set(requests)
+        completions.append((name, ftype))
+        if name == "ERROR":
+            raise RuntimeError("IOC read error")
+        return caches[name].get_results[ftype][0]
+
+    monkeypatch.setattr("epics.PV", lambda name, **_: pvs[name])
+    monkeypatch.setattr(ca, "isConnected", lambda name: pvs[name].connected)
+    monkeypatch.setattr(ca, "element_count", lambda name: pvs[name].count)
+    monkeypatch.setattr(ca, "get_cache", caches.__getitem__)
+    monkeypatch.setattr(ca, "promote_type", lambda name, *, use_time=False, use_ctrl=False: "time" if use_time else "ctrl")
+    monkeypatch.setattr(ca, "get_with_metadata", get)
+    monkeypatch.setattr(ca, "get_complete_with_metadata", complete)
+    monkeypatch.setattr(ca, "flush_io", flush)
+    return SimpleNamespace(pvs=pvs, requests=requests, completions=completions, clock=clock)
+
+
+def test_native_batch_sends_all_requests_before_draining_and_preserves_ready_samples(ca_batch):
+    clock = ca_batch.clock
+
+    def poll(interval):
+        clock.now += interval
+
+    names = ("SLOW", "MISSING", "FAST", "ARRAY", "ERROR", "PRIOR")
+    points = [*(_point(name, name) for name in names), _point("FAST_ALIAS", "FAST")]
+    result = sample_capture_points(points, 0.03, poll_function=poll, monotonic=lambda: clock.now, batch_reads=True)
+
+    assert [entry.pv_name for entry in result.entries] == [*names, "FAST"]
+    samples = {entry.pv_name: entry for entry in result.entries}
+    assert {name: sample.quality for name, sample in samples.items()} == {
+        "SLOW": SampleQuality.READ_ERROR, "MISSING": SampleQuality.DISCONNECTED, "FAST": SampleQuality.OK,
+        "ARRAY": SampleQuality.UNSUPPORTED_ARRAY, "ERROR": SampleQuality.READ_ERROR, "PRIOR": SampleQuality.READ_ERROR,
+    }
+    assert samples["FAST"].value == 12 and samples["FAST"].unit == "A"
+    assert (samples["FAST"].source_timestamp, samples["FAST"].alarm_status, samples["FAST"].alarm_severity) == (123.0, 4, 0)
+    assert result.status == "partial" and clock.now == pytest.approx(0.03)
+    assert len(ca_batch.requests) == 6
+    assert all(pv.read_count == 0 and pv.disconnected for pv in ca_batch.pvs.values())
+
+
+def test_native_batch_cancels_outstanding_reads_and_keeps_completed_samples(ca_batch):
+    clock = ca_batch.clock
+
+    def stop_after_poll(_interval):
+        clock.stop = True
+
+    result = sample_capture_points(
+        (_point("FAST", "FAST"), _point("SLOW", "SLOW"), _point("ERROR", "ERROR")),
+        1.0, poll_function=stop_after_poll, monotonic=lambda: clock.now,
+        stop_requested=lambda: clock.stop, batch_reads=True,
+    )
+    assert result.status == "cancelled"
+    assert [entry.quality for entry in result.entries] == [SampleQuality.OK, SampleQuality.CANCELLED, SampleQuality.READ_ERROR]

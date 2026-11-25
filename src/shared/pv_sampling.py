@@ -34,6 +34,14 @@ class _PvSample:
     detail: str
 
 
+@dataclass(frozen=True)
+class _CaRead:
+    chid: Any
+    cache: Any
+    time_type: int
+    ctrl_type: int
+
+
 def sample_capture_points(
     points: Iterable[CapturePoint],
     total_timeout_s: float,
@@ -44,10 +52,13 @@ def sample_capture_points(
     poll_function: Callable[[float], None] | None = None,
     monotonic: Callable[[], float] = time.monotonic,
     utc_now: Callable[[], datetime] | None = None,
+    batch_reads: bool = False,
 ) -> CaptureSamplingResult:
     """Read a capture plan using one bounded, read-only EPICS batch."""
     if total_timeout_s <= 0:
         raise ValueError("Capture timeout must be greater than zero.")
+    if batch_reads and pv_factory is not None:
+        raise ValueError("Batch reads require the native Channel Access reader")
 
     capture_points = tuple(points)
     should_stop = stop_requested or (lambda: False)
@@ -76,49 +87,9 @@ def sample_capture_points(
                     f"{type(exc).__name__}: {exc}",
                 )
 
-        pending = set(pv_by_name) - set(samples)
-        while pending and not should_stop():
-            connected = {
-                pv_name
-                for pv_name in pending
-                if bool(getattr(pv_by_name[pv_name], "connected", False))
-            }
-            pending.difference_update(connected)
-            remaining = deadline - monotonic()
-            if not pending or remaining <= 0:
-                break
-            poll(min(0.02, remaining))
-
-        if should_stop():
-            cancelled = True
-        for pv_name in pending:
-            samples[pv_name] = _error_sample(
-                SampleQuality.CANCELLED if cancelled else SampleQuality.DISCONNECTED,
-                "Capture cancelled" if cancelled else f"No connection within {total_timeout_s:g} s",
-            )
-
-        for pv_name in unique_names:
-            if pv_name in samples:
-                continue
-            if should_stop():
-                cancelled = True
-                samples[pv_name] = _error_sample(
-                    SampleQuality.CANCELLED,
-                    "Capture cancelled",
-                )
-                continue
-            remaining = deadline - monotonic()
-            if remaining <= 0:
-                samples[pv_name] = _error_sample(
-                    SampleQuality.READ_ERROR,
-                    f"Capture exceeded shared timeout of {total_timeout_s:g} s",
-                )
-                continue
-            samples[pv_name] = _read_one(
-                pv_by_name[pv_name],
-                remaining,
-                now_utc,
-            )
+        read = _read_ca_batch if batch_reads else _read_sequentially
+        samples.update(read(pv_by_name, deadline, total_timeout_s, should_stop, poll, monotonic, now_utc))
+        cancelled = cancelled or any(sample.quality == SampleQuality.CANCELLED for sample in samples.values())
     finally:
         for pv in pv_by_name.values():
             try:
@@ -173,6 +144,108 @@ def sample_capture_points(
     return CaptureSamplingResult(tuple(entries), status, len(capture_points))
 
 
+def _read_sequentially(pvs, deadline, timeout_s, should_stop, poll, monotonic, now_utc):
+    pending = set(pvs)
+    while pending and not should_stop():
+        pending = {name for name in pending if not bool(getattr(pvs[name], "connected", False))}
+        remaining = deadline - monotonic()
+        if not pending or remaining <= 0:
+            break
+        poll(min(0.02, remaining))
+
+    samples = {name: _unread_sample(should_stop(), SampleQuality.DISCONNECTED,
+                                   f"No connection within {timeout_s:g} s") for name in pending}
+    for name, pv in pvs.items():
+        if name in samples:
+            continue
+        stopped = should_stop()
+        remaining = deadline - monotonic()
+        if stopped or remaining <= 0:
+            samples[name] = _unread_sample(stopped, SampleQuality.READ_ERROR,
+                                           f"Capture exceeded shared timeout of {timeout_s:g} s")
+        else:
+            samples[name] = _read_one(pv, remaining, now_utc)
+    return samples
+
+
+def _read_ca_batch(pvs, deadline, timeout_s, should_stop, poll, monotonic, now_utc):
+    from epics import ca
+
+    waiting, active, samples = dict(pvs), {}, {}
+    while (waiting or active) and not should_stop() and monotonic() < deadline:
+        sent = False
+        for name, pv in tuple(waiting.items()):
+            if should_stop() or monotonic() >= deadline:
+                break
+            try:
+                if not pv.connected or not ca.isConnected(pv.chid):
+                    continue
+                del waiting[name]
+                count = ca.element_count(pv.chid)
+                if (error := _invalid_count(count, None, now_utc)) is not None:
+                    samples[name] = error
+                    continue
+                cache = ca.get_cache(name)
+                time_type = ca.promote_type(pv.chid, use_time=True)
+                ctrl_type = ca.promote_type(pv.chid, use_ctrl=True)
+                types = tuple(dict.fromkeys((time_type, ctrl_type)))
+                # A previous timed-out GET is still owned by its original batch.
+                # PyEPICS would otherwise attach a new get() to that old reply.
+                with cache.lock:
+                    if any(cache.get_results.get(kind, [None])[0] is ca.GET_PENDING for kind in types):
+                        raise RuntimeError("An earlier Channel Access read is still pending")
+                for kind in types:
+                    ca.get_with_metadata(pv.chid, ftype=kind, count=1, wait=False, timeout=0)
+                active[name] = _CaRead(pv.chid, cache, time_type, ctrl_type)
+                sent = True
+            except Exception as exc:
+                waiting.pop(name, None)
+                samples[name] = _error_sample(SampleQuality.READ_ERROR, f"{type(exc).__name__}: {exc}")
+        if sent:
+            ca.flush_io()
+
+        for name, request in tuple(active.items()):
+            if should_stop() or monotonic() >= deadline:
+                break
+            # get_complete_with_metadata waits if pending. Inspect the PyEPICS
+            # callback slots so a single slow PV cannot hold up ready replies.
+            with request.cache.lock:
+                slots = request.cache.get_results
+                replies = [slots.get(kind, [None])[0] for kind in (request.time_type, request.ctrl_type)]
+            if any(reply is ca.GET_PENDING for reply in replies):
+                continue
+            del active[name]
+            try:
+                if any(reply is None for reply in replies):
+                    raise RuntimeError("EPICS value or control metadata was not requested")
+                metadata = ca.get_complete_with_metadata(request.chid, ftype=request.time_type, count=1, timeout=0)
+                if metadata is not None and request.ctrl_type != request.time_type:
+                    control = ca.get_complete_with_metadata(request.chid, ftype=request.ctrl_type, count=1, timeout=0)
+                    if control is None:
+                        raise RuntimeError("EPICS control metadata was not received")
+                    metadata = {**metadata, "units": control.get("units")}
+                samples[name] = _sample_from_metadata(metadata, 1, now_utc)
+            except Exception as exc:
+                samples[name] = _error_sample(SampleQuality.READ_ERROR, f"{type(exc).__name__}: {exc}", count=1)
+
+        remaining = deadline - monotonic()
+        if (waiting or active) and remaining > 0 and not should_stop():
+            poll(min(0.005, remaining))
+
+    stopped = should_stop()
+    for name in waiting:
+        samples[name] = _unread_sample(stopped, SampleQuality.DISCONNECTED,
+                                       f"No connection within {timeout_s:g} s")
+    for name in active:
+        samples[name] = _unread_sample(stopped, SampleQuality.READ_ERROR,
+                                       f"EPICS value or control metadata did not arrive within {timeout_s:g} s")
+    return samples
+
+
+def _unread_sample(stopped, quality, detail):
+    return _error_sample(SampleQuality.CANCELLED if stopped else quality, "Capture cancelled" if stopped else detail)
+
+
 def _default_epics_helpers(
     pv_factory: Callable[[str], Any] | None,
     poll_function: Callable[[float], None] | None,
@@ -201,6 +274,24 @@ def _read_one(
     utc_now: Callable[[], datetime],
 ) -> _PvSample:
     count = _optional_int(getattr(pv, "count", None))
+    if (error := _invalid_count(count, pv, utc_now)) is not None:
+        return error
+    try:
+        metadata = pv.get_with_metadata(
+            with_ctrlvars=True,
+            use_monitor=False,
+            timeout=max(0.001, timeout_s),
+        )
+    except Exception as exc:
+        return _error_sample(
+            SampleQuality.READ_ERROR,
+            f"{type(exc).__name__}: {exc}",
+            count=count,
+        )
+    return _sample_from_metadata(metadata, count, utc_now, pv=pv)
+
+
+def _invalid_count(count, pv, utc_now):
     if count is None or count < 1:
         return _error_sample(
             SampleQuality.READ_ERROR,
@@ -219,18 +310,10 @@ def _read_one(
             quality=SampleQuality.UNSUPPORTED_ARRAY,
             detail=f"Native element count is {count}; arrays are excluded from snapshot v1",
         )
-    try:
-        metadata = pv.get_with_metadata(
-            with_ctrlvars=True,
-            use_monitor=False,
-            timeout=max(0.001, timeout_s),
-        )
-    except Exception as exc:
-        return _error_sample(
-            SampleQuality.READ_ERROR,
-            f"{type(exc).__name__}: {exc}",
-            count=count,
-        )
+    return None
+
+
+def _sample_from_metadata(metadata, count, utc_now, *, pv=None):
     if metadata is None:
         return _error_sample(
             SampleQuality.READ_ERROR,

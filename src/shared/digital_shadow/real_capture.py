@@ -116,7 +116,8 @@ def capture_real_once(context, request, *, timeout_s=5.0, allow_live=False,
             continue
         remaining = deadline - time.monotonic()
         if remaining > 0:
-            sampled = sample_capture_points(group, remaining, pv_factory=pv_factory, poll_function=poll_function)
+            sampled = sample_capture_points(group, remaining, pv_factory=pv_factory, poll_function=poll_function,
+                                            batch_reads=pv_factory is None)
             sampled_entries.extend(sampled.entries)
             cancelled = cancelled or sampled.status == "cancelled"
         else:
@@ -153,6 +154,7 @@ def capture_real_once(context, request, *, timeout_s=5.0, allow_live=False,
     from .session import digest
     evidence = {"schema": "digital_shadow_real_capture_v1", "snapshot_hash": digest(snapshot_to_dict(snapshot)),
                 "reader_kind": kind, "scope": scope, "same_bunch_confirmed": False,
+                "read_strategy": "batched_ca_gets" if pv_factory is None else "injected_reader",
                 "captured_keys": [entry.key for entry in entries]}
     return snapshot, evidence
 
