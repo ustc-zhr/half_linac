@@ -156,11 +156,14 @@ Transmission Recovery can also check the gain direction at an applied phase.
 Set `acceleration_check` on an individual stage after validating that increasing
 momentum decreases the magnitude of the orbit response on that path. The HALF
 profile enables **Capture Test Data** for `LLRF02` on the `XC10 → BPM10` path.
-Select the station and enter the RF amplitude drop and corrector step to
+Select the station and enter the LLRF AMP drop and corrector step to
 capture at the current phase. The capture uses machine limits and records X
 and SUM separately with source timestamps so the pulse alignment can be
-checked from the data. It restores the RF amplitude and corrector current.
-The summary shows the location of the capture's `run.json`. Gain direction
+checked from the data. Where the RF station maps `kly_forward_power`, capture
+records fresh power samples during each AMP group. The summary reports whether
+the lower-AMP power samples sit below, above, or overlap the two original-AMP
+groups. It also reports insufficient power samples and shows the path to
+`run.json`. Capture restores LLRF AMP and corrector current. Gain direction
 remains undetermined during test captures. The classified check and the
 `BPM08` SUM recovery use their respective settings.
 
@@ -169,7 +172,7 @@ An enabled check uses these calibration values:
 | Field | Meaning |
 | --- | --- |
 | `bpm`, `corrector` | Profile element IDs for the position BPM and horizontal corrector. |
-| `amplitude`, `current` | Each contains a calibrated `window` of two limits, a positive `step`, and a readback `tolerance`. Use percent for amplitude and amperes for current. |
+| `amplitude`, `current` | Each contains a calibrated `window` of two limits, a positive `step`, and a readback `tolerance`. Amplitude values are LLRF AMP in percent. Current values are in amperes. |
 | `conditions` | List of readbacks, each with an `element`, logical `channel`, and two-value `window`. The window is optional for `K1_total`. The HALF candidate records `QL16.K1_total` in 1/m². Add any relevant downstream RF conditions with their validated windows. |
 | `samples_per_state`, `settle_time_s`, `sample_timeout_s` | Sample count, settling time, and sampling deadline per setting. |
 | `pair_tolerance_s` | Maximum source timestamp difference for X and SUM from the same pulse. Validate timestamp alignment at the BPM's operating pulse rate. |
@@ -177,8 +180,10 @@ An enabled check uses these calibration values:
 | `minimum_response_difference`, `maximum_baseline_drift` | Measured slope difference required for a decision and allowed difference between nominal repeats, in native BPM position units per ampere. |
 
 Set `enabled` to true once the station's calibration and perturbations have
-been verified, including that the amplitude step changes the effective RF
-field at the fixed phase. Each check writes a separate `acceleration_check_*.json`
+been verified. Verify that a higher LLRF AMP increases the magnitude of the
+effective RF voltage and that the RF phase remains stable at the beam time.
+The capture log's `amplitude` fields record LLRF AMP settings and readbacks in
+percent. Each check writes a separate `acceleration_check_*.json`
 next to the recovery run's `run.json`.
 
 `calibrations/*.json` contains tracked runtime calibration data that converts a physical

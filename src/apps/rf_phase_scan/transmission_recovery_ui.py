@@ -490,7 +490,7 @@ class TransmissionRecoveryPage(QWidget):
         if self.check_worker is not None:
             self.check_worker.stop()
             self.stop_button.setEnabled(False)
-            self.summary.setText("Stopping · restoring RF amplitude and corrector current…")
+            self.summary.setText("Stopping · restoring LLRF AMP and corrector current…")
         elif self.worker is not None:
             self.worker.stop()
             self.stop_button.setEnabled(False)
@@ -614,7 +614,7 @@ class TransmissionRecoveryPage(QWidget):
         layout = QFormLayout(dialog)
         description = QLabel(
             f"Use the current phase with beam at {spec['bpm']}. "
-            f"The capture restores {stage.rf_element} amplitude and {spec['corrector']} current.",
+            f"The capture restores {stage.rf_element} AMP and {spec['corrector']} current.",
             dialog,
         )
         description.setWordWrap(True)
@@ -623,7 +623,7 @@ class TransmissionRecoveryPage(QWidget):
         amplitude.setDecimals(3)
         current = self._double_spin(0, 0, 100)
         current.setDecimals(3)
-        layout.addRow("RF amplitude drop (percentage points)", amplitude)
+        layout.addRow("LLRF AMP drop (percentage points)", amplitude)
         layout.addRow("Corrector step per side (A)", current)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
         start = buttons.button(QDialogButtonBox.Ok)
@@ -708,7 +708,16 @@ class TransmissionRecoveryPage(QWidget):
         item.setToolTip(detail)
         self._set_running(False)
         if result.get("capture_completed") and not result.get("error"):
-            self.summary.setText(f"{result['rf_element']} · Test data saved · {result['json_path']}")
+            power = {
+                "lower_at_low_amp": "KLY forward power fell at lower AMP",
+                "higher_at_low_amp": "KLY forward power rose at lower AMP",
+                "overlap": "KLY forward power samples overlap",
+                "insufficient_samples": "KLY forward power samples incomplete",
+            }.get(result.get("kly_forward_power_check"))
+            heading = f"{result['rf_element']} · Test data saved"
+            if power:
+                heading = f"{heading} · {power}"
+            self.summary.setText(f"{heading}\n{result['json_path']}")
         else:
             self.summary.setText(f"{result['rf_element']} · {label} · {detail.splitlines()[0]}")
         if result["restore_errors"]:

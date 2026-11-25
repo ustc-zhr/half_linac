@@ -60,6 +60,8 @@ class SimulatedBeam:
         self.nominal_response = 1.0
         self.sum = 10.0
         self.stale = False
+        self.power_stale = False
+        self.power = lambda amplitude: 7.0 if amplitude == 50.0 else 6.5
         self.skew = 0.0
         self.writes = []
         self.on_write = lambda _pv, _value: None
@@ -78,6 +80,8 @@ class SimulatedBeam:
             return AmpReading(x, 1.0 if self.stale else self.now)
         if pv == config.sum_pv:
             return AmpReading(self.sum, 1.0 if self.stale else self.now + self.skew)
+        if pv == config.kly_forward_power_pv:
+            return AmpReading(self.power(amplitude), 1.0 if self.power_stale else self.now)
         if pv == config.corrector.readback:
             return AmpReading(self.current_readback(), None)
         if pv == config.amplitude.readback:
@@ -140,12 +144,35 @@ def test_real_capture_collects_independent_samples_without_a_recovery_run(check_
     stored = json.loads(runner.path.read_text())
     assert stored["mode"] == "capture"
     assert len(stored["groups"]) == 3
+    assert stored["configuration"]["kly_forward_power_pv"] == "IN:MW:LLRF02:GET_CH2_POWER"
+    assert stored["kly_forward_power_check"] == "lower_at_low_amp"
+    assert [group["kly_forward_power"]["median"] for group in stored["groups"]] == [7.0, 6.5, 7.0]
+    for group in stored["groups"]:
+        power = group["kly_forward_power"]
+        assert len(power["samples"]) == runner.config.samples_per_state
+        assert all(sample["timestamp"] > power["after_timestamp"] for sample in power["samples"])
     samples = stored["groups"][0]["points"][0]["samples"]
     assert len(samples["x"]) == len(samples["sum"]) == runner.config.samples_per_state
     assert samples["sum"][0]["timestamp"] - samples["x"][0]["timestamp"] == pytest.approx(0.02)
     assert samples["sum"][0]["value"] == 0.0
     assert beam.values[runner.config.amplitude.setpoint] == 50.0
     assert beam.values[runner.config.corrector.setpoint] == 0.2
+
+
+@pytest.mark.parametrize(
+    "power_stale, low_power, expected",
+    [(True, 6.5, "insufficient_samples"), (False, 7.0, "overlap"), (False, 7.5, "higher_at_low_amp")],
+)
+def test_power_comparison_reports_direction_without_changing_capture_result(
+    check_setup, tmp_path, power_stale, low_power, expected
+):
+    runner, beam = make_capture(check_setup, tmp_path)
+    beam.power_stale = power_stale
+    beam.power = lambda amplitude: 7.0 if amplitude == 50.0 else low_power
+    result = runner.run()
+    assert result["capture_completed"]
+    assert result["status"] == "undetermined"
+    assert result["kly_forward_power_check"] == expected
 
 
 def test_capture_rejects_a_step_outside_machine_limits_before_writing(check_setup, tmp_path):
@@ -468,6 +495,7 @@ def test_offscreen_real_capture_entry_without_sum_scan(check_setup, tmp_path, mo
         QTest.qWait(5)
     assert page.check_worker is None
     assert "Test data saved" in page.summary.text()
+    assert "KLY forward power fell at lower AMP" in page.summary.text()
     assert page.table.item(0, page.ACCELERATION_COLUMN).text() == "Undetermined"
     records = list(tmp_path.glob("acceleration_capture_*/run.json"))
     assert len(records) == 1

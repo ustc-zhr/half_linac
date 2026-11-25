@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Event
 
-from half_linac.src.apps.rf_phase_scan.amp_scan import EpicsAmpClient
+from half_linac.src.apps.rf_phase_scan.amp_scan import OUTPUT_CHANNEL, EpicsAmpClient
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import phase_difference_deg
 from half_linac.src.shared.machine_profile import (
     EnergyControlLock,
@@ -65,6 +65,7 @@ class AccelerationCheckConfig:
     phase_tolerance_deg: float
     readback_timeout_s: float
     capture_only: bool = False
+    kly_forward_power_pv: str | None = None
 
 
 def _number(value, name, *, minimum=None):
@@ -138,6 +139,10 @@ def resolve_acceleration_check(context, stage, settings, spec, *, capture_only=F
     sum_change = threshold("maximum_relative_sum_change")
     if sum_change is not None and sum_change >= 1:
         raise ValueError("maximum_relative_sum_change must be less than 1.")
+    power_pv = None
+    rf = context.profile.get_element(stage.rf_element)
+    if capture_only and context.control_backend.name in rf.channels.get(OUTPUT_CHANNEL, {}):
+        power_pv = resolve_channel(context, stage.rf_element, OUTPUT_CHANNEL)
     config = AccelerationCheckConfig(
         rf_element=stage.rf_element,
         bpm=bpm.id,
@@ -159,12 +164,15 @@ def resolve_acceleration_check(context, stage, settings, spec, *, capture_only=F
         phase_tolerance_deg=settings.readback_tolerance_deg,
         readback_timeout_s=settings.readback_timeout_s,
         capture_only=capture_only,
+        kly_forward_power_pv=power_pv,
     )
     signals = (
         config.amplitude.setpoint, config.amplitude.readback, config.corrector.setpoint,
         config.corrector.readback, config.phase_pv, config.phase_readback_pv,
         config.x_pv, config.sum_pv,
     )
+    if power_pv is not None:
+        signals += (power_pv,)
     if len(set(signals)) != len(signals) or any(
         condition.pv in signals for condition in conditions
     ):
@@ -215,9 +223,9 @@ def classify_response(baseline, lower, repeat, *, threshold, maximum_drift):
         return "undetermined", "The nominal-amplitude response did not reproduce."
     differences = abs(lower) - abs(baseline), abs(lower) - abs(repeat)
     if min(differences) > threshold:
-        return "accelerating", "The orbit response fell at the higher RF amplitude."
+        return "accelerating", "The orbit response fell at the higher LLRF AMP setting."
     if max(differences) < -threshold:
-        return "decelerating", "The orbit response rose at the higher RF amplitude."
+        return "decelerating", "The orbit response rose at the higher LLRF AMP setting."
     return "undetermined", "The response difference was not resolved in both comparisons."
 
 
@@ -345,7 +353,7 @@ class AccelerationCheck:
     def _sample_buffer(self):
         return {"x": [], "sum": []} if self.config.capture_only else []
 
-    def _sample(self, samples, reference_sum=None):
+    def _sample(self, samples, reference_sum=None, power=None):
         config = self.config
         pvs = config.x_pv, config.sum_pv
         deadline = self.monotonic() + config.sample_timeout_s
@@ -374,6 +382,7 @@ class AccelerationCheck:
                     ):
                         samples[channel].append(asdict(reading))
                         watermark[index] = reading.timestamp
+                self._capture_forward_power(power, timeout=min(0.5, remaining))
                 if all(len(values) == config.samples_per_state for values in samples.values()):
                     return
                 self.sleep(min(POLL_INTERVAL_S, remaining))
@@ -399,6 +408,43 @@ class AccelerationCheck:
         if abs(signal / reference - 1) > self.config.maximum_relative_sum_change:
             raise RuntimeError(f"{self.config.bpm}: beam SUM moved outside its stability range.")
 
+    def _capture_forward_power(self, record, *, timeout):
+        if record is None or record["error"] or len(record["samples"]) >= self.config.samples_per_state:
+            return
+        try:
+            reading = self._read(self.config.kly_forward_power_pv, timeout=timeout)
+        except Exception as exc:
+            record["error"] = str(exc) or type(exc).__name__
+            return
+        stamp = reading.timestamp
+        if stamp is None or not math.isfinite(stamp):
+            record["error"] = "KLY power source timestamp unavailable."
+            return
+        if record["after_timestamp"] is None:
+            record["after_timestamp"] = stamp
+            return
+        samples = record["samples"]
+        previous = samples[-1]["timestamp"] if samples else record["after_timestamp"]
+        if stamp > previous:
+            samples.append(asdict(reading))
+
+    def _compare_forward_power(self):
+        if self.config.kly_forward_power_pv is None:
+            return
+        records = [group["kly_forward_power"] for group in self.result["groups"]]
+        if any(len(record["samples"]) < self.config.samples_per_state for record in records):
+            self.result["kly_forward_power_check"] = "insufficient_samples"
+            return
+        before, lower, after = ([sample["value"] for sample in record["samples"]] for record in records)
+        nominal = before + after
+        if max(lower) < min(nominal):
+            outcome = "lower_at_low_amp"
+        elif min(lower) > max(nominal):
+            outcome = "higher_at_low_amp"
+        else:
+            outcome = "overlap"
+        self.result["kly_forward_power_check"] = outcome
+
     def _group(self, name, amplitude, current, reference_sum):
         config = self.config
         self.on_state(f"{config.rf_element} · {name}")
@@ -410,6 +456,11 @@ class AccelerationCheck:
         amp_readback = self._verify_readback(config.amplitude, amplitude)
         group = {"name": name, "amplitude": amp_readback, "points": []}
         self.result["groups"].append(group)
+        power = None
+        if config.kly_forward_power_pv is not None:
+            power = {"after_timestamp": None, "samples": [], "error": ""}
+            group["kly_forward_power"] = power
+            self._capture_forward_power(power, timeout=0.5)
         for target in (current - config.corrector.step, current + config.corrector.step):
             self._check_conditions()
             self._verify_readback(config.amplitude, amplitude)
@@ -419,7 +470,7 @@ class AccelerationCheck:
             actual = self._verify_readback(config.corrector, target)
             point = {"current_setpoint": target, "current": actual, "samples": self._sample_buffer()}
             group["points"].append(point)
-            self._sample(point["samples"], reference_sum)
+            self._sample(point["samples"], reference_sum, power)
             self._check_conditions()
             self._verify_readback(config.amplitude, amplitude)
             self._verify_readback(config.corrector, target)
@@ -429,6 +480,9 @@ class AccelerationCheck:
             )
             point["median_x"] = statistics.median(reading["value"] for reading in positions)
         self._move(config.corrector, current)
+        if power is not None:
+            readings = [sample["value"] for sample in power["samples"]]
+            power["median"] = statistics.median(readings) if readings else None
         minus, plus = group["points"]
         slope = (plus["median_x"] - minus["median_x"]) / (plus["current"] - minus["current"])
         if not math.isfinite(slope):
@@ -463,10 +517,11 @@ class AccelerationCheck:
             for signal in signals:
                 self._check_sum_stability(signal, reference_sum)
         baseline = self._group("Baseline", amplitude, current, reference_sum)
-        lower_response = self._group("Lower RF amplitude", lower, current, reference_sum)
+        lower_response = self._group("Lower LLRF AMP", lower, current, reference_sum)
         repeat = self._group("Baseline repeat", amplitude, current, reference_sum)
         self.result["measured_phase_deg"] = self._check_conditions()
         if config.capture_only:
+            self._compare_forward_power()
             return
         self.result["status"], self.result["reason"] = classify_response(
             baseline, lower_response, repeat, threshold=config.minimum_response_difference,
