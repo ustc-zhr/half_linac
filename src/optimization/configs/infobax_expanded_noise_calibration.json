@@ -1,0 +1,161 @@
+{
+  "schema": "half_infobax_p2_b7_expanded_noise_v1",
+  "stage": "P2-B7",
+  "scope": "One bounded offline 32-training/32-validation independent-seed continuation at the unchanged native 100k setting; no optimizer or IOC",
+  "predecessor_config_sha256": "9b9e4755ce55742dad5a56844fc16508b26f77f9611ab2f10d27e241eebf00d9",
+  "reference_arm": "native_100k",
+  "cases": [
+    {
+      "id": "linear_control",
+      "sextupole_k2": 0.0
+    },
+    {
+      "id": "nonlinear",
+      "sextupole_k2": 1000.0
+    },
+    {
+      "id": "near_tie",
+      "sextupole_k2": 100.0
+    }
+  ],
+  "workpoints": [
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0
+  ],
+  "scan_values": [
+    -4.0,
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0
+  ],
+  "particles": 100000,
+  "linear_resolution_factors": [
+    1
+  ],
+  "energy_mev": 225.0,
+  "primary_particle_seed": 12345,
+  "repeat_workpoints": [
+    -3.0,
+    -1.0,
+    0.0,
+    3.0
+  ],
+  "repeat_scan_values": [
+    -4.0,
+    0.0,
+    4.0
+  ],
+  "calibration_particle_seeds": [
+    1661537361,
+    403161101,
+    1377694889,
+    822670999,
+    759465309,
+    126446917,
+    753816687,
+    1592849329,
+    1140564915,
+    552176569,
+    1190144653,
+    505131057,
+    329049697,
+    467038697,
+    1434464339,
+    1397021521,
+    1117123355,
+    779095877,
+    1163552463,
+    610128391,
+    1406597317,
+    40855043,
+    466781871,
+    1185712865,
+    1037621829,
+    533904687,
+    289835541,
+    1661729679,
+    529874473,
+    987051443,
+    532973253,
+    673926221
+  ],
+  "validation_particle_seeds": [
+    871717049,
+    856218021,
+    541969835,
+    1751549887,
+    595846145,
+    340609993,
+    1531639121,
+    1396660215,
+    1119224705,
+    1503813465,
+    1394119367,
+    355727659,
+    941854113,
+    1491343087,
+    1392848917,
+    774309693,
+    725196841,
+    12709043,
+    853055267,
+    854227387,
+    1209035783,
+    699952627,
+    692096563,
+    978412061,
+    1060554959,
+    1681518921,
+    1517997197,
+    805596749,
+    1739204863,
+    384043979,
+    810606993,
+    552681361
+  ],
+  "seed_design": "Fresh positive odd seeds from numpy default_rng(2026111307), disjoint from all B2-B6 recorded particle seeds; no old held-out populations reused",
+  "measurement_method": "rms_count_variance",
+  "measurement": {
+    "minimum_count": 1000,
+    "minimum_sigma_pixels": 1.0,
+    "maximum_edge_fraction": 0.001
+  },
+  "calibration_gates": {
+    "maximum_primary_variance_relative_error": 0.02,
+    "maximum_validation_variance_relative_error": 0.02,
+    "all_reconstructions_physical": true,
+    "maximum_emittance_relative_error": 0.05,
+    "all_calibration_and_validation_frames_valid": true,
+    "minimum_heldout_95_interval_coverage": 0.9,
+    "maximum_absolute_heldout_standardized_mean": 0.5,
+    "heldout_standardized_mean_square_range": [
+      0.5,
+      2.0
+    ]
+  },
+  "noise_scale_calibration": "sqrt(mean over training points of sample variance of corrected measurements divided by mean predicted noise variance)); training only, no point-specific fitted factors",
+  "noise_validation": "Apply the training-only global noise scale, then compare held-out frame minus calibration mean against sqrt(frame noise variance plus calibration-mean noise variance); no fitting on held-out populations",
+  "input_frames": "Reuse native_100k primary frames and accepted reference evidence from B5 only; unscale their inherited B4.1 noise before applying the new training-only scale",
+  "reference_policy": "Reconstruct B5 primary curves with new scaled relative weights; require unchanged emittance within 1e-8 relative error and retain B5 independent reference acceptance",
+  "failure_policy": "Retain every failed frame; no clipping, retries, rejection, per-point factors, held-out refitting or alternative-arm selection",
+  "continuation": "Preserve B2-B6, retain global-scalar estimator and all acceptance gates. Run exactly 32 fresh training plus 32 fresh validation seeds; no early success, extension, retries or held-out refitting. Runtime and future-query-noise acceptance remain separate before a new benchmark.",
+  "workers": 3,
+  "seed_bootstrap": {
+    "samples": 5000,
+    "training_rng_seed": 2026111317,
+    "validation_rng_seed": 2026111327,
+    "confidence": 0.95,
+    "unit": "Resample complete seed vectors across all 36 optical points; no independent frame resampling",
+    "interpretation": "Descriptive uncertainty only, no new pass criterion. Held-out intervals condition on the frozen fitted scale and training means; they exclude training-fit uncertainty."
+  }
+}

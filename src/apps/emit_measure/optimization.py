@@ -395,6 +395,15 @@ class OptimizationSession:
         record['feasible'] = not reasons
 
     def run(self):
+        from contextlib import nullcontext
+        from .control import emittance_lock
+        context = getattr(self.device, 'context', None)
+        self.control_lease = (nullcontext() if context is None else
+            emittance_lock(context.profile.machine.id, context.control_backend.name))
+        with self.control_lease:
+            return self._run_locked()
+
+    def _run_locked(self):
         self.run_dir.mkdir(parents=True, exist_ok=False)
         self.deadline = self.clock() + self.config.max_minutes * 60
         self.summary['status'] = 'running'
@@ -403,6 +412,8 @@ class OptimizationSession:
                 import numpy as np
                 np.save(self.run_dir / 'background.npy', self.background, allow_pickle=False)
                 self.summary['measurement']['background_snapshot'] = 'background.npy'
+            if getattr(self, "prepare", None) is not None:
+                self.prepare()
             self.device.validate()
             self.initial = self.config.point(self.device.initial(), bounded=False)
             self.config.point(self.initial)  # All bounds must contain the actual initial setpoints.
@@ -512,6 +523,15 @@ class OptimizationSession:
         return self.summary
 
     def manual_move(self, *, best=False):
+        from contextlib import nullcontext
+        from .control import emittance_lock
+        context = getattr(self.device, 'context', None)
+        lease = (nullcontext() if context is None else
+                 emittance_lock(context.profile.machine.id, context.control_backend.name))
+        with lease:
+            return self._manual_move_locked(best=best)
+
+    def _manual_move_locked(self, *, best=False):
         if self.initial is None or (best and not self.confirmed):
             raise ValueError('No verified value available.')
         # During restore, a disconnected member must not prevent attempts on others.

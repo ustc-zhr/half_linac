@@ -1,0 +1,42 @@
+{
+  "schema": "half_infobax_p2_b3_measurement_diagnostic_v1",
+  "stage": "P2-B3",
+  "scope": "Offline measurement/reference and noise diagnosis only; no optimizer, GP, acquisition, inference, GUI or real-machine changes",
+  "predecessor_config_sha256": "943b23e481028caf32242d3ccbdc0f0337c7d7ed82ca772d49f87c3cab3cd4ef",
+  "cases": [
+    {"id": "linear_control", "sextupole_k2": 0.0},
+    {"id": "nonlinear", "sextupole_k2": 1000.0},
+    {"id": "near_tie", "sextupole_k2": 100.0}
+  ],
+  "workpoints": [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0],
+  "scan_values": [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+  "particles": 20000,
+  "primary_particle_seed": 12345,
+  "energy_mev": 225.0,
+  "streams": ["particle_rms", "pixel_center_rms", "shared_image_rms", "gaussian_fit"],
+  "entrance_watch": "PRE immediately upstream of QT02",
+  "predecessor_watch": "PRF07",
+  "repeat_workpoints": [-3.0, -1.0, 0.0, 3.0],
+  "repeat_scan_values": [-4.0, 0.0, 4.0],
+  "repeat_particle_seeds": [12345, 23456, 34567, 45678, 56789, 67890, 78901, 89012],
+  "repeat_interpretation": "Independent simulated particle populations at fixed controls; no camera noise or real-machine repeatability claim",
+  "deterministic_rerun_point": {"workpoint": -1.0, "scan_value": 4.0, "seed": 12345},
+  "noise_std_mm2_under_audit": 0.002,
+  "gates": {
+    "all_query_and_fit_failures_reported": true,
+    "maximum_entrance_covariance_relative_drift": 1e-10,
+    "maximum_linear_prediction_variance_relative_error": 0.02,
+    "all_particle_rms_reconstructions_physical": true,
+    "maximum_particle_rms_emittance_relative_error": 0.05,
+    "maximum_raster_variance_relative_error": 0.02,
+    "maximum_gaussian_variance_relative_error": 0.02,
+    "all_gaussian_reconstructions_physical": true,
+    "maximum_gaussian_emittance_relative_error": 0.05,
+    "maximum_configured_noise_nonpositive_probability": 1e-6,
+    "repeat_standard_deviation_confidence_level": 0.95,
+    "maximum_deterministic_repeat_relative_error": 1e-12
+  },
+  "reference_policy": "Use named SDDS x/xp/p columns and the same shared beam-matrix solver for every width stream; retain nonphysical results without projection or rejection",
+  "failure_policy": "Never clip negative observations or discard failed queries, fits, reconstructions or repeats; preserve partial evidence",
+  "continuation": "Freeze all evidence regardless of gates. Measurement and noise failures keep GUI/optimization acceptance blocked. Any replacement measurement/noise model requires a new config and output directory; P2-B2 remains immutable."
+}

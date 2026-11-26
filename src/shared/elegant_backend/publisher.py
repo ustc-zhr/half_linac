@@ -155,6 +155,10 @@ def reconcile_watch_scalar_sources(
 
 
 class VmPublisher:
+    def __init__(self, *, wait_for_image_completion: bool = False):
+        self.wait_for_image_completion = wait_for_image_completion
+        self.acknowledged_image_pvs: list[str] = []
+
     def publish_bpms(self, plan: VmPublishPlan, bpmcen_path: str | Path) -> bool:
         bpm = _load_bpm_centroids_from_sdds(Path(bpmcen_path))
         spec_by_id = {spec.element_id: spec for spec in plan.bpm_specs}
@@ -184,6 +188,7 @@ class VmPublisher:
         usedline: Sequence[str],
         elegant_dir: str | Path,
     ) -> bool:
+        self.acknowledged_image_pvs = []
         elegant_dir = Path(elegant_dir)
         usedline_set = set(usedline)
         all_ok = True
@@ -248,8 +253,11 @@ class VmPublisher:
                 label=f"flag {spec.target_element_id}/{spec.logical_channel}",
                 pv_name=spec.pv_name,
                 value=image,
+                wait=self.wait_for_image_completion,
             ):
                 all_ok = False
+            elif self.wait_for_image_completion:
+                self.acknowledged_image_pvs.append(spec.pv_name)
 
         return all_ok
 
@@ -342,12 +350,12 @@ class VmPublisher:
 
         return True
 
-    def _publish_one_best_effort(self, *, label: str, pv_name: str, value) -> bool:
+    def _publish_one_best_effort(self, *, label: str, pv_name: str, value, wait=False) -> bool:
         try:
             result = caput(
                 pv_name,
                 value,
-                wait=False,
+                wait=wait,
                 connection_timeout=EPICS_CONNECTION_TIMEOUT_S,
                 timeout=EPICS_PUT_TIMEOUT_S,
             )
@@ -358,7 +366,7 @@ class VmPublisher:
             print(f"{label} publish skipped: {exc}")
             return False
 
-        if result in (None, False):
+        if result != 1:
             print(f"{label} publish incomplete: PV write was not confirmed for {pv_name}.")
             return False
         return True

@@ -1,0 +1,92 @@
+{
+  "schema": "half_infobax_p2_b8_calibrated_benchmark_v1",
+  "stage": "P2-B8",
+  "scope": "Bounded isolated 100k IOC acceptance plus matched-budget unchanged M0 InfoBAX/Random comparison using accepted B7 per-frame noise and frozen references; no real-machine or GUI changes",
+  "predecessor_config_sha256": "75f3a91c234ce4152004e33b75330471b83f1c6764baf45b08cbd555e219c781",
+  "ioc_acceptance_sha256": "1b85920c9673302286087a14992f111a547dd7b018fab2d7db4c24d192635294",
+  "cases": [
+    {
+      "id": "nonlinear",
+      "sextupole_k2": 1000.0
+    },
+    {
+      "id": "near_tie",
+      "sextupole_k2": 100.0
+    }
+  ],
+  "particles": 100000,
+  "linear_resolution_factors": [
+    1
+  ],
+  "reference_arm": "native_100k",
+  "workpoints": [
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0
+  ],
+  "scan_values": [
+    -4.0,
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0
+  ],
+  "energy_mev": 225.0,
+  "measurement_method": "rms_count_variance",
+  "measurement": {
+    "minimum_count": 1000,
+    "minimum_sigma_pixels": 1.0,
+    "maximum_edge_fraction": 0.001
+  },
+  "noise_scale_source": "p2_b7/noise_scale_fit.json, training-only factor 0.6902834680118383; no refit",
+  "forecast_noise_std_mm2": 0.002,
+  "forecast_noise_interpretation": "Existing fixed future-query noise assumption retained; only revealed observations receive per-frame noise estimates. No hidden reference or future frame enters pool noise.",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "policies": [
+    "infobax",
+    "random"
+  ],
+  "initial_observations": 6,
+  "total_observations": 14,
+  "bootstrap_seed": 20261113,
+  "bootstrap_samples": 5000,
+  "gates": {
+    "all_full_scan_references_physical": true,
+    "all_runs_complete_matched_budget_without_duplicates": true,
+    "minimum_recommendation_rate_per_policy": 0.95,
+    "paired_regret_difference_upper_95_ci_strictly_below": 0.0
+  },
+  "workers": 2,
+  "pairing": "Both policies use the same initial design and the same cached actual frame for each (case, policy seed, query index); a query-indexed independent elegant seed is shared if both policies select that query",
+  "observation_seed": "2 * (stable_seed('b8_particle', case_id, policy_seed, query_index) % 1000000000) + 1",
+  "observations": "Actual positive corrected count-image variances with per-frame uncertainty; no synthetic additive Gaussian noise",
+  "reference": "B7 primary full-scan weighted emittance reference audited against entrance particles and B5 independent seeds; evaluator-only finite-precision target",
+  "numerical_policy": "InfoBAXConfig defaults retained; only seed varies. Existing GP, acquisition, physicality functional and future-query fixed forecast remain unchanged",
+  "failure_policy": "Retain quality failures, unavailable recommendations, degraded EIG, and incomplete budgets; no retries, clipping, seed changes or conditional-only success claims",
+  "continuation": "Run all 16 prespecified paired seeds on both cases after B7 and actual IOC gates pass; preserve all prior evidence and stop without tuning if any frozen benchmark gate fails."
+}

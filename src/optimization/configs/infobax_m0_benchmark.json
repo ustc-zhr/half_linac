@@ -1,0 +1,31 @@
+{
+  "schema": "half_infobax_p2_b2_benchmark_v1",
+  "purpose": "Bounded M0 engineering benchmark, no physics-informed model or archive replay",
+  "machine": "half",
+  "reference": "full-scan Gaussian-image-fit emittance; finite precision, not absolute truth",
+  "source": "compact elegant lattice, one fixed upstream sextupole",
+  "cases": [
+    {"id": "nonlinear", "sextupole_k2": 1000.0},
+    {"id": "near_tie", "sextupole_k2": 100.0}
+  ],
+  "particles": 20000,
+  "workpoints": [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0],
+  "scan_values": [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+  "energy_mev": 225.0,
+  "observation_noise_std_mm2": 0.002,
+  "seeds": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+  "initial_observations": 6,
+  "total_observations": 14,
+  "policies": ["infobax", "random"],
+  "pairing": "same initial design and query-indexed Gaussian noise per case and seed",
+  "bootstrap_seed": 20261113,
+  "bootstrap_samples": 5000,
+  "gates": {
+    "all_full_scan_references_physical": true,
+    "all_runs_complete_matched_budget_without_duplicates": true,
+    "minimum_recommendation_rate_per_policy": 0.95,
+    "paired_regret_difference_upper_95_ci_strictly_below": 0.0
+  },
+  "failure_policy": "retain invalid observations, failed recommendations and degraded EIG as failures; no clipping, retries or silent exclusion",
+  "continuation": "GUI acceptance requires isolated IOC acceptance and all benchmark gates; failure closes this stage without tuning seeds, cases or thresholds"
+}

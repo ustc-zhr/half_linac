@@ -1,0 +1,104 @@
+{
+  "schema": "half_infobax_p2_b6_100k_noise_v1",
+  "stage": "P2-B6",
+  "scope": "Offline native-geometry 100k particle-count measurement noise calibration and independent validation only; no optimizer or IOC execution",
+  "predecessor_config_sha256": "90ed7181966b6eab2971e5c4a90c3fe6128b5714ee8c81728ace89d8b408f611",
+  "reference_arm": "native_100k",
+  "cases": [
+    {
+      "id": "linear_control",
+      "sextupole_k2": 0.0
+    },
+    {
+      "id": "nonlinear",
+      "sextupole_k2": 1000.0
+    },
+    {
+      "id": "near_tie",
+      "sextupole_k2": 100.0
+    }
+  ],
+  "workpoints": [
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0
+  ],
+  "scan_values": [
+    -4.0,
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0
+  ],
+  "particles": 100000,
+  "linear_resolution_factors": [
+    1
+  ],
+  "energy_mev": 225.0,
+  "primary_particle_seed": 12345,
+  "repeat_workpoints": [
+    -3.0,
+    -1.0,
+    0.0,
+    3.0
+  ],
+  "repeat_scan_values": [
+    -4.0,
+    0.0,
+    4.0
+  ],
+  "calibration_particle_seeds": [
+    1360116357,
+    1681066233,
+    141831361,
+    1280231157,
+    1141345729,
+    1543612163,
+    216168767,
+    806673775
+  ],
+  "validation_particle_seeds": [
+    921471569,
+    595338379,
+    1632498637,
+    631732581,
+    1740778317,
+    1169911769,
+    846658893,
+    1256137035
+  ],
+  "seed_design": "Deterministic fresh positive odd seeds from numpy default_rng(2026111306); disjoint from all frozen predecessor particle populations",
+  "measurement_method": "rms_count_variance",
+  "measurement": {
+    "minimum_count": 1000,
+    "minimum_sigma_pixels": 1.0,
+    "maximum_edge_fraction": 0.001
+  },
+  "calibration_gates": {
+    "maximum_primary_variance_relative_error": 0.02,
+    "maximum_validation_variance_relative_error": 0.02,
+    "all_reconstructions_physical": true,
+    "maximum_emittance_relative_error": 0.05,
+    "all_calibration_and_validation_frames_valid": true,
+    "minimum_heldout_95_interval_coverage": 0.9,
+    "maximum_absolute_heldout_standardized_mean": 0.5,
+    "heldout_standardized_mean_square_range": [
+      0.5,
+      2.0
+    ]
+  },
+  "noise_scale_calibration": "sqrt(mean over training points of sample variance of corrected measurements divided by mean predicted noise variance)); training only, no point-specific fitted factors",
+  "noise_validation": "Apply the training-only global noise scale, then compare held-out frame minus calibration mean against sqrt(frame noise variance plus calibration-mean noise variance); no fitting on held-out populations",
+  "input_frames": "Reuse native_100k primary frames and accepted reference evidence from B5 only; unscale their inherited B4.1 noise before applying the new training-only scale",
+  "reference_policy": "Reconstruct B5 primary curves with new scaled relative weights; require unchanged emittance within 1e-8 relative error and retain B5 independent reference acceptance",
+  "failure_policy": "Retain every failed frame; no clipping, retries, rejection, per-point factors, held-out refitting or alternative-arm selection",
+  "continuation": "Preserve all B2 through B5 evidence. Stop on any unchanged calibration gate failure. Passing establishes only declared simulated particle-count noise at 100k; runtime acceptance and future-query noise treatment remain separate before any new matched-budget benchmark."
+}

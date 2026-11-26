@@ -55,6 +55,27 @@ from half_linac.src.virtual_machine.lattice_usedline import (
 
 
 class ElegantBackendTests(unittest.TestCase):
+    def test_image_publisher_waits_for_acknowledgement_when_requested(self):
+        publisher = VmPublisher(wait_for_image_completion=True)
+        plan = VmPublishPlan(watch_image_specs=(VmWatchImagePublishSpec(
+            source_watch_id="PRF07", target_element_id="PRF07", logical_channel="image",
+            pv_name="TEST:PRF07", pixel_shape=(4, 3), pixel_width_mm=0.02,
+        ),))
+        lattice = {"PRF07": {"TYPE": "WATCH", "MODE": "coord", "DISABLE": "0"}}
+        with patch.object(Path, "is_file", return_value=True), patch(
+            "half_linac.src.shared.elegant_backend.publisher._load_watch_image_from_sdds",
+            return_value=np.zeros(12),
+        ), patch("half_linac.src.shared.elegant_backend.publisher.caput", return_value=1) as put:
+            self.assertTrue(publisher.publish_watch_images(
+                plan, lattice=lattice, usedline=["PRF07"], elegant_dir="/tmp"
+            ))
+            self.assertTrue(put.call_args.kwargs["wait"])
+            self.assertEqual(publisher.acknowledged_image_pvs, ["TEST:PRF07"])
+        with patch("half_linac.src.shared.elegant_backend.publisher.caput", return_value=-1):
+            self.assertFalse(publisher._publish_one_best_effort(
+                label="test", pv_name="TEST:PRF07", value=np.zeros(12), wait=True
+            ))
+
     def setUp(self):
         self.elegant_dir = REPO_ROOT / "src/virtual_machine/half_elegant/elegant"
         self.lattice_file = self.elegant_dir / "lattice_ini.lte"

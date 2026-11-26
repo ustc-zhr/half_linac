@@ -1,0 +1,39 @@
+{
+  "schema": "half_infobax_p2_b10_transport_moment_v1",
+  "stage": "P2-B10",
+  "scope": "One fixed offline transport-moment GP comparison on frozen B8 observations; no new acquisition, machine, camera or GUI operations",
+  "predecessor_config_sha256": "7c6631f29d179215bfc7c8714e447b1c0debb914891de3fcf1a0a0859c0598f7",
+  "models": [
+    "m0",
+    "transport_moments"
+  ],
+  "observation_counts": [
+    6,
+    14
+  ],
+  "samples": 16384,
+  "reference_inputs": "B9 exact pool specifications; B8 checkpoints and finite primary curves for evaluation only",
+  "moment_parameterization": "A=QR; response y_c=Q u_c, three beam coefficients m_c=R^-1 u_c; no positive-definite constraint",
+  "candidate_kernel": "Matern-5/2, length scale 0.32 inherited from each fixed InfoBAXConfig; no scan-coordinate kernel",
+  "prior_covariance": "scale^2 * (scan_count/3) * kron(K_candidate, I_3), matching average response variance to M0",
+  "prior_mean": "Repeat Q.T @ (observed median * ones(scan_count)); observed data only",
+  "amplitude_and_likelihood": "Same observed-only scale=max(std(target),0.2*abs(median),median(fixed forecast)); same noise^2+1e-10 likelihood",
+  "numerics": "Stabilize Gaussian covariance in latent coordinates; sample there then map through Q; no physical beam-matrix projection, sample rejection or response-space eigenvalue floor",
+  "recommendation_invalid_threshold": 0.5,
+  "sampling": "At 6 observations stable_seed(summary,policy_seed,M0,0); at 14 reuse B9 enhanced seed stable_seed(p2_b9_physicality,case,policy_seed,history_policy). Same numeric seeds aid reproducibility; no cross-model common-random-number claim across different latent dimensions.",
+  "metrics": [
+    "Candidate/output physicality partitions and unchanged-gate availability",
+    "Posterior transport-span energy and per-draw transport residual",
+    "Unobserved finite-primary response RMSE/normalized RMSE, standardized residual mean square, interval coverage and NLPD",
+    "Paired seed-bootstrap differences, retaining both cases and both history policies together"
+  ],
+  "bootstrap": {
+    "samples": 5000,
+    "seed": 2026111310,
+    "confidence": 0.95,
+    "unit": "resample 16 complete policy seeds, keeping both cases and both historical policies; conditional on frozen histories"
+  },
+  "transport_relative_tolerance": 1e-10,
+  "interpretation": "Model predictions and counterfactual recommendations on old histories, not an adaptive policy comparison or a real-machine acceptance result",
+  "continuation": "Preserve B2-B9. Run this single prior specification without tuning; document whether structural consistency improves physicality and withheld predictions. Separately map existing emittance-optimization interfaces for a future standalone controlled real-machine workflow."
+}

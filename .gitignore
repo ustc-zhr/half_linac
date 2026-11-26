@@ -118,3 +118,6 @@ src/virtual_machine/*_elegant/elegant/*.sig
 docs/analysis/*.json
 docs/analysis/*.png
 energy_prediction_analysis/
+
+# Local InfoBAX experiment outputs; test inputs are versioned in tests/fixtures.
+/src/optimization/infobax/benchmarks/

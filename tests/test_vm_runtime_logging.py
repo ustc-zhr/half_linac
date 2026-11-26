@@ -18,6 +18,21 @@ from half_linac.src.virtual_machine.common import start_VM
 
 
 class VmRuntimeLoggingTests(unittest.TestCase):
+    def test_image_acknowledgement_requires_successful_synchronous_publication(self):
+        parser = SimpleNamespace(json_to_lte_ele=Mock(), lattice={})
+        plan = SimpleNamespace(bpm_specs=(), watch_image_specs=(object(),), watch_scalar_specs=())
+        for success, wait in ((True, True), (False, True), (True, False)):
+            publisher = SimpleNamespace(
+                publish_watch_images=Mock(return_value=success), wait_for_image_completion=wait,
+            )
+            with patch.object(start_VM, "_run_elegant"), patch.object(
+                start_VM, "read_runtime_state", return_value={"usedline": []}
+            ), redirect_stdout(io.StringIO()):
+                result = start_VM._update_vm_outputs(
+                    parser, publisher, plan, Path("/tmp/elegant"), Path("/tmp/runtime.json")
+                )
+            self.assertEqual(result["screens_acknowledged"], success and wait)
+
     def test_update_logs_published_data_with_device_counts(self):
         parser = SimpleNamespace(json_to_lte_ele=Mock(), lattice={})
         publisher = SimpleNamespace(

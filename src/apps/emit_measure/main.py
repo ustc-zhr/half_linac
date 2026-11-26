@@ -208,39 +208,9 @@ def _projection_measurement_quality(projection):
     )
 
 
-def _read_flag_image_fit(
-    image_pv,
-    pixel_shape,
-    extent,
-    *,
-    background=None,
-    roi=None,
-    flip_y=False,
-    full_frame_for_roi=False,
-    method="Gaussian fit",
-    fit_vmin=None,
-):
-    raw_image = epics.caget(image_pv)
-    if raw_image is None:
-        raise RuntimeError(f"Failed to read flag image PV: {image_pv}.")
-    try:
-        return analyze_raw_beam_image(
-            raw_image,
-            pixel_shape=pixel_shape,
-            extent=extent,
-            background=background,
-            roi=roi,
-            flip_y=flip_y,
-            full_frame_for_roi=full_frame_for_roi,
-            analyzer=partial(analyze_beam_image, method=method, fit_vmin=fit_vmin),
-        )
-    except (TypeError, ValueError) as exc:
-        if "image size" in str(exc):
-            raise RuntimeError(
-                f"Flag image length mismatch for {image_pv}: got {np.asarray(raw_image).size}, "
-                f"expected {pixel_shape[0] * pixel_shape[1]}."
-            ) from exc
-        raise RuntimeError(f"Flag image PV is not numeric array data: {image_pv}.") from exc
+def _read_flag_image_fit(*args, **kwargs):
+    from half_linac.src.apps.emit_measure.measurement_service import read_flag_image_fit
+    return read_flag_image_fit(*args, get=epics.caget, **kwargs)
 
 
 def _read_optional_scalar_pv(pv_name):
@@ -4829,7 +4799,7 @@ class myWindow(QWidget,Ui_Form):
         self.optimization_dialog.raise_()
         self.optimization_dialog.activateWindow()
 
-    def optimization_parameters(self, variables=()):
+    def optimization_parameters(self, variables=(), *, defer_io=False):
         """Freeze the current measurement without changing ordinary scan settings."""
         from half_linac.src.apps.emit_measure.optimization import VerifiedQuadRestore
         if self.machine_profile.machine.id != "half" or self.machine_type != "real":
@@ -4854,18 +4824,13 @@ class myWindow(QWidget,Ui_Form):
         if para.background_image is not None:
             para.background_image = np.array(para.background_image, copy=True)
         para.recal = False
-        image = epics.caget(para.flagImagePV, timeout=10, use_monitor=False)
-        if image is None or np.asarray(image).size != int(np.prod(para.flag_pixel_shape)):
-            raise ValueError(f"{para.flag_name} image is unavailable or its dimensions do not match the configuration.")
-        self._prepare_emit_model_snapshot(para)
-        para.restore_quad = VerifiedQuadRestore(self.app_context, para.quad_name)
         para.scan_metadata = self._scan_metadata_from_paras(para)
-        para.scan_metadata["initial_quad"] = {
-            "element": para.quad_name,
-            "k1": para.restore_quad.initial_k1,
-            "current_set": para.restore_quad.initial_current,
-            "current_readback": para.restore_quad.initial_readback,
-        }
+        para.defer_measurement_prepare = True
+        if not defer_io:
+            from half_linac.src.apps.emit_measure.measurement_service import prepare_measurement
+            # Preserve the public legacy preparation behavior for existing callers.
+            self._prepare_emit_model_snapshot(para)
+            prepare_measurement(para, model_prepared=True)
         return para
 
     def get_setting(self, *, show_warning=True):
@@ -6205,6 +6170,15 @@ class scanThread(QThread):
         self.adaptive_config = getattr(paras, "adaptive_config", None)
         self.model_line = paras.model_line
         self.app_context = paras.app_context
+        self.control_lease = getattr(paras, "control_lease", None)
+        self.explicit_k1_values = getattr(paras, "explicit_k1_values", None)
+        self.previous_point_results = deepcopy(getattr(paras, "previous_point_results", []))
+        self.point_results = []
+        self.raw_archive_dir = getattr(paras, "raw_archive_dir", None)
+        self.on_point_result = getattr(paras, "on_point_result", None)
+        self.measurement_check = getattr(paras, "measurement_check", None)
+        self.require_point_quality = getattr(paras, "require_point_quality", False)
+        self.skip_parabolic = getattr(paras, "skip_parabolic", False)
         self.model_snapshot_metadata = getattr(paras, "model_snapshot_metadata", None)
         self.model_lattice_overrides = getattr(paras, "model_lattice_overrides", None)
         self.quad_length = None
@@ -6239,8 +6213,12 @@ class scanThread(QThread):
         self.charge_attempts = 0
 
     def _sleep_or_stop(self, seconds):
+        if self.measurement_check is not None:
+            self.measurement_check()
         end_time = time.time() + seconds
         while self.is_running and time.time() < end_time:
+            if self.measurement_check is not None:
+                self.measurement_check()
             time.sleep(min(0.1, end_time - time.time()))
         return self.is_running
 
@@ -6375,167 +6353,32 @@ class scanThread(QThread):
         return summary
 
     def _acquire_k1(self, k1, *, adaptive=False):
-        if self.effective_k1_limit is not None and not self.effective_k1_limit.contains(k1):
-            raise MachineProfileError(
-                f"Planned K₁ = {float(k1):g} m⁻² is outside the effective limit "
-                f"{self.effective_k1_limit.describe()} for {self.quad_name}.K₁."
-            )
-        if self.restore_quad_callback is not None:
-            def check_running():
-                if not self.is_running:
-                    raise RuntimeError("Scan stopped.")
-            self.restore_quad_callback.move(k1, check_running)
-        else:
-            epics.caput(self.quadPV, k1)
-        if not self._sleep_or_stop(self.settle_time):
-            return None
-
-        sigx_values = []
-        sigy_values = []
-        usable_sigx_values = []
-        usable_sigy_values = []
-        for sample_index in range(self.samples):
-            if not self.is_running:
-                return None
-            self._emit_scan_progress(sample_index=sample_index + 1)
-            if sample_index > 0 and not self._sleep_or_stop(self.sample_interval):
-                return None
-
-            retry = 0
-            while self.is_running:
-                try:
-                    image, fit_result = _read_flag_image_fit(
-                        self.flagImagePV,
-                        self.flag_pixel_shape,
-                        self.flag_image_extent,
-                        background=self.background_image,
-                        roi=self.roi,
-                        flip_y=self.flag_image_flip_y,
-                        full_frame_for_roi=True,
-                        method=self.beam_width_method,
-                        fit_vmin=self.fit_vmin,
-                    )
-                except RuntimeError as exc:
-                    if not adaptive or retry >= self.adaptive_config.max_retries:
-                        if adaptive:
-                            self._emit_adaptive_status(
-                                f"Rejected K₁ = {k1:g} m⁻²: image unavailable",
-                                k1=k1,
-                            )
-                            return None
-                        raise
-                    retry += 1
-                    self._emit_adaptive_status(
-                        f"Retrying K₁ = {k1:g} m⁻² "
-                        f"({retry}/{self.adaptive_config.max_retries})",
-                        k1=k1,
-                        retry_reason=str(exc),
-                    )
-                    if self.sample_interval > 0 and not self._sleep_or_stop(
-                        self.sample_interval
-                    ):
-                        return None
-                    continue
-                size_pv = _read_optional_size_pvs(
-                    self.flagSigxPV,
-                    self.flagSigyPV,
-                )
-                point = {
-                    "method": None,
-                    "k1": k1,
-                    "flag": self.flag_name,
-                    "beam_image": image,
-                    "beam_fit": fit_result,
-                    "beam_extent": self.flag_image_extent,
-                    "show_roi_overlay": True,
-                    "size_pv": size_pv,
-                    "background_status": self.background_status,
-                }
-                if fit_result.valid:
-                    break
-                self.trigger.emit(point)
-                detail = f": {fit_result.message}" if fit_result.message else ""
-                if not adaptive or retry >= self.adaptive_config.max_retries:
-                    if adaptive:
-                        self._emit_adaptive_status(
-                            f"Rejected K₁ = {k1:g} m⁻²: invalid image fit",
-                            k1=k1,
-                        )
-                        return None
-                    raise RuntimeError(
-                        f"Flag image fit failed for {self.flag_name} "
-                        f"({_display_fit_status(fit_result.status)}){detail}."
-                    )
-                retry += 1
-                self._emit_adaptive_status(
-                    f"Retrying K₁ = {k1:g} m⁻² "
-                    f"({retry}/{self.adaptive_config.max_retries})",
-                    k1=k1,
-                )
-                if self.sample_interval > 0 and not self._sleep_or_stop(self.sample_interval):
-                    return None
-
-            if not self.is_running:
-                return None
-            charge_sample = self._read_charge_sample()
-            if charge_sample is not None:
-                point["charge_sample"] = charge_sample
-            sigx = float(fit_result.sigx_mm)
-            sigy = float(fit_result.sigy_mm)
-            if self.scan_strategy == "adaptive_quality":
-                x_quality = _projection_measurement_quality(fit_result.x_projection)
-                y_quality = _projection_measurement_quality(fit_result.y_projection)
-            else:
-                x_quality = {"status": "usable", "usable": True}
-                y_quality = {"status": "usable", "usable": True}
-            print("Quad K1=", k1, "sigmax=", sigx, "sigmay=", sigy)
-            point["sigx"] = sigx
-            point["sigy"] = sigy
-            point["plane_quality"] = {"x": x_quality, "y": y_quality}
-            if self.scan_strategy == "adaptive_quality" and (
-                not x_quality["usable"] or not y_quality["usable"]
-            ):
-                self._emit_adaptive_status(
-                    f"Quality at K₁ = {k1:g} m⁻² "
-                    f"· X: {_display_fit_status(x_quality['status'])} "
-                    f"· Y: {_display_fit_status(y_quality['status'])}",
-                    k1=k1,
-                    plane_quality=point["plane_quality"],
-                )
-            point["adaptive_stage"] = "measurement" if adaptive else None
-            self.k1l.append(k1)
-            self.sigxl.append(sigx)
-            self.sigyl.append(sigy)
-            self.x_quality_usable.append(bool(x_quality["usable"]))
-            self.y_quality_usable.append(bool(y_quality["usable"]))
-            self.point_quality.append(
-                {"k1": float(k1), "x": x_quality, "y": y_quality}
-            )
-            sigx_values.append(sigx)
-            sigy_values.append(sigy)
-            if x_quality["usable"]:
-                usable_sigx_values.append(sigx)
-            if y_quality["usable"]:
-                usable_sigy_values.append(sigy)
-            self.trigger.emit(point)
-
-        if not sigx_values:
-            return None
-        self.completed_k1_points += 1
-        self._emit_scan_progress()
-        return AdaptiveObservation(
-            k1=float(k1),
-            sigx=float(np.mean(usable_sigx_values)) if usable_sigx_values else None,
-            sigy=float(np.mean(usable_sigy_values)) if usable_sigy_values else None,
-            sigx_err=self._sample_error(usable_sigx_values),
-            sigy_err=self._sample_error(usable_sigy_values),
-            x_usable=bool(usable_sigx_values),
-            y_usable=bool(usable_sigy_values),
-        )
+        from half_linac.src.apps.emit_measure.measurement_service import acquire_scan_point
+        return acquire_scan_point(
+            self, k1, adaptive=adaptive, read_image_fit=_read_flag_image_fit,
+            read_sizes=_read_optional_size_pvs, quality=_projection_measurement_quality,
+            format_status=_display_fit_status)
 
     def _run_grid_scan(self):
         self._emit_scan_progress(stage="grid")
-        for k1 in np.linspace(self.k1_from, self.k1_end, self.k1_steps):
+        for prior in self.previous_point_results:
+            for frame in prior["frames"]:
+                if "sigx" not in frame or "sigy" not in frame:
+                    continue
+                self.k1l.append(prior["k1"])
+                self.sigxl.append(frame["sigx"])
+                self.sigyl.append(frame["sigy"])
+                quality = frame["quality"]
+                self.x_quality_usable.append(quality["x"]["usable"])
+                self.y_quality_usable.append(quality["y"]["usable"])
+                self.point_quality.append({"k1": prior["k1"], **quality})
+            self.point_results.append(prior)
+            self.completed_k1_points += 1
+        values = (np.linspace(self.k1_from, self.k1_end, self.k1_steps)
+                  if self.explicit_k1_values is None else self.explicit_k1_values)
+        for k1 in values:
+            if any(abs(p["k1"]-float(k1)) < 1e-10 for p in self.previous_point_results):
+                continue
             if not self.is_running:
                 return
             if self._acquire_k1(float(k1), adaptive=False) is None:
@@ -6763,6 +6606,18 @@ class scanThread(QThread):
         self.x_quality_usable, self.y_quality_usable = restore_scan_quality(self.k1l, entries)
 
     def run(self):
+        from contextlib import nullcontext
+        from half_linac.src.apps.emit_measure.control import emittance_lease
+        lease = (nullcontext() if self.recal else
+                 emittance_lease(self.app_context, self.control_lease))
+        try:
+            with lease:
+                self._run_scan_locked()
+        except Exception as exc:
+            self.terminal_result.update(error=str(exc), fatal=True)
+            self.trigger.emit({"error": str(exc)})
+
+    def _run_scan_locked(self):
         tmp = {"method": None}
         iniK1 = None
         try:
@@ -6853,92 +6708,94 @@ class scanThread(QThread):
             else:
                 raise RuntimeError("self.recal should be True or False.")
 
-            # Parabolic fitting method
-            # ========================
-            # get the transfer matrix of (exit of quad-to-flag) 
-            trans = transfer(
-                self.EnergyMeV,
-                app_context=self.app_context,
-                model_line=self.model_line,
-                lattice_overrides=self.model_lattice_overrides,
-            )
-            mat = trans.get_map(
-                self.quad_name,
-                self.flag_name,
-                twiss_only=True,
-            )
-            self.quad_length = trans.get_lattice_float(self.quad_name, "L")
-            
-            m11 = mat[0,0]
-            m12 = mat[0,1]
-            m33 = mat[2,2]
-            m34 = mat[2,3]
-            if self.scan_strategy in ADAPTIVE_SCAN_STRATEGIES:
-                k1_array = np.asarray(self.k1l, dtype=float)
-                sigx_array = np.asarray(self.sigxl, dtype=float)
-                sigy_array = np.asarray(self.sigyl, dtype=float)
-                polynomial_design = np.column_stack(
-                    (np.ones_like(k1_array), k1_array, k1_array**2)
+            fit_summary = {}
+            if not self.skip_parabolic:
+                # Parabolic fitting method
+                # ========================
+                # get the transfer matrix of (exit of quad-to-flag)
+                trans = transfer(
+                    self.EnergyMeV,
+                    app_context=self.app_context,
+                    model_line=self.model_line,
+                    lattice_overrides=self.model_lattice_overrides,
                 )
-                x_indices, x_selection = self._least_squares_selection(
-                    k1_array, polynomial_design, "xplane"
+                mat = trans.get_map(
+                    self.quad_name,
+                    self.flag_name,
+                    twiss_only=True,
                 )
-                y_indices, y_selection = self._least_squares_selection(
-                    k1_array, polynomial_design, "yplane"
-                )
-                tmp["method"] = "parabolic"
-                tmp["xplane"] = self._parabolic_selected_plane_result(
-                    k1_array[x_indices],
-                    sigx_array[x_indices],
-                    m11,
-                    m12,
-                    "xplane",
-                    x_selection,
-                )
-                tmp["yplane"] = self._parabolic_selected_plane_result(
-                    -k1_array[y_indices],
-                    sigy_array[y_indices],
-                    m33,
-                    m34,
-                    "yplane",
-                    y_selection,
-                )
-                parabolic_summary = _method_fit_summary(
-                    "parabolic", tmp["xplane"], tmp["yplane"]
-                )
-                fit_summary = {"parabolic": parabolic_summary}
-                tmp["fit_summary"] = parabolic_summary
-                self.trigger.emit(tmp)
-                if not self._sleep_or_stop(2):
-                    return
-                print(f"Parabolic fitting finished: {parabolic_summary['status']}")
-            else:
-                try:
-                    dim0 = len(self.k1l)/self.samples
-                    k1l   = np.reshape(self.k1l,  (int(dim0),self.samples))
-                    sigxl = np.reshape(self.sigxl,(int(dim0),self.samples))
-                    sigyl = np.reshape(self.sigyl,(int(dim0),self.samples))
-                except ValueError:
-                    print("Warning: Please delete all points for a K1 value to make every step has the same samples.")
-                    print("However, this would not affect least squares method.")
-                    fit_summary = {
-                        "parabolic": {
-                            "method": "parabolic",
-                            "status": "skipped",
-                            "message": "Scan points cannot be grouped into equal samples per K₁.",
-                        }
-                    }
-                else:
+                self.quad_length = trans.get_lattice_float(self.quad_name, "L")
+
+                m11 = mat[0,0]
+                m12 = mat[0,1]
+                m33 = mat[2,2]
+                m34 = mat[2,3]
+                if self.scan_strategy in ADAPTIVE_SCAN_STRATEGIES:
+                    k1_array = np.asarray(self.k1l, dtype=float)
+                    sigx_array = np.asarray(self.sigxl, dtype=float)
+                    sigy_array = np.asarray(self.sigyl, dtype=float)
+                    polynomial_design = np.column_stack(
+                        (np.ones_like(k1_array), k1_array, k1_array**2)
+                    )
+                    x_indices, x_selection = self._least_squares_selection(
+                        k1_array, polynomial_design, "xplane"
+                    )
+                    y_indices, y_selection = self._least_squares_selection(
+                        k1_array, polynomial_design, "yplane"
+                    )
                     tmp["method"] = "parabolic"
-                    tmp["xplane"] = self._parabolic_plane_result(k1l, sigxl, m11, m12, "xplane")
-                    tmp["yplane"] = self._parabolic_plane_result(-k1l, sigyl, m33, m34, "yplane")
-                    parabolic_summary = _method_fit_summary("parabolic", tmp["xplane"], tmp["yplane"])
+                    tmp["xplane"] = self._parabolic_selected_plane_result(
+                        k1_array[x_indices],
+                        sigx_array[x_indices],
+                        m11,
+                        m12,
+                        "xplane",
+                        x_selection,
+                    )
+                    tmp["yplane"] = self._parabolic_selected_plane_result(
+                        -k1_array[y_indices],
+                        sigy_array[y_indices],
+                        m33,
+                        m34,
+                        "yplane",
+                        y_selection,
+                    )
+                    parabolic_summary = _method_fit_summary(
+                        "parabolic", tmp["xplane"], tmp["yplane"]
+                    )
                     fit_summary = {"parabolic": parabolic_summary}
                     tmp["fit_summary"] = parabolic_summary
                     self.trigger.emit(tmp)
                     if not self._sleep_or_stop(2):
                         return
                     print(f"Parabolic fitting finished: {parabolic_summary['status']}")
+                else:
+                    try:
+                        dim0 = len(self.k1l)/self.samples
+                        k1l   = np.reshape(self.k1l,  (int(dim0),self.samples))
+                        sigxl = np.reshape(self.sigxl,(int(dim0),self.samples))
+                        sigyl = np.reshape(self.sigyl,(int(dim0),self.samples))
+                    except ValueError:
+                        print("Warning: Please delete all points for a K1 value to make every step has the same samples.")
+                        print("However, this would not affect least squares method.")
+                        fit_summary = {
+                            "parabolic": {
+                                "method": "parabolic",
+                                "status": "skipped",
+                                "message": "Scan points cannot be grouped into equal samples per K₁.",
+                            }
+                        }
+                    else:
+                        tmp["method"] = "parabolic"
+                        tmp["xplane"] = self._parabolic_plane_result(k1l, sigxl, m11, m12, "xplane")
+                        tmp["yplane"] = self._parabolic_plane_result(-k1l, sigyl, m33, m34, "yplane")
+                        parabolic_summary = _method_fit_summary("parabolic", tmp["xplane"], tmp["yplane"])
+                        fit_summary = {"parabolic": parabolic_summary}
+                        tmp["fit_summary"] = parabolic_summary
+                        self.trigger.emit(tmp)
+                        if not self._sleep_or_stop(2):
+                            return
+                        print(f"Parabolic fitting finished: {parabolic_summary['status']}")
 
             # Least squares method
             # ========================
@@ -6979,6 +6836,7 @@ class scanThread(QThread):
             except Exception as exc:
                 self.terminal_result.update(restored=False, restore_error=str(exc))
                 self.trigger.emit({"error": f"Quadrupole restoration failed: {exc}"})
+            self.terminal_result["point_results"] = self.point_results
             self.terminal_result["archive"] = str(self.scan_results_path)
             if not self.is_running:
                 self.terminal_result["error"] = "Scan stopped."
@@ -7322,101 +7180,9 @@ class scanThread(QThread):
             payload["actual_range"] = [unique_values[0], unique_values[-1]]
         return payload
 
-    def _solveMat(self,A0,k1l,sigxx):
-        determinant = None
-        rank = None
-        condition_number = None
-        residual_rms = None
-        solver = "numpy.linalg.lstsq"
-        try:
-            A = np.asarray(A0, dtype=float).reshape(len(k1l), 3)
-            b = np.asarray(sigxx, dtype=float).reshape(-1)
-            if A.shape[0] != b.size:
-                raise ValueError(
-                    f"design matrix rows ({A.shape[0]}) do not match measurements ({b.size})"
-                )
-            if not np.all(np.isfinite(A)) or not np.all(np.isfinite(b)):
-                raise ValueError("least-squares input contains non-finite values")
-
-            xx, _reported_residuals, rank_value, singular_values = np.linalg.lstsq(
-                A,
-                b,
-                rcond=None,
-            )
-            rank = int(rank_value)
-            fitted = A @ xx
-            residual_rms = (
-                float(np.sqrt(np.mean((fitted - b) ** 2)))
-                if b.size
-                else None
-            )
-            if singular_values.size and singular_values[-1] > 0:
-                condition_number = float(singular_values[0] / singular_values[-1])
-
-            if rank < LEAST_SQUARES_REQUIRED_RANK:
-                raise ValueError(
-                    f"rank-deficient fit: rank={rank}/{LEAST_SQUARES_REQUIRED_RANK}; "
-                    "scan points do not provide enough independent optics settings"
-                )
-            if condition_number is None or condition_number > LEAST_SQUARES_MAX_CONDITION:
-                condition_text = "infinite" if condition_number is None else f"{condition_number:.3e}"
-                raise ValueError(
-                    f"ill-conditioned fit: condition={condition_text} exceeds "
-                    f"{LEAST_SQUARES_MAX_CONDITION:.1e}"
-                )
-
-            sig11 = float(xx[0])
-            sig12 = float(xx[1])
-            sig22 = float(xx[2])
-
-            determinant = float(sig11 * sig22 - sig12**2)
-            if not math.isfinite(determinant) or determinant <= 0:
-                raise ValueError(f"non-physical beam matrix determinant={determinant:.6g}")
-            ex = math.sqrt(determinant)
-            beta  = sig11/ex
-            alpha = -sig12/ex
-            gamma = sig22/ex
-            
-            gam0 = self.EnergyMeV*1e6/ELECTRON_MASS_EV
-            exn = ex*gam0
-            
-            #print("exn,beta,alpha,gamma",exn,beta,alpha,gamma)
-            tmp = structData()
-            tmp.ex    = round(ex   ,4)
-            tmp.exn   = round(exn  ,2)
-            tmp.exn_raw = float(exn)
-            tmp.beta  = round(beta ,2)
-            tmp.alpha = round(alpha,2)
-            tmp.gamma = round(gamma,2)
-            tmp.status = "valid"
-            tmp.message = ""
-            tmp.determinant = determinant
-
-        except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as exc:
-            print(f"Warning: least-squares emittance solve failed: {exc}")
-            tmp = structData()
-            tmp.ex    = None 
-            tmp.exn   = None 
-            tmp.beta  = None 
-            tmp.alpha = None 
-            tmp.gamma = None 
-            if "non-physical" in str(exc):
-                tmp.status = "non_physical"
-            elif "rank-deficient" in str(exc):
-                tmp.status = "rank_deficient"
-            elif "ill-conditioned" in str(exc):
-                tmp.status = "ill_conditioned"
-            else:
-                tmp.status = "failed"
-            tmp.message = str(exc)
-            tmp.determinant = determinant
-
-        tmp.rank = rank
-        tmp.condition_number = condition_number
-        tmp.residual_rms = residual_rms
-        tmp.solver = solver
-
-        return tmp
+    def _solveMat(self, A0, k1l, sigxx):
+        from half_linac.src.apps.emit_measure.measurement_service import solve_beam_matrix
+        return solve_beam_matrix(A0, k1l, sigxx, self.EnergyMeV, LEAST_SQUARES_MAX_CONDITION)
 
     # Method-2, parabolic fitting 
     #----------------------------------------

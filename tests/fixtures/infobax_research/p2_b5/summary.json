@@ -1,0 +1,166 @@
+{
+  "stage": "P2-B5",
+  "status": "REFERENCE-PASS",
+  "selected_arm": "native_100k",
+  "primary_arms": {
+    "native_20k": {
+      "passed": false,
+      "gates": {
+        "all_frames_valid": true,
+        "all_references_physical": true,
+        "variance_closure": true,
+        "emittance_closure": false,
+        "particle_rms_closure": true,
+        "full_field_retention": true
+      },
+      "frames": 189,
+      "physical_references": 21,
+      "expected_references": 21,
+      "max_variance_relative_error": 0.014432961855904702,
+      "max_emittance_relative_error": 0.05137793379157929,
+      "max_particle_rms_emittance_relative_error": 0.00010008777695813542,
+      "minimum_retention_fraction": 1.0
+    },
+    "fine_20k": {
+      "passed": true,
+      "gates": {
+        "all_frames_valid": true,
+        "all_references_physical": true,
+        "variance_closure": true,
+        "emittance_closure": true,
+        "particle_rms_closure": true,
+        "full_field_retention": true
+      },
+      "frames": 189,
+      "physical_references": 21,
+      "expected_references": 21,
+      "max_variance_relative_error": 0.0036088526709703306,
+      "max_emittance_relative_error": 0.009391985039265416,
+      "max_particle_rms_emittance_relative_error": 0.00010008777695813542,
+      "minimum_retention_fraction": 1.0
+    },
+    "native_100k": {
+      "passed": true,
+      "gates": {
+        "all_frames_valid": true,
+        "all_references_physical": true,
+        "variance_closure": true,
+        "emittance_closure": true,
+        "particle_rms_closure": true,
+        "full_field_retention": true
+      },
+      "frames": 189,
+      "physical_references": 21,
+      "expected_references": 21,
+      "max_variance_relative_error": 0.006101730698596652,
+      "max_emittance_relative_error": 0.013893599456328731,
+      "max_particle_rms_emittance_relative_error": 2.822034206872992e-05,
+      "minimum_retention_fraction": 1.0
+    },
+    "fine_100k": {
+      "passed": true,
+      "gates": {
+        "all_frames_valid": true,
+        "all_references_physical": true,
+        "variance_closure": true,
+        "emittance_closure": true,
+        "particle_rms_closure": true,
+        "full_field_retention": true
+      },
+      "frames": 189,
+      "physical_references": 21,
+      "expected_references": 21,
+      "max_variance_relative_error": 0.0023157142465648484,
+      "max_emittance_relative_error": 0.008805290049623937,
+      "max_particle_rms_emittance_relative_error": 2.822034206872992e-05,
+      "minimum_retention_fraction": 1.0
+    }
+  },
+  "validation_arms": {
+    "native_20k": {
+      "passed": true,
+      "gates": {
+        "all_frames_valid": true,
+        "all_references_physical": true,
+        "variance_closure": true,
+        "emittance_closure": true,
+        "particle_rms_closure": true,
+        "full_field_retention": true
+      },
+      "frames": 378,
+      "physical_references": 42,
+      "expected_references": 42,
+      "max_variance_relative_error": 0.00714482089513524,
+      "max_emittance_relative_error": 0.030275133606282978,
+      "max_particle_rms_emittance_relative_error": 0.00012914497595639673,
+      "minimum_retention_fraction": 1.0
+    },
+    "fine_20k": {
+      "passed": true,
+      "gates": {
+        "all_frames_valid": true,
+        "all_references_physical": true,
+        "variance_closure": true,
+        "emittance_closure": true,
+        "particle_rms_closure": true,
+        "full_field_retention": true
+      },
+      "frames": 378,
+      "physical_references": 42,
+      "expected_references": 42,
+      "max_variance_relative_error": 0.002045657043586724,
+      "max_emittance_relative_error": 0.029646504548939356,
+      "max_particle_rms_emittance_relative_error": 0.00012914497595639673,
+      "minimum_retention_fraction": 1.0
+    },
+    "native_100k": {
+      "passed": true,
+      "gates": {
+        "all_frames_valid": true,
+        "all_references_physical": true,
+        "variance_closure": true,
+        "emittance_closure": true,
+        "particle_rms_closure": true,
+        "full_field_retention": true
+      },
+      "frames": 378,
+      "physical_references": 42,
+      "expected_references": 42,
+      "max_variance_relative_error": 0.005895207215376619,
+      "max_emittance_relative_error": 0.02871151582447118,
+      "max_particle_rms_emittance_relative_error": 9.315916902363774e-05,
+      "minimum_retention_fraction": 1.0
+    },
+    "fine_100k": {
+      "passed": true,
+      "gates": {
+        "all_frames_valid": true,
+        "all_references_physical": true,
+        "variance_closure": true,
+        "emittance_closure": true,
+        "particle_rms_closure": true,
+        "full_field_retention": true
+      },
+      "frames": 378,
+      "physical_references": 42,
+      "expected_references": 42,
+      "max_variance_relative_error": 0.002088696778715482,
+      "max_emittance_relative_error": 0.01926297637677843,
+      "max_particle_rms_emittance_relative_error": 9.315916902363774e-05,
+      "minimum_retention_fraction": 1.0
+    }
+  },
+  "baseline_reproduction": {
+    "passed": true,
+    "maximum_relative_error": 0.0
+  },
+  "selected_validation_passed": true,
+  "particle_tracking_attempts": 1134,
+  "raster_observations": 2268,
+  "failures": [],
+  "optimizer_runs": 0,
+  "ioc_access": false,
+  "geometry_application": "offline rasterization only; no profile/PV/IOC changes",
+  "noise_calibration_at_new_settings": "pending",
+  "gui_acceptance": "not established by reference precision alone"
+}

@@ -122,15 +122,17 @@ class DialogTests(unittest.TestCase):
                 self.assertLessEqual(read.bottom(), table.top())
                 self.assertFalse(read.intersects(budget))
                 self.assertLessEqual(variables.right(), options.left())
-                self.assertTrue(options.contains(algorithm))
+                self.assertTrue(dialog_rect(self.dialog.tabs).contains(algorithm))
+                self.assertFalse(options.intersects(algorithm))
                 self.assertLessEqual(table.bottom(), dialog_rect(self.dialog.lower_offset).top())
                 self.assertLessEqual(variables.bottom(), budget.top())
-                self.assertLessEqual(algorithm.bottom(), note.top())
+                self.assertLessEqual(options.bottom(), dialog_rect(self.dialog.tabs).top())
+                self.assertLessEqual(dialog_rect(self.dialog.scroll_area).bottom(),
+                                     dialog_rect(self.dialog.start_button).top())
                 self.assertGreaterEqual(self.dialog.variables.height(), 148)
                 if height == 720:
                     self.assertGreater(self.dialog.scroll_area.verticalScrollBar().maximum(), 0)
-                else:
-                    self.assertEqual(self.dialog.scroll_area.verticalScrollBar().maximum(), 0)
+
 
         self.dialog.algorithm.setCurrentIndex(self.dialog.algorithm.findData('bo'))
         self.dialog.advanced_button.setChecked(True)

@@ -1,0 +1,144 @@
+{
+  "schema": "half_infobax_p2_b4_1_weighted_rms_v1",
+  "stage": "P2-B4.1",
+  "scope": "One bounded continuation: weighted shared reconstruction and a training-only global count-noise scale, with independent held-out populations and unchanged calibration gates",
+  "predecessor_config_sha256": "07513d70a0741299d52516e3bd089ad6d728ff43818ad43906853329502eba17",
+  "cases": [
+    {
+      "id": "linear_control",
+      "sextupole_k2": 0.0
+    },
+    {
+      "id": "nonlinear",
+      "sextupole_k2": 1000.0
+    },
+    {
+      "id": "near_tie",
+      "sextupole_k2": 100.0
+    }
+  ],
+  "workpoints": [
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0
+  ],
+  "scan_values": [
+    -4.0,
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0
+  ],
+  "particles": 20000,
+  "primary_particle_seed": 12345,
+  "energy_mev": 225.0,
+  "repeat_workpoints": [
+    -3.0,
+    -1.0,
+    0.0,
+    3.0
+  ],
+  "repeat_scan_values": [
+    -4.0,
+    0.0,
+    4.0
+  ],
+  "calibration_particle_seeds": [
+    12345,
+    23456,
+    34567,
+    45678,
+    56789,
+    67890,
+    78901,
+    89012
+  ],
+  "validation_particle_seeds": [
+    31415927,
+    27182819,
+    16180339,
+    14142137,
+    17320509,
+    22360679,
+    24494897,
+    26457513
+  ],
+  "measurement_method": "rms_count_variance",
+  "measurement": {
+    "minimum_count": 1000,
+    "minimum_sigma_pixels": 1.0,
+    "maximum_edge_fraction": 0.001
+  },
+  "variance_definition": "Pixel-center central second moment minus pixel_width_mm squared / 12; no clipping or distribution-specific fitting",
+  "noise_definition": "sqrt((fourth_central_moment - (N-3)/(N-1) * second_central_moment squared) / N), computed from each VM particle-count frame",
+  "noise_validation": "Apply the training-only global noise scale, then compare held-out frame minus calibration mean against sqrt(frame noise variance plus calibration-mean noise variance); no fitting on held-out populations",
+  "calibration_gates": {
+    "maximum_primary_variance_relative_error": 0.02,
+    "maximum_validation_variance_relative_error": 0.02,
+    "all_reconstructions_physical": true,
+    "maximum_emittance_relative_error": 0.05,
+    "all_calibration_and_validation_frames_valid": true,
+    "minimum_heldout_95_interval_coverage": 0.9,
+    "maximum_absolute_heldout_standardized_mean": 0.5,
+    "heldout_standardized_mean_square_range": [
+      0.5,
+      2.0
+    ]
+  },
+  "benchmark": {
+    "cases": [
+      "nonlinear",
+      "near_tie"
+    ],
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "policies": [
+      "infobax",
+      "random"
+    ],
+    "initial_observations": 6,
+    "total_observations": 14,
+    "forecast_noise_std_mm2": 0.002,
+    "forecast_noise_interpretation": "Existing fixed future-query noise assumption retained; only revealed observations receive per-frame noise estimates. No hidden reference or future frame enters pool noise.",
+    "observation_seed": "2 * (stable_seed('b4_particle', case_id, policy_seed, query_index) % 1000000000) + 1",
+    "observations": "Actual positive corrected RMS variances from independent elegant particle populations; paired policies reuse the same query-indexed frame, with no additive Gaussian perturbation",
+    "reference": "Frozen primary corrected-image full-scan reference, audited against entrance particle covariance; finite precision, not absolute truth",
+    "bootstrap_seed": 20261113,
+    "bootstrap_samples": 5000,
+    "gates": {
+      "all_full_scan_references_physical": true,
+      "all_runs_complete_matched_budget_without_duplicates": true,
+      "minimum_recommendation_rate_per_policy": 0.95,
+      "paired_regret_difference_upper_95_ci_strictly_below": 0.0
+    }
+  },
+  "failure_policy": "Retain all invalid frames, nonphysical references, quality failures and unavailable recommendations; no retries, clipping, sample rejection or projection",
+  "continuation": "Preserve B2/B3/B4. Stop on any unchanged calibration gate failure; run the declared matched-budget comparison only if calibration passes. No further model or acquisition tuning in this stage.",
+  "reference_solver": "shared weighted SVD with RMS-size errors = per-frame variance std / (2 * sqrt(variance)); no beam-matrix projection",
+  "noise_scale_calibration": "sqrt(mean over training points of sample variance of corrected measurements divided by mean predicted noise variance)); training only, no point-specific fitted factors",
+  "input_frames": "Reuse frozen B4 primary and training frames; record source hashes. Independent validation seeds are not reused."
+}

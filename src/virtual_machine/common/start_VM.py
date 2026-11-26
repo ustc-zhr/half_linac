@@ -125,6 +125,11 @@ def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
             usedline=usedline,
             elegant_dir=elegant_dir,
         )
+        publication["screens_acknowledged"] = (
+            publication["screens"]
+            and getattr(publisher, "wait_for_image_completion", False) is True
+        )
+        publication["screen_image_pvs"] = list(getattr(publisher, "acknowledged_image_pvs", ()))
         if publication["screens"]:
             print(f"Published screen images ({_format_device_count(image_count)}).")
         else:
@@ -185,7 +190,7 @@ def main():
     )
     try:
         publish_plan = build_vm_publish_plan(runtime.profile)
-        publisher = VmPublisher()
+        publisher = VmPublisher(wait_for_image_completion=True)
     except Exception as exc:
         print(f"failed to build VM publish plan: {exc}")
         return 1
