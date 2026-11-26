@@ -4,6 +4,7 @@ import json
 import math
 import statistics
 import time
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,12 @@ from typing import Any, Callable, Mapping
 
 from epics import caget, caput
 
+from half_linac.src.apps.rf_phase_scan.amp_scan import EpicsAmpClient
+from half_linac.src.apps.rf_phase_scan.joint_phase_scan import (
+    JointPhaseScanConfig,
+    PhaseResponseMeasurement,
+    select_joint_phase,
+)
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import (
     phase_difference_deg,
     wait_for_phase_readback,
@@ -180,6 +187,8 @@ class TransmissionRecoveryRunner:
         write: Callable[..., Any] = caput,
         lock_factory=EnergyControlLock.for_machine,
         sleeper: Callable[[float], None] = time.sleep,
+        response_routes: Mapping[str, JointPhaseScanConfig] | None = None,
+        response_client_factory=EpicsAmpClient,
     ) -> None:
         self.context = context
         self.candidates = tuple(candidates)
@@ -195,11 +204,14 @@ class TransmissionRecoveryRunner:
         self.write = write
         self.lock_factory = lock_factory
         self.sleeper = sleeper
+        self.response_routes = dict(response_routes) if response_routes is not None else None
+        self.response_client_factory = response_client_factory
         self.stopping = False
         self.status = "pending"
         self.error = ""
         self.initial_snapshot: dict[str, Any] | None = None
         self.expected_phases: dict[str, float] = {}
+        self.phase_commands: dict[str, tuple[float, ...]] = {}
         self.records = [
             {
                 "rf_element": stage.rf_element,
@@ -212,6 +224,10 @@ class TransmissionRecoveryRunner:
 
     def stop(self) -> None:
         self.stopping = True
+
+    def _check_cancelled(self) -> None:
+        if self.stopping:
+            raise TransmissionRecoveryCancelled("Transmission Recovery stopped by operator.")
 
     @staticmethod
     def _finite(value: Any, label: str) -> float:
@@ -234,10 +250,8 @@ class TransmissionRecoveryRunner:
     def _wait(self, duration_s: float, *, cancellable: bool = True) -> None:
         deadline = time.monotonic() + max(float(duration_s), 0.0)
         while True:
-            if cancellable and self.stopping:
-                raise TransmissionRecoveryCancelled(
-                    "Transmission Recovery stopped by operator."
-                )
+            if cancellable:
+                self._check_cancelled()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return
@@ -245,8 +259,18 @@ class TransmissionRecoveryRunner:
 
     def _set_phase(self, stage: TransmissionRecoveryStage, value: float) -> float:
         command = wrap_phase_deg(float(value))
+        if self.response_routes is not None:
+            actual = self._finite(self.read(stage.phase_pv), f"{stage.rf_element} phase setpoint")
+            if all(
+                abs(phase_difference_deg(actual, expected)) > self.settings.readback_tolerance_deg
+                for expected in self.phase_commands[stage.rf_element]
+            ):
+                raise RuntimeError(f"{stage.rf_element} phase setpoint changed outside this scan.")
+            self.phase_commands[stage.rf_element] = (actual, command)
         if not self.write(stage.phase_pv, command, wait=True, timeout=5):
             raise RuntimeError(f"{stage.rf_element} phase setpoint write failed.")
+        if self.response_routes is not None:
+            self.phase_commands[stage.rf_element] = (command,)
         wait_for_phase_readback(
             lambda: self.read(stage.phase_readback_pv),
             command,
@@ -271,6 +295,11 @@ class TransmissionRecoveryRunner:
             raise RuntimeError(
                 "Selected Transmission Recovery stages must follow configured order."
             )
+        if self.response_routes is not None:
+            for stage in self.stages:
+                route = self.response_routes.get(stage.rf_element)
+                if route is None or route.response.rf_element != stage.rf_element:
+                    raise RuntimeError(f"{stage.rf_element} has no phase-response path.")
 
     def _snapshot(self) -> None:
         devices: dict[str, Any] = {}
@@ -302,6 +331,7 @@ class TransmissionRecoveryRunner:
             self.records[index]["initial_phase_deg"] = setpoint
             self.callbacks.item(index, dict(self.records[index]))
         self.expected_phases = expected
+        self.phase_commands = {name: (phase,) for name, phase in expected.items()}
         self.initial_snapshot = {
             "schema_version": "rf_transmission_recovery_snapshot_v1",
             "created_at": datetime.now().astimezone().isoformat(
@@ -338,7 +368,7 @@ class TransmissionRecoveryRunner:
                 )
 
     def _payload(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": "rf_transmission_recovery_v1",
             "machine_id": self.context.machine.id,
             "backend": self.context.control_backend.name,
@@ -371,6 +401,14 @@ class TransmissionRecoveryRunner:
             "directory": str(self.directory),
             "json_path": str(self.directory / "run.json"),
         }
+        if self.response_routes is not None:
+            payload["configuration"].update(
+                selection_mode="acceleration_and_sum",
+                phase_response_routes={
+                    name: asdict(route) for name, route in self.response_routes.items()
+                },
+            )
+        return payload
 
     def _save(self) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -394,15 +432,14 @@ class TransmissionRecoveryRunner:
         initial_phase: float,
         offset_deg: float,
         acquisition_index: int,
+        response: PhaseResponseMeasurement | None,
     ) -> dict[str, Any]:
+        self._check_cancelled()
         command = self._set_phase(stage, initial_phase + offset_deg)
         self._wait(self.settings.settle_time_s)
         samples: list[float | None] = []
         for sample_index in range(self.settings.samples_per_point):
-            if self.stopping:
-                raise TransmissionRecoveryCancelled(
-                    "Transmission Recovery stopped by operator."
-                )
+            self._check_cancelled()
             samples.append(self._optional_finite(self.read(stage.signal_pv)))
             if sample_index + 1 < self.settings.samples_per_point:
                 self._wait(self.settings.sample_interval_s)
@@ -423,6 +460,15 @@ class TransmissionRecoveryRunner:
             "status": "valid" if median_sum is not None else "invalid",
         }
         self.records[index]["points"].append(point)
+        if response is not None:
+            self._save()
+            point["response"] = {}
+            if median_sum is None or median_sum < response.route.minimum_transmission_sum:
+                point["response"].update(
+                    status="skipped", reason=f"{stage.target_bpm}: insufficient transmission SUM.",
+                )
+            else:
+                response.measure(command, point["response"])
         self.callbacks.point(index, dict(point))
         self._save()
         return point
@@ -432,13 +478,15 @@ class TransmissionRecoveryRunner:
         index: int,
         stage: TransmissionRecoveryStage,
         initial_phase: float,
-    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        response: PhaseResponseMeasurement | None,
+    ) -> list[dict[str, Any]]:
         points: list[dict[str, Any]] = []
         scan_error: Exception | None = None
         try:
             for acquisition_index, offset in enumerate(
                 self.settings.execution_offsets()
             ):
+                self._check_cancelled()
                 if acquisition_index == (self.settings.points + 1) // 2:
                     self.callbacks.state(
                         f"{stage.rf_element}: returning to initial phase"
@@ -456,8 +504,11 @@ class TransmissionRecoveryRunner:
                         initial_phase,
                         offset,
                         acquisition_index,
+                        response,
                     )
                 )
+            if response is not None:
+                self._repeat_reference(index, stage, points, response)
         except Exception as exc:
             scan_error = exc
         try:
@@ -473,18 +524,32 @@ class TransmissionRecoveryRunner:
             ) from restore_exc
         if scan_error is not None:
             raise scan_error
-        if self.stopping:
-            raise TransmissionRecoveryCancelled(
-                "Transmission Recovery stopped by operator."
-            )
+        self._check_cancelled()
+        return points
 
+    def _repeat_reference(self, index, stage, points, response):
+        valid = [point for point in points if point["response"]["status"] == "valid"]
+        if len(valid) < 3:
+            return
+        self._check_cancelled()
+        reference = valid[0]
+        self.callbacks.state(f"{stage.rf_element}: repeating reference response")
+        phase = self._set_phase(stage, reference["command_phase_deg"])
+        self._wait(self.settings.settle_time_s)
+        repeat = {"acquisition_index": reference["acquisition_index"], "command_phase_deg": phase}
+        self.records[index]["response_reference_repeat"] = repeat
+        response.measure(phase, repeat)
+        self._save()
+
+    @staticmethod
+    def _sum_peak(stage, points, *, require_variation):
         valid = [point for point in points if point["median_sum"] is not None]
-        if len(valid) < 2:
+        if len(valid) < (2 if require_variation else 1):
             raise RuntimeError(
                 f"{stage.target_bpm} did not provide enough valid scan points."
             )
         values = {float(point["median_sum"]) for point in valid}
-        if len(values) == 1:
+        if require_variation and len(values) == 1:
             raise RuntimeError(
                 f"{stage.target_bpm} SUM has no measurable phase response."
             )
@@ -492,14 +557,80 @@ class TransmissionRecoveryRunner:
         peaks = [
             point for point in valid if float(point["median_sum"]) == peak_sum
         ]
-        best = min(
+        return min(
             peaks,
             key=lambda point: (
                 abs(float(point["offset_deg"])),
                 float(point["offset_deg"]),
             ),
         )
-        return best, points
+
+    def _choose_phase(self, index, stage, points, response):
+        record = self.records[index]
+        if response is not None and not any(point["median_sum"] is not None for point in points):
+            for point in points:
+                point["acceleration"] = "undetermined"
+            record["initial_phase_acceleration"] = "undetermined"
+            record["acceleration_analysis"] = {
+                "status": "undetermined", "reason": f"{stage.target_bpm}: no usable transmission SUM.",
+            }
+            return None
+        peak = self._sum_peak(stage, points, require_variation=response is None)
+        record.update(
+            peak_phase_deg=peak["command_phase_deg"],
+            peak_offset_deg=peak["offset_deg"],
+            peak_sum=peak["median_sum"],
+        )
+        if response is None:
+            return peak
+        repeat = record.get("response_reference_repeat", {})
+        reference = points[repeat["acquisition_index"]] if repeat else None
+        best, analysis = select_joint_phase(points, reference, repeat, response.route)
+        record["acceleration_analysis"] = analysis
+        record["initial_phase_acceleration"] = points[0]["acceleration"]
+        if best is not None:
+            record.update(
+                selected_phase_deg=best["command_phase_deg"],
+                selected_acquisition_index=best["acquisition_index"],
+                selected_sum=best["median_sum"],
+                selected_response=best["response"]["slope"],
+            )
+        return best
+
+    def _run_stage(self, index, stage, initial_phase, response):
+        self._check_cancelled()
+        record = self.records[index]
+        with response.open() if response is not None else nullcontext() as snapshot:
+            if response is not None:
+                record["response_snapshot"] = snapshot
+            points = self._scan_stage(index, stage, initial_phase, response)
+            best = self._choose_phase(index, stage, points, response)
+            self._check_cancelled()
+            if best is None:
+                reason = record["acceleration_analysis"]["reason"]
+                self._update(index, status="undetermined", error=reason)
+                return False
+            self._update(index, status="applying")
+            if response is not None:
+                self._check_expected_state()
+                verification = record["response_application_verification"] = {"before": {}}
+                response.verify_phase(initial_phase, verification["before"])
+            try:
+                applied = self._set_phase(stage, best["command_phase_deg"])
+                if response is not None:
+                    self._wait(self.settings.settle_time_s)
+                    verification["after"] = {}
+                    response.verify_phase(applied, verification["after"])
+                self._check_cancelled()
+            except Exception as exc:
+                try:
+                    self._set_phase(stage, initial_phase)
+                except Exception as restore_exc:
+                    raise RuntimeError(f"{exc}; phase restore failed: {restore_exc}") from restore_exc
+                raise
+            self.expected_phases[stage.rf_element] = applied
+            self._update(index, status="applied", applied_phase_deg=applied)
+            return True
 
     def run(self) -> dict[str, Any]:
         active_index = 0
@@ -525,49 +656,20 @@ class TransmissionRecoveryRunner:
                 self._check_expected_state()
                 initial_phase = self.expected_phases[stage.rf_element]
                 self._update(active_index, status="scanning", points=[])
-                best, _points = self._scan_stage(
-                    active_index, stage, initial_phase
-                )
-                best_phase = wrap_phase_deg(
-                    float(best["requested_phase_unwrapped_deg"])
-                )
-                self.records[active_index].update(
-                    peak_phase_deg=best_phase,
-                    peak_offset_deg=float(best["offset_deg"]),
-                    peak_sum=float(best["median_sum"]),
-                )
-                if self.stopping:
-                    raise TransmissionRecoveryCancelled(
-                        "Transmission Recovery stopped by operator."
+                response = None
+                if self.response_routes is not None:
+                    response = PhaseResponseMeasurement(
+                        context=self.context,
+                        route=self.response_routes[stage.rf_element],
+                        on_state=self.callbacks.state,
+                        check_cancelled=self._check_cancelled,
+                        client_factory=self.response_client_factory,
+                        sleep=self.sleeper,
                     )
-                self._update(active_index, status="applying")
-                try:
-                    applied = self._set_phase(stage, best_phase)
-                except Exception as apply_exc:
-                    try:
-                        self._set_phase(stage, initial_phase)
-                    except Exception as restore_exc:
-                        raise RuntimeError(
-                            f"{apply_exc}; phase restore failed: {restore_exc}"
-                        ) from restore_exc
-                    raise
-                if self.stopping:
-                    try:
-                        self._set_phase(stage, initial_phase)
-                    except Exception as restore_exc:
-                        raise RuntimeError(
-                            f"{stage.rf_element} phase restore failed: "
-                            f"{restore_exc}"
-                        ) from restore_exc
-                    raise TransmissionRecoveryCancelled(
-                        "Transmission Recovery stopped by operator."
-                    )
-                self.expected_phases[stage.rf_element] = applied
-                self._update(
-                    active_index,
-                    status="applied",
-                    applied_phase_deg=applied,
-                )
+                if not self._run_stage(active_index, stage, initial_phase, response):
+                    self.status = "undetermined"
+                    self.error = self.records[active_index]["error"]
+                    break
             else:
                 self.status = "completed"
         except TransmissionRecoveryCancelled as exc:

@@ -25,6 +25,10 @@ POLL_INTERVAL_S = 0.05
 SETPOINT_TOLERANCE = 1e-6
 
 
+class BeamResponseUnavailable(RuntimeError):
+    """The BPM samples do not support measuring an orbit response."""
+
+
 @dataclass(frozen=True)
 class Perturbation:
     element: str
@@ -87,7 +91,9 @@ def _range(values, name):
     return low, high
 
 
-def resolve_acceleration_check(context, stage, settings, spec, *, capture_only=False):
+def resolve_acceleration_check(
+    context, stage, settings, spec, *, capture_only=False, fixed_amplitude=False,
+):
     """Resolve the approved diagnostic path independently of the SUM scan."""
     bpm = context.profile.get_element(spec["bpm"])
     corrector = context.profile.get_element(spec["corrector"])
@@ -98,7 +104,7 @@ def resolve_acceleration_check(context, stage, settings, spec, *, capture_only=F
     def perturbation(element, channel, readback, name):
         config = spec[name]
         target = resolve_write_target(context, element, logical_channel=channel)
-        if capture_only:
+        if capture_only or fixed_amplitude:
             limits = _range(
                 (target.machine_limit.low, target.machine_limit.high), f"{name} machine limits"
             )
@@ -106,10 +112,12 @@ def resolve_acceleration_check(context, stage, settings, spec, *, capture_only=F
             limits = _range(config["window"], f"{name}.window")
         if not all(target.machine_limit.contains(value) for value in limits):
             raise ValueError(f"{name}.window is outside machine limits.")
-        step = _number(config["step"], f"{name}.step", minimum=0)
         tolerance = _number(config["tolerance"], f"{name}.tolerance", minimum=0)
-        if step <= max(2 * tolerance, SETPOINT_TOLERANCE):
-            raise ValueError(f"{name}.step must exceed twice its readback tolerance.")
+        step = 0.0
+        if not (fixed_amplitude and name == "amplitude"):
+            step = _number(config["step"], f"{name}.step", minimum=0)
+            if step <= max(2 * tolerance, SETPOINT_TOLERANCE):
+                raise ValueError(f"{name}.step must exceed twice its readback tolerance.")
         return Perturbation(
             element, target.pv_name, resolve_channel(context, element, readback),
             step, tolerance, limits,
@@ -159,8 +167,12 @@ def resolve_acceleration_check(context, stage, settings, spec, *, capture_only=F
         sample_timeout_s=_number(spec["sample_timeout_s"], "sample_timeout_s", minimum=0),
         pair_tolerance_s=threshold("pair_tolerance_s"),
         settle_time_s=settle,
-        minimum_response_difference=threshold("minimum_response_difference"),
-        maximum_baseline_drift=threshold("maximum_baseline_drift"),
+        minimum_response_difference=(
+            None if fixed_amplitude else threshold("minimum_response_difference")
+        ),
+        maximum_baseline_drift=(
+            None if fixed_amplitude else threshold("maximum_baseline_drift")
+        ),
         phase_tolerance_deg=settings.readback_tolerance_deg,
         readback_timeout_s=settings.readback_timeout_s,
         capture_only=capture_only,
@@ -239,7 +251,7 @@ class AccelerationCheck:
             None if config.capture_only and applied_phase is None
             else _number(applied_phase, "Applied phase")
         )
-        self.path = Path(path)
+        self.path = Path(path) if path is not None else None
         self.on_state = on_state
         self.client_factory = client_factory
         self.lock_factory = lock_factory
@@ -362,17 +374,19 @@ class AccelerationCheck:
             self._check_stop()
             remaining = deadline - self.monotonic()
             if remaining <= 0:
-                raise RuntimeError(f"{config.bpm}: BPM read timed out.")
-            watermark.append(self._read(pv, timeout=min(0.5, remaining)).timestamp)
+                raise BeamResponseUnavailable(f"{config.bpm}: BPM read timed out.")
+            watermark.append(self._read_bpm(pv, remaining).timestamp)
         if any(value is None or not math.isfinite(value) for value in watermark):
-            raise RuntimeError(f"{config.bpm}: BPM source timestamps unavailable.")
+            raise BeamResponseUnavailable(f"{config.bpm}: BPM source timestamps unavailable.")
         while True:
             self._check_stop()
             remaining = deadline - self.monotonic()
             if remaining <= 0:
                 qualifier = "fresh" if config.capture_only else "fresh, paired"
-                raise RuntimeError(f"{config.bpm}: insufficient {qualifier} X and SUM samples.")
-            readings = tuple(self._read(pv, timeout=min(0.5, remaining)) for pv in pvs)
+                raise BeamResponseUnavailable(
+                    f"{config.bpm}: insufficient {qualifier} X and SUM samples."
+                )
+            readings = tuple(self._read_bpm(pv, remaining) for pv in pvs)
             if config.capture_only:
                 for index, (channel, reading) in enumerate(zip(("x", "sum"), readings)):
                     if (
@@ -397,16 +411,22 @@ class AccelerationCheck:
                 watermark = [x.timestamp, signal.timestamp]
                 samples.append({"x": asdict(x), "sum": asdict(signal)})
                 if signal.value < config.minimum_sum:
-                    raise RuntimeError(f"{config.bpm}: beam SUM is below the minimum.")
+                    raise BeamResponseUnavailable(f"{config.bpm}: beam SUM is below the minimum.")
                 if reference_sum is not None:
                     self._check_sum_stability(signal.value, reference_sum)
             if len(samples) == config.samples_per_state:
                 return
             self.sleep(min(POLL_INTERVAL_S, remaining))
 
+    def _read_bpm(self, pv, remaining):
+        try:
+            return self._read(pv, timeout=min(0.5, remaining))
+        except RuntimeError as exc:
+            raise BeamResponseUnavailable(str(exc)) from exc
+
     def _check_sum_stability(self, signal, reference):
         if abs(signal / reference - 1) > self.config.maximum_relative_sum_change:
-            raise RuntimeError(f"{self.config.bpm}: beam SUM moved outside its stability range.")
+            raise BeamResponseUnavailable(f"{self.config.bpm}: beam SUM moved outside its stability range.")
 
     def _capture_forward_power(self, record, *, timeout):
         if record is None or record["error"] or len(record["samples"]) >= self.config.samples_per_state:
@@ -445,14 +465,15 @@ class AccelerationCheck:
             outcome = "overlap"
         self.result["kly_forward_power_check"] = outcome
 
-    def _group(self, name, amplitude, current, reference_sum):
+    def _group(self, name, amplitude, current, reference_sum, *, fixed_amplitude=False):
         config = self.config
         self.on_state(f"{config.rf_element} · {name}")
         self._check_conditions()
         self._owned(config.corrector)
-        self._move(config.amplitude, amplitude)
-        self._settle()
-        self._check_conditions()
+        if not fixed_amplitude:
+            self._move(config.amplitude, amplitude)
+            self._settle()
+            self._check_conditions()
         amp_readback = self._verify_readback(config.amplitude, amplitude)
         group = {"name": name, "amplitude": amp_readback, "points": []}
         self.result["groups"].append(group)
@@ -473,7 +494,9 @@ class AccelerationCheck:
             self._sample(point["samples"], reference_sum, power)
             self._check_conditions()
             self._verify_readback(config.amplitude, amplitude)
-            self._verify_readback(config.corrector, target)
+            current_after = self._verify_readback(config.corrector, target)
+            if fixed_amplitude:
+                point["current_after"] = current_after
             positions = (
                 point["samples"]["x"] if config.capture_only
                 else [sample["x"] for sample in point["samples"]]
@@ -490,13 +513,16 @@ class AccelerationCheck:
         group["slope"] = slope
         return slope
 
-    def _measure(self):
-        config = self.config
-        self.result["measured_phase_deg"] = self._check_conditions()
-        for actuator in (config.amplitude, config.corrector):
+    def _snapshot_actuators(self):
+        for actuator in (self.config.amplitude, self.config.corrector):
             self.initial[actuator] = self._read(actuator.setpoint).value
             self.expected[actuator] = (self.initial[actuator],)
             self._readback(actuator, self.initial[actuator])
+
+    def _measure(self):
+        config = self.config
+        self.result["measured_phase_deg"] = self._check_conditions()
+        self._snapshot_actuators()
         amplitude, current = (self.initial[item] for item in (config.amplitude, config.corrector))
         lower = amplitude - config.amplitude.step
         self.result.update(

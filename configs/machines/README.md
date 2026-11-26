@@ -152,12 +152,34 @@ optional `low` and `high` values to narrow the scan window. A
 the scan page. Power Scan and Transmission Recovery use the
 `rf_phase_scan` workflow's `write_control` policy for the active backend.
 
+The **Use Accel / Decel** checkbox in Transmission Recovery defaults to off.
+The HALF profile enables this mode for `LLRF02`. It uses `BPM08` SUM for
+transmission and measures `BPM10` X/SUM at nominal current and at
+`XC10 ± 0.2 A` by default, with LLRF AMP held fixed. **Start Selected** lets
+operators edit the corrector step for each selected station. The path assumes
+that higher momentum produces a smaller horizontal response with `QL16` defocusing.
+The scan checks quadrupole current and forward power and repeats one response
+to account for drift. Among confirmed accelerating points at or above 95% of the
+accelerating region's peak SUM, it applies the phase with the smallest
+resolved response. Comparable responses favor higher SUM. If the scan
+cannot confirm an accelerating point, it restores the initial phase. Per-point
+responses and classifications are saved in `run.json`.
+
+HALF lists candidate paths for `LLRF03`–`LLRF20` in
+`transmission_recovery.phase_response_candidates`, keyed by each stage's
+`target_bpm`. Paths are in preference order. The quadrupoles and inferred
+`intervening_rf` describe the span from the corrector to the response BPM.
+For `LLRF19`, also account for `LLRF20` upstream of both candidate
+correctors. An operational scan path uses the stage's
+`acceleration_check.phase_response` configuration after optics validation.
+
 Transmission Recovery can also check the gain direction at an applied phase.
 Set `acceleration_check` on an individual stage after validating that increasing
 momentum decreases the magnitude of the orbit response on that path. The HALF
 profile enables **Capture Test Data** for `LLRF02` on the `XC10 → BPM10` path.
 Select the station and enter the LLRF AMP drop and corrector step to
-capture at the current phase. The capture uses machine limits and records X
+capture at the current phase. Both dialogs remember the station's last selected
+corrector step while the page is open. The capture uses machine limits and records X
 and SUM separately with source timestamps so the pulse alignment can be
 checked from the data. Where the RF station maps `kly_forward_power`, capture
 records fresh power samples during each AMP group. The summary reports whether

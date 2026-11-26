@@ -28,6 +28,7 @@ from half_linac.src.apps.rf_phase_scan.acceleration_check import (
     discover_acceleration_checks,
     resolve_acceleration_capture,
 )
+from half_linac.src.apps.rf_phase_scan.joint_phase_scan import resolve_joint_phase_scan
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import phase_difference_deg
 from half_linac.src.apps.rf_phase_scan.scan_widgets import (
     parameter_card, prepare_scan_axes, scan_actions, scan_page_layout,
@@ -129,6 +130,11 @@ class TransmissionRecoveryPage(QWidget):
         "decelerating": "Decelerating",
         "undetermined": "Undetermined",
     }
+    ACCELERATION_COLORS = {
+        "accelerating": "#49c488",
+        "decelerating": "#ff707e",
+        "undetermined": "#a5aeb6",
+    }
 
     def __init__(
         self,
@@ -175,6 +181,22 @@ class TransmissionRecoveryPage(QWidget):
             if isinstance(item.get("acceleration_check"), dict)
             and item["acceleration_check"].get("capture_enabled") is True
         }
+        self.response_specs = {}
+        self.response_default_steps = {}
+        self.response_unavailable = {}
+        self.corrector_steps = {}
+        if self.write_enabled:
+            for stage, item in zip(self.candidates, self.config["stages"]):
+                spec = item.get("acceleration_check")
+                if not isinstance(spec, dict) or "phase_response" not in spec:
+                    continue
+                try:
+                    route = resolve_joint_phase_scan(context, stage, self.default_settings, spec)
+                except (KeyError, ValueError, TypeError, OverflowError) as exc:
+                    self.response_unavailable[stage.rf_element] = str(exc)
+                else:
+                    self.response_specs[stage.rf_element] = spec
+                    self.response_default_steps[stage.rf_element] = route.response.corrector.step
         self.worker = None
         self.restore_worker = None
         self.check_worker = None
@@ -183,6 +205,7 @@ class TransmissionRecoveryPage(QWidget):
         self.selected_rows: list[int] = []
         self.current_task_index = None
         self.current_points: list[dict[str, Any]] = []
+        self.current_applied_index = None
         self.last_result: dict[str, Any] | None = None
         self.last_stages = ()
         self.last_settings = None
@@ -218,12 +241,28 @@ class TransmissionRecoveryPage(QWidget):
             self.default_settings.sample_interval_s, 0.0, 60.0
         )
         self.sample_interval.setSuffix(" s")
+        self.use_acceleration = QCheckBox("Use Accel / Decel", self)
+        self.use_acceleration.setObjectName("useAccelerationInPhaseScan")
+        self.use_acceleration.setEnabled(bool(self.response_specs))
+        if self.response_specs:
+            response_tip = (
+                "Measure corrector response during the phase scan and apply a confirmed "
+                f"accelerating phase with high BPM SUM. Available for {', '.join(self.response_specs)}."
+            )
+        elif self.response_unavailable:
+            response_tip = "\n".join(
+                f"{rf} · {error}" for rf, error in self.response_unavailable.items()
+            )
+        else:
+            response_tip = "No phase-response path is available for this control backend."
+        self.use_acceleration.setToolTip(response_tip)
         parameter_widgets = (
             ("Phase range", self._range_widget()),
             ("Points", self.points),
             ("Settle time", self.settle),
             ("Samples / point", self.samples),
             ("Sample interval", self.sample_interval),
+            ("Phase selection", self.use_acceleration),
         )
         parameters = parameter_card(self, parameter_widgets)
         self.check_button = QPushButton("Check Accel / Decel", parameters)
@@ -284,6 +323,7 @@ class TransmissionRecoveryPage(QWidget):
         self.restore_button.clicked.connect(self._restore_snapshot)
         self.check_button.clicked.connect(self._start_acceleration_check)
         self.capture_button.clicked.connect(self._start_acceleration_capture)
+        self.use_acceleration.toggled.connect(self._update_response_mode)
         self.table.itemSelectionChanged.connect(self._update_check_button)
         self.acceleration_phase_changed.connect(self._check_phase_changed, Qt.QueuedConnection)
         for control in (
@@ -326,14 +366,31 @@ class TransmissionRecoveryPage(QWidget):
         return [
             row
             for row, selector in enumerate(self.stage_checkboxes)
-            if selector.isChecked()
+            if selector.isChecked() and (
+                not self.use_acceleration.isChecked()
+                or self.candidates[row].rf_element in self.response_specs
+            )
         ]
 
     def _select_all(self, checked):
         for selector in self.stage_checkboxes:
+            if not selector.isEnabled():
+                continue
             signals_were_blocked = selector.blockSignals(True)
             selector.setChecked(bool(checked))
             selector.blockSignals(signals_were_blocked)
+        self._update_summary()
+
+    def _update_response_mode(self):
+        joint = self.use_acceleration.isChecked()
+        for stage, selector in zip(self.candidates, self.stage_checkboxes):
+            available = stage.rf_element in self.response_specs
+            selector.setEnabled(not joint or available)
+            selector.setToolTip(
+                self.response_unavailable.get(
+                    stage.rf_element, "No phase-response path configured for this station."
+                ) if joint and not available else ""
+            )
         self._update_summary()
 
     def select_stations(self, stations):
@@ -374,10 +431,17 @@ class TransmissionRecoveryPage(QWidget):
             minutes = len(rows) * (
                 settings.points * per_point + settings.settle_time_s
             ) / 60.0
-            detail = (
-                f"{len(rows)} selected · approximately {minutes:.1f} min · "
-                "each accepted BPM SUM maximum will be applied immediately."
-            )
+            if self.use_acceleration.isChecked():
+                names = ", ".join(self.candidates[row].rf_element for row in rows)
+                detail = (
+                    f"{names} selected · BPM SUM and corrector response at each usable phase."
+                    if rows else f"Select a station with a phase-response path · {', '.join(self.response_specs)}."
+                )
+            else:
+                detail = (
+                    f"{len(rows)} selected · approximately {minutes:.1f} min · "
+                    "each accepted BPM SUM maximum will be applied immediately."
+                )
         except ValueError as exc:
             detail = f"Invalid settings · {exc}"
         self.summary.setText(detail)
@@ -399,6 +463,7 @@ class TransmissionRecoveryPage(QWidget):
             self.clear_button,
         ):
             widget.setEnabled(not running)
+        self.use_acceleration.setEnabled(not running and bool(self.response_specs))
         self.start_button.setEnabled(
             not running and bool(self._selected_rows()) and self.write_enabled
         )
@@ -410,6 +475,46 @@ class TransmissionRecoveryPage(QWidget):
         )
         self.window._set_recovery_running(running)
         self._update_check_button()
+
+    def _confirm_joint_scan(self, stages, routes):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Start Transmission Recovery")
+        layout = QFormLayout(dialog)
+        description = QLabel(
+            "LLRF AMP stays fixed. The corrector is stepped to both sides of its "
+            "initial current at each usable phase. Confirmed accelerating points "
+            "with high BPM SUM can be applied.",
+            dialog,
+        )
+        description.setWordWrap(True)
+        layout.addRow(description)
+        controls = {}
+        for stage in stages:
+            response = routes[stage.rf_element].response
+            corrector = response.corrector
+            low, high = corrector.limits
+            step = self._double_spin(0, 0, (high - low) / 2)
+            step.setDecimals(3)
+            step.setMinimum(0.001)
+            step.setValue(self.corrector_steps.get(stage.rf_element, corrector.step))
+            step.setSuffix(" A")
+            step.setPrefix("± ")
+            step.setToolTip("Corrector current step per side")
+            layout.addRow(
+                f"{stage.rf_element} · {stage.target_bpm} SUM · {corrector.element} → {response.bpm}",
+                step,
+            )
+            controls[stage.rf_element] = step
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
+        buttons.button(QDialogButtonBox.Ok).setText("Start Scan")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addRow(buttons)
+        steps = None
+        if dialog.exec_() == QDialog.Accepted:
+            steps = {rf: control.value() for rf, control in controls.items()}
+        dialog.deleteLater()
+        return steps
 
     def _start(self):
         if (
@@ -432,18 +537,35 @@ class TransmissionRecoveryPage(QWidget):
             QMessageBox.warning(self, "Transmission Recovery", str(exc))
             return
         stages = tuple(self.candidates[row] for row in rows)
-        mapping = "\n".join(
-            f"{stage.rf_element} → {stage.target_bpm}" for stage in stages
-        )
-        if QMessageBox.question(
-            self,
-            "Start Transmission Recovery",
-            f"Scan and apply {len(stages)} selected RF phases in configured order?\n\n"
-            f"{mapping}",
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel,
-        ) != QMessageBox.Yes:
-            return
+        routes = None
+        if self.use_acceleration.isChecked():
+            try:
+                routes = {
+                    stage.rf_element: resolve_joint_phase_scan(
+                        self.context, stage, settings, self.response_specs[stage.rf_element],
+                    )
+                    for stage in stages
+                }
+                steps = self._confirm_joint_scan(stages, routes)
+                if steps is None:
+                    return
+                routes = {
+                    rf: route.with_corrector_step(steps[rf]) for rf, route in routes.items()
+                }
+            except (KeyError, ValueError, TypeError, OverflowError) as exc:
+                QMessageBox.warning(self, "Transmission Recovery", str(exc))
+                return
+            self.corrector_steps.update(steps)
+        else:
+            mapping = "\n".join(f"{stage.rf_element} → {stage.target_bpm}" for stage in stages)
+            if QMessageBox.question(
+                self,
+                "Start Transmission Recovery",
+                f"Scan and apply {len(stages)} selected RF phases in configured order?\n\n{mapping}",
+                QMessageBox.Yes | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            ) != QMessageBox.Yes:
+                return
 
         self.selected_rows = list(rows)
         self.last_result = None
@@ -451,6 +573,7 @@ class TransmissionRecoveryPage(QWidget):
         self.last_settings = settings
         self.current_task_index = None
         self.current_points = []
+        self.current_applied_index = None
         for row in range(len(self.candidates)):
             for column in range(3, self.ACCELERATION_COLUMN):
                 self.table.item(row, column).setText("—")
@@ -475,6 +598,7 @@ class TransmissionRecoveryPage(QWidget):
                 directory=run_dir,
                 callbacks=callbacks,
                 configuration_snapshot=self.config,
+                response_routes=routes,
             )
 
         self.worker = TransmissionRecoveryThread(runner_factory)
@@ -623,6 +747,8 @@ class TransmissionRecoveryPage(QWidget):
         amplitude.setDecimals(3)
         current = self._double_spin(0, 0, 100)
         current.setDecimals(3)
+        default_current_step = self.response_default_steps.get(stage.rf_element, 0)
+        current.setValue(self.corrector_steps.get(stage.rf_element, default_current_step))
         layout.addRow("LLRF AMP drop (percentage points)", amplitude)
         layout.addRow("Corrector step per side (A)", current)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
@@ -663,6 +789,7 @@ class TransmissionRecoveryPage(QWidget):
         except (KeyError, TypeError, ValueError) as exc:
             QMessageBox.warning(self, "Capture Test Data", str(exc))
             return
+        self.corrector_steps[stage.rf_element] = steps[1]
         run_dir = self.runtime_paths["runs_dir"] / make_runtime_run_id(
             "acceleration_capture", uuid4().hex[:8]
         )
@@ -792,9 +919,38 @@ class TransmissionRecoveryPage(QWidget):
             self.table.item(row, column).setText(value)
         message = record.get("error") or ""
         self.table.item(row, 7).setToolTip(str(message))
+        analysis = record.get("acceleration_analysis")
+        if analysis:
+            acceleration = self.table.item(row, self.ACCELERATION_COLUMN)
+            applied = record.get("status") == "applied"
+            retained = record.get("status") == "undetermined"
+            status = "undetermined"
+            if applied:
+                status = analysis["status"]
+            elif retained:
+                status = record.get("initial_phase_acceleration", "undetermined")
+            acceleration.setText(self.ACCELERATION_LABELS[status])
+            if applied:
+                acceleration.setToolTip(
+                    f"Applied BPM SUM {record['selected_sum']:.3f}\n"
+                    f"Corrector response {record['selected_response']:.4g} BPM units/A"
+                )
+            elif retained:
+                acceleration.setToolTip(f"Initial phase retained. {analysis['reason']}")
+            else:
+                acceleration.setToolTip(analysis.get("reason") or message)
+            if task_index == self.current_task_index:
+                self.current_points = list(record["points"])
+                self.current_applied_index = (
+                    record.get("selected_acquisition_index") if applied else None
+                )
+                self._draw_plot()
+        elif message and "response_snapshot" in record:
+            self.table.item(row, self.ACCELERATION_COLUMN).setToolTip(str(message))
         if record.get("status") == "scanning":
             self.current_task_index = task_index
             self.current_points = []
+            self.current_applied_index = None
             self.plot_title.setText(
                 f"{record['rf_element']} → {record['target_bpm']}"
             )
@@ -810,6 +966,7 @@ class TransmissionRecoveryPage(QWidget):
         if task_index != self.current_task_index:
             self.current_task_index = task_index
             self.current_points = []
+            self.current_applied_index = None
         self.current_points.append(dict(point))
         self._draw_plot()
 
@@ -920,14 +1077,38 @@ class TransmissionRecoveryPage(QWidget):
                 linewidth=1.8,
                 markersize=5,
             )
-            peak = max(ordered, key=lambda point: float(point["median_sum"]))
-            axes.scatter(
-                [float(peak["offset_deg"])],
-                [float(peak["median_sum"])],
-                color=self.palette["fit"],
-                s=55,
-                zorder=3,
-            )
+            if any("acceleration" in point for point in ordered):
+                for status, color in self.ACCELERATION_COLORS.items():
+                    classified = [point for point in ordered if point.get("acceleration") == status]
+                    if classified:
+                        axes.scatter(
+                            [point["offset_deg"] for point in classified],
+                            [point["median_sum"] for point in classified],
+                            color=color, label=self.ACCELERATION_LABELS[status], s=32, zorder=3,
+                        )
+                selected = next(
+                    (point for point in ordered if point["acquisition_index"] == self.current_applied_index),
+                    None,
+                )
+                if selected is not None:
+                    axes.scatter(
+                        [selected["offset_deg"]], [selected["median_sum"]],
+                        marker="*", color=self.ACCELERATION_COLORS["accelerating"],
+                        s=130, label="Applied phase", zorder=4,
+                    )
+                axes.legend(
+                    loc="best", facecolor=self.palette["plot"], edgecolor=self.palette["border"],
+                    labelcolor=self.palette["muted"],
+                )
+            else:
+                peak = max(ordered, key=lambda point: float(point["median_sum"]))
+                axes.scatter(
+                    [float(peak["offset_deg"])],
+                    [float(peak["median_sum"])],
+                    color=self.palette["fit"],
+                    s=55,
+                    zorder=3,
+                )
         self.plot.fig.tight_layout()
         self.plot.canvas.draw_idle()
 

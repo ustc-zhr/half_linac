@@ -350,8 +350,10 @@ def test_offscreen_check_uses_highlighted_row_and_invalidates_on_phase_change(
     assert page.check_button.parentWidget() is parameters
     fields = parameters.layout()
     sample_row, sample_column, _, _ = fields.getItemPosition(fields.indexOf(page.sample_interval))
+    joint_row, joint_column, _, _ = fields.getItemPosition(fields.indexOf(page.use_acceleration))
     check_row, check_column, _, _ = fields.getItemPosition(fields.indexOf(page.check_button))
-    assert (check_row, check_column) == (sample_row, sample_column + 1)
+    assert (joint_row, joint_column) == (sample_row, sample_column + 1)
+    assert (check_row, check_column) == (sample_row, sample_column + 2)
     assert page.check_status.mapTo(window, page.check_status.rect().bottomRight()).y() < 720
     assert not page.check_button.isEnabled()
     assert page.check_status.text() == "No calibrated path"

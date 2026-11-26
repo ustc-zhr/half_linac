@@ -147,7 +147,18 @@
           "capture_enabled": true,
           "corrector": "XC10",
           "bpm": "BPM10",
-          "conditions": [{"element": "QL16", "channel": "K1_total"}]
+          "conditions": [{"element": "QL16", "channel": "K1_total"}],
+          "phase_response": {
+            "amplitude": {"tolerance": 0.1},
+            "current": {"step": 0.2, "tolerance": 0.05},
+            "minimum_sum": 10000,
+            "minimum_transmission_sum": 10000,
+            "maximum_relative_sum_change": 0.2,
+            "high_sum_fraction": 0.95,
+            "pair_tolerance_s": 0.001,
+            "optics_current_tolerance_a": 0.1,
+            "maximum_relative_power_change": 0.05
+          }
         }
       },
       {"rf_element": "LLRF03", "target_bpm": "BPM12"},
@@ -168,7 +179,87 @@
       {"rf_element": "LLRF18", "target_bpm": "BPM19"},
       {"rf_element": "LLRF19", "target_bpm": "BPM20"},
       {"rf_element": "LLRF20", "target_bpm": "BPM20"}
-    ]
+    ],
+    "phase_response_candidates": {
+      "BPM12": [
+        {
+          "corrector": "XC13",
+          "bpm": "BPM13",
+          "quadrupoles": ["QL21"],
+          "intervening_rf": ["LLRF05", "LLRF06"]
+        }
+      ],
+      "BPM13": [
+        {
+          "corrector": "XC14",
+          "bpm": "BPM14",
+          "quadrupoles": ["QL22"],
+          "intervening_rf": ["LLRF07", "LLRF08"]
+        }
+      ],
+      "BPM14": [
+        {
+          "corrector": "XC15",
+          "bpm": "BPM15",
+          "quadrupoles": ["QL23"],
+          "intervening_rf": ["LLRF09", "LLRF10"]
+        }
+      ],
+      "BPM15": [
+        {
+          "corrector": "XC16",
+          "bpm": "BPM16",
+          "quadrupoles": ["QL24"],
+          "intervening_rf": ["LLRF11", "LLRF12"]
+        }
+      ],
+      "BPM16": [
+        {
+          "corrector": "XC17",
+          "bpm": "BPM17",
+          "quadrupoles": ["QL25"],
+          "intervening_rf": ["LLRF13", "LLRF14"]
+        }
+      ],
+      "BPM17": [
+        {
+          "corrector": "XC18",
+          "bpm": "BPM18",
+          "quadrupoles": ["QL26"],
+          "intervening_rf": ["LLRF15", "LLRF16"]
+        }
+      ],
+      "BPM18": [
+        {
+          "corrector": "XC19",
+          "bpm": "BPM19",
+          "quadrupoles": ["QL27"],
+          "intervening_rf": ["LLRF17", "LLRF18"]
+        }
+      ],
+      "BPM19": [
+        {
+          "corrector": "XC20",
+          "bpm": "BPM20",
+          "quadrupoles": ["QT01"],
+          "intervening_rf": ["LLRF19", "LLRF20"]
+        }
+      ],
+      "BPM20": [
+        {
+          "corrector": "XC21",
+          "bpm": "BPM21",
+          "quadrupoles": ["QT02", "QT03", "QT04"],
+          "intervening_rf": []
+        },
+        {
+          "corrector": "XC22",
+          "bpm": "BPM22",
+          "quadrupoles": ["QT05", "QT06"],
+          "intervening_rf": []
+        }
+      ]
+    }
   },
   "write_control": {"vm": "blocked", "real": "allowed"},
   "real_status": "write_smoke_passed"
