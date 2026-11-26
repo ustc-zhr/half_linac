@@ -153,6 +153,36 @@ class FrameworkTests(unittest.TestCase):
         self.assertFalse(self.host._optimization_locked)
         self.assertTrue(self.dialog.tabs.tabBar().isEnabled())
 
+    def test_m0_one_initial_k1_per_end_resumes_from_archive(self):
+        points = self.page.initial_points_per_end
+        self.assertEqual(points.minimum(), 3)
+        self.page.model.setCurrentIndex(self.page.model.findData('M0'))
+        self.assertEqual(self.page.model.currentText(), 'Direct variance GP (M0)')
+        self.assertEqual(points.minimum(), 1)
+        points.setValue(1)
+        self.start_paused('verification')
+
+        workflow = self.page.workflow
+        self.assertEqual(workflow.status, 'paused', workflow.error)
+        self.assertEqual(workflow.config.model, 'M0')
+        self.assertEqual(workflow.config.initial_points_per_end, 1)
+        self.assertEqual(len(workflow.core.initial_design), 5)
+        initialization = [record for record in workflow.records if record['phase'] == 'initialization']
+        self.assertEqual([record['candidate_index'] for record in initialization], [0, 4])
+
+        self.page.model.setCurrentIndex(self.page.model.findData('transport_moments'))
+        self.assertEqual(points.value(), 3)
+        with patch('half_linac.src.apps.emit_measure.infobax_page.QFileDialog.getOpenFileName',
+                   return_value=(str(workflow.path), '')):
+            self.page.load_run()
+        self.assertEqual(self.page.model.currentData(), 'M0')
+        self.assertEqual(self.page.model.currentText(), 'Direct variance GP (M0)')
+        self.assertEqual(points.value(), 1)
+        self.dialog.start()
+        self.complete()
+        self.assertEqual(self.page.workflow.status, 'completed', self.page.workflow.error)
+        self.assertEqual(len(self.page.workflow.verification), 3)
+
     def test_custom_candidate_and_initialization_counts_resume_from_archive(self):
         self.paras.k1_steps = 4
         self.page.current_candidate_count.setValue(7)

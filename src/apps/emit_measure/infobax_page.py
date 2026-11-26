@@ -8,7 +8,7 @@ from queue import Queue, Empty
 from threading import Event
 from uuid import uuid4
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QSpinBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFileDialog, QAbstractItemView)
@@ -19,7 +19,10 @@ from half_linac.src.shared.machine_profile import resolve_app_runtime_paths
 from .control import emittance_lock
 from .infobax_gui import WorkflowWorker
 from .infobax_framework import archived_variables, build_framework_workflow, load_framework_recovery
-from .infobax_workflow import DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow, WorkflowConfig
+from .infobax_workflow import (
+    DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow, WorkflowConfig,
+    minimum_initial_points_per_end,
+)
 
 
 class IntegratedInfoBAXWorker(WorkflowWorker):
@@ -103,7 +106,13 @@ class InfoBAXPage(QWidget):
         box=QVBoxLayout(self)
         row=QHBoxLayout()
         row.addWidget(QLabel("Posterior"))
-        self.model=QComboBox();self.model.addItems(["transport_moments","M0"]);row.addWidget(self.model)
+        self.model = QComboBox()
+        self.model.addItem("transport_moments", "transport_moments")
+        self.model.addItem("Direct variance GP (M0)", "M0")
+        self.model.setItemData(self.model.findData("M0"),
+                               "Gaussian process for beam-size variance (σ²) over solenoid currents and K1.",
+                               Qt.ToolTipRole)
+        row.addWidget(self.model)
         row.addWidget(QLabel("Active query limit"))
         self.active = QSpinBox()
         self.active.setRange(0, 2**31 - 1)
@@ -120,11 +129,11 @@ class InfoBAXPage(QWidget):
         self.current_candidate_count.setValue(DEFAULT_CURRENT_CANDIDATES)
         self.current_candidate_count.setToolTip("Number of candidate current settings, including the starting settings for all selected solenoids.")
         self.initial_points_per_end = QSpinBox()
-        self.initial_points_per_end.setRange(3, 2**31 - 1)
+        self.initial_points_per_end.setRange(minimum_initial_points_per_end(self.model.currentData()), 2**31 - 1)
         self.initial_points_per_end.setValue(DEFAULT_INITIAL_POINTS_PER_END)
         self.initial_points_per_end.setToolTip(
             "K1 points at each of the two most separated current candidates. "
-            "Choose 3 to the number of K1 candidates in the main-window grid."
+            "Minimum: 1 for M0 or 3 for transport_moments. Maximum: the main-window K1 grid size."
         )
         for label, control in (("Current candidates", self.current_candidate_count),
                                ("Initial K1 points per end", self.initial_points_per_end)):
@@ -147,11 +156,15 @@ class InfoBAXPage(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.cellDoubleClicked.connect(self.open_diagnostics)
         box.addWidget(self.table,1)
-        for signal in (self.model.currentTextChanged,self.active.valueChanged,
+        self.model.currentIndexChanged.connect(self.update_initial_points_minimum)
+        for signal in (self.model.currentIndexChanged,self.active.valueChanged,
                        self.current_candidate_count.valueChanged,self.initial_points_per_end.valueChanged):
             signal.connect(self.settings_changed)
         self.style_plot()
         self.refresh_note()
+
+    def update_initial_points_minimum(self):
+        self.initial_points_per_end.setMinimum(minimum_initial_points_per_end(self.model.currentData()))
 
     def style_plot(self):
         palette=self.dialog.host._palette()
@@ -206,7 +219,7 @@ class InfoBAXPage(QWidget):
             if not resume: self.workflow=self.saved=None;self.table.setRowCount(0)
             self.paras=paras
             self.launch(IntegratedInfoBAXWorker(paras,variables,run_dir,plane=d.plane.currentData(),
-                model=self.model.currentText(),active_queries=self.active.value(),max_minutes=d.minutes.value(),
+                model=self.model.currentData(),active_queries=self.active.value(),max_minutes=d.minutes.value(),
                 current_candidate_count=self.current_candidate_count.value(),initial_points_per_end=self.initial_points_per_end.value(),
                 solenoid_settle=d.solenoid_settle.value(),resume=resume,parent=self))
         except Exception as exc: d.error(str(exc))
@@ -359,7 +372,8 @@ class InfoBAXPage(QWidget):
                             d.variables.item(row,4).setText(str(variables[name].high))
                     d.plane.setCurrentIndex(d.plane.findData(cfg["plane"]));d.minutes.setValue(cfg["max_minutes"])
                     d.solenoid_settle.setValue(settings["solenoid_settle"])
-                    self.model.setCurrentText(cfg["model"]);self.active.setValue(cfg["active_queries"])
+                    self.model.setCurrentIndex(self.model.findData(cfg["model"]))
+                    self.active.setValue(cfg["active_queries"])
                     self.current_candidate_count.setValue(cfg.get("current_candidate_count", DEFAULT_CURRENT_CANDIDATES))
                     self.initial_points_per_end.setValue(cfg.get("initial_points_per_end", DEFAULT_INITIAL_POINTS_PER_END))
             self.render()

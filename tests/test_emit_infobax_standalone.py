@@ -288,6 +288,13 @@ class WorkflowTests(unittest.TestCase):
             config(current_candidate_count=1)
         with self.assertRaisesRegex(ValueError, 'Initial K1 points'):
             config(initial_points_per_end=len(self.cfg.scan_values) + 1)
+        with self.assertRaisesRegex(ValueError, 'between 3'):
+            config(model='transport_moments', initial_points_per_end=2)
+        with self.assertRaisesRegex(ValueError, 'between 1'):
+            config(model='M0', initial_points_per_end=0)
+        two_points = config(model='M0', initial_points_per_end=2).initial_scan_indices()
+        self.assertEqual(len(two_points), 2)
+        self.assertTrue(set(two_points) < set(config(model='M0').initial_scan_indices()))
         with self.assertRaises(ValueError):
             WorkflowConfig(-1,1,(-1.,0.,1.),((1.,0.),)*3,225)
 

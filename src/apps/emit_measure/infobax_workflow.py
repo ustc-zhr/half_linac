@@ -28,6 +28,10 @@ DEFAULT_CURRENT_CANDIDATES = 5
 DEFAULT_INITIAL_POINTS_PER_END = 3
 
 
+def minimum_initial_points_per_end(model):
+    return 1 if model == "M0" else 3
+
+
 def current_vector(value):
     return tuple(value) if isinstance(value, (tuple, list)) else (value,)
 
@@ -69,8 +73,9 @@ class WorkflowConfig:
             raise ValueError("At least three distinct finite K1 values are required")
         if type(self.current_candidate_count) is not int or self.current_candidate_count < 2:
             raise ValueError("At least two current candidates are required")
-        if type(self.initial_points_per_end) is not int or not 3 <= self.initial_points_per_end <= len(scans):
-            raise ValueError("Initial K1 points per end must be between 3 and the number of K1 candidates")
+        minimum = minimum_initial_points_per_end(self.model)
+        if type(self.initial_points_per_end) is not int or not minimum <= self.initial_points_per_end <= len(scans):
+            raise ValueError(f"Initial K1 points per end must be between {minimum} and the number of K1 candidates for {self.model}")
         p = np.asarray(projections)
         if p.shape != (len(scans), 2) or not np.all(np.isfinite(p)):
             raise ValueError("Transport projections must match scan values")
@@ -96,13 +101,14 @@ class WorkflowConfig:
             raise ValueError("Transport design is rank deficient")
         scaled = design / scales
         _, _, pivots = qr(scaled.T, pivoting=True, mode="economic")
-        selected = sorted(int(i) for i in pivots[:3])
+        independent = [int(i) for i in pivots[:3]]
         if (np.linalg.matrix_rank(scaled) != 3
                 or np.linalg.cond(scaled) > DEFAULT_MAX_CONDITION_NUMBER
-                or np.linalg.cond(scaled[selected]) > DEFAULT_MAX_CONDITION_NUMBER):
+                or np.linalg.cond(scaled[sorted(independent)]) > DEFAULT_MAX_CONDITION_NUMBER):
             raise ValueError("Transport design is singular or ill-conditioned")
 
-        # Keep the independent QR points and fill gaps for extra measurements.
+        # Use QR pivot order for sparse M0 initialization and fill gaps beyond three points.
+        selected = sorted(independent[:self.initial_points_per_end])
         scans = np.asarray(self.scan_values)
         distances = np.min(np.abs(scans[:, None] - scans[selected]), axis=1)
         while len(selected) < self.initial_points_per_end:
