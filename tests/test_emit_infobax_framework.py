@@ -5,6 +5,7 @@ os.environ.setdefault('MPLCONFIGDIR','/tmp/emit-framework-test-mpl')
 import sys,time,json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -17,6 +18,7 @@ from PyQt5.QtCore import Qt
 from half_linac.src.apps.emit_measure import main
 from half_linac.src.shared.machine_profile import load_app_context,resolve_channel
 from half_linac.src.apps.emit_measure.infobax_framework import grid_for_parameters
+from half_linac.src.apps.emit_measure.infobax_workflow import InfoBAXWorkflow
 
 
 class Model:
@@ -109,14 +111,23 @@ class FrameworkTests(unittest.TestCase):
         self.assertTrue(predicate(),self.dialog.status.text())
 
     def complete(self):
-        deadline=time.monotonic()+25
-        while self.page.busy() and time.monotonic()<deadline:
-            self.app.processEvents()
-            if self.page.approve_button.isEnabled():self.page.approve_current()
-            time.sleep(.003)
-        self.pump(lambda:not self.page.busy())
+        self.pump(lambda: not self.page.busy(), timeout=25)
+
+    def start_paused(self, phase='baseline'):
+        full_scan = InfoBAXWorkflow._full_scan_phase
+
+        def pause_before_scan(workflow, candidate, scan_phase, records):
+            if scan_phase == phase:
+                workflow.request_pause()
+                workflow.check()
+            return full_scan(workflow, candidate, scan_phase, records)
+
+        with patch.object(InfoBAXWorkflow, '_full_scan_phase', pause_before_scan):
+            self.dialog.start()
+            self.complete()
 
     def test_actual_scan_thread_full_loop_without_frame_id(self):
+        self.page.active.setValue(1)
         self.dialog.start();self.complete()
         w=self.page.workflow
         self.assertIsNotNone(w,self.dialog.status.text())
@@ -125,7 +136,8 @@ class FrameworkTests(unittest.TestCase):
         self.assertEqual(w.baseline_fit['source'],'existing_scan')
         self.assertEqual(w.verification_fit['source'],'existing_scan')
         self.assertEqual(len(w.baseline),3);self.assertEqual(len(w.verification),3)
-        self.assertEqual(len(w.records),12)
+        self.assertEqual(len(w.records),13)
+        self.assertEqual(sum(row['phase'] == 'active' for row in w.records), 1)
         self.assertNotIn('current_candidate_count', w.payload()['config'])
         self.assertNotIn('initial_points_per_end', w.payload()['config'])
         self.assertEqual(self.values[self.pvs['sol']],1.)
@@ -141,17 +153,7 @@ class FrameworkTests(unittest.TestCase):
         self.paras.k1_steps = 4
         self.page.current_candidate_count.setValue(7)
         self.page.initial_points_per_end.setValue(4)
-        self.dialog.start()
-        for _ in range(9):
-            self.pump(lambda: self.page.approve_button.isEnabled() or not self.page.busy())
-            self.assertTrue(self.page.approve_button.isEnabled(), self.dialog.status.text())
-            self.assertFalse(self.page.current_candidate_count.isEnabled())
-            self.assertFalse(self.page.initial_points_per_end.isEnabled())
-            self.page.approve_current()
-        self.pump(lambda: self.page.approve_button.isEnabled() or not self.page.busy())
-        self.assertIn('verification', self.page.proposal.text())
-        self.page.stop(pause=True)
-        self.pump(lambda: not self.page.busy())
+        self.start_paused('verification')
 
         workflow = self.page.workflow
         self.assertEqual(workflow.status, 'paused')
@@ -178,19 +180,32 @@ class FrameworkTests(unittest.TestCase):
         self.complete()
         self.assertEqual(self.page.workflow.status, 'completed', self.page.workflow.error)
 
-    def test_waiting_has_no_writes_and_pause_reapproval(self):
-        self.pv_writes.clear();self.dialog.start()
-        self.pump(lambda:self.page.approve_button.isEnabled())
-        self.assertEqual(self.pv_writes,[])
-        self.assertFalse(self.dialog.tabs.tabBar().isEnabled())
-        self.dialog.tabs.setCurrentIndex(0)
-        self.assertEqual(self.dialog.tabs.currentIndex(),1)
-        self.page.stop(pause=True);self.pump(lambda:not self.page.busy())
+    def test_pause_before_motion_and_resume_without_confirmation(self):
+        before_scan = Event()
+
+        def wait_for_pause(workflow, *_args):
+            before_scan.set()
+            while not workflow.pause_requested.wait(.01):
+                workflow.check()
+            workflow.check()
+
+        self.pv_writes.clear()
+        with patch.object(InfoBAXWorkflow, '_full_scan_phase', wait_for_pause):
+            self.dialog.start()
+            self.pump(before_scan.is_set)
+            self.assertEqual(self.pv_writes, [])
+            self.assertFalse(self.dialog.tabs.tabBar().isEnabled())
+            self.assertFalse(self.page.current_candidate_count.isEnabled())
+            self.assertFalse(self.page.initial_points_per_end.isEnabled())
+            self.dialog.tabs.setCurrentIndex(0)
+            self.assertEqual(self.dialog.tabs.currentIndex(), 1)
+            self.page.stop(pause=True)
+            self.complete()
         self.assertEqual(self.page.workflow.status,'paused')
         self.assertEqual(self.page.workflow.restoration_status,'succeeded')
-        self.dialog.start();self.pump(lambda:self.page.approve_button.isEnabled() or not self.page.busy())
-        self.assertTrue(self.page.approve_button.isEnabled(),self.dialog.status.text())
-        self.page.stop();self.pump(lambda:not self.page.busy())
+        self.dialog.start()
+        self.complete()
+        self.assertEqual(self.page.workflow.status, 'completed', self.page.workflow.error)
 
     def test_main_frame_count_is_validated_before_writes(self):
         self.paras.samples=1
@@ -218,8 +233,7 @@ class FrameworkTests(unittest.TestCase):
                     time.sleep(.15)
             return original(machine,directory,completed,completed_point,lease)
         with patch.object(FrameworkInfoBAXMachine,'scan_parameters',parameters_with_pause):
-            self.dialog.start();self.pump(lambda:self.page.approve_button.isEnabled())
-            self.page.approve_current();self.pump(lambda:not self.page.busy())
+            self.dialog.start();self.complete()
         w=self.page.workflow
         self.assertEqual(w.status,'paused',w.error)
         self.assertEqual(len(w.baseline),1)
@@ -234,10 +248,9 @@ class FrameworkTests(unittest.TestCase):
         self.assertEqual(len(baseline),3)
 
     def test_restore_failure_locks_then_manual_recovery_unlocks(self):
-        self.dialog.start();self.pump(lambda:self.page.approve_button.isEnabled())
         original=main.epics.caput.side_effect
         main.epics.caput.side_effect=lambda pv,v,*a,**kw:0 if pv==self.pvs['sol'] else original(pv,v,*a,**kw)
-        self.page.stop();self.pump(lambda:not self.page.busy())
+        self.start_paused()
         self.assertTrue(self.dialog.fault)
         self.assertFalse(self.dialog.apply_button.isEnabled())
         self.assertTrue(self.dialog.restore_button.isEnabled())
@@ -249,16 +262,14 @@ class FrameworkTests(unittest.TestCase):
         self.assertEqual(self.page.workflow.restoration_status,'succeeded')
 
     def test_changed_measurement_settings_reject_resume_without_writes(self):
-        self.dialog.start();self.pump(lambda:self.page.approve_button.isEnabled())
-        self.page.stop(pause=True);self.pump(lambda:not self.page.busy())
+        self.start_paused()
         self.paras.samples=4;self.pv_writes.clear()
         self.dialog.start();self.pump(lambda:not self.page.busy())
         self.assertIn('settings differ',self.dialog.status.text())
         self.assertEqual(self.pv_writes,[])
 
     def test_archive_recovery_does_not_require_camera_or_main_sampling_settings(self):
-        self.dialog.start();self.pump(lambda:self.page.approve_button.isEnabled())
-        self.page.stop(pause=True);self.pump(lambda:not self.page.busy())
+        self.start_paused()
         w=self.page.workflow
         saved=w.payload();saved.update(run_dir=str(w.run_dir))
         self.page.workflow=None;self.page.saved=saved

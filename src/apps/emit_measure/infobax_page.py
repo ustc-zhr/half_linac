@@ -78,7 +78,7 @@ class IntegratedInfoBAXWorker(WorkflowWorker):
             with emittance_lock(self.paras.app_context.profile.machine.id,
                                 self.paras.app_context.control_backend.name) as lease:
                 self.workflow=build_framework_workflow(self.paras,self.variable,self.run_dir,
-                    **self.arguments,approve=self.approve,progress=self.progress.emit,
+                    **self.arguments,automatic_measurements=True,progress=self.progress.emit,
                     full_scan=self.full_scan,resume=self.resume,lease=lease)
                 self.workflow.machine.frame_progress=self.frame.emit
                 if self.abort.is_set():
@@ -133,8 +133,6 @@ class InfoBAXPage(QWidget):
         self.note=QLabel();self.note.setWordWrap(True);box.addWidget(self.note)
         self.proposal=QLabel("Baseline: full scan → endpoint initialization → model-selected queries → full verification")
         self.proposal.setWordWrap(True);box.addWidget(self.proposal)
-        self.approve_button=QPushButton("Confirm current proposal");self.approve_button.setEnabled(False)
-        self.approve_button.clicked.connect(self.approve_current);box.addWidget(self.approve_button)
         self.posterior=QLabel("Best-workpoint probabilities: —");self.posterior.setWordWrap(True);box.addWidget(self.posterior)
         self.figure=Figure(figsize=(7,2.5),tight_layout=True)
         self.canvas=FigureCanvasQTAgg(self.figure);self.axes=self.figure.add_subplot(111)
@@ -213,7 +211,7 @@ class InfoBAXPage(QWidget):
         self.error=None;self.worker=worker
         self.dialog.lock_host()
         worker.ready.connect(self.ready);worker.progress.connect(self.show_progress)
-        worker.requested.connect(self.propose);worker.scan_requested.connect(self.start_scan)
+        worker.scan_requested.connect(self.start_scan)
         worker.cancel_scan.connect(self.cancel_scan);worker.frame.connect(self.show_frame)
         worker.failed.connect(self.failed);worker.finished.connect(self.finished)
         worker.start();self.dialog.update_buttons()
@@ -221,15 +219,6 @@ class InfoBAXPage(QWidget):
     def ready(self,workflow):
         self.workflow=workflow;self.saved=None
         self.dialog.status.setText(f"InfoBAX · {workflow.run_dir}")
-
-    def propose(self,p):
-        details=(f"K1={p['scan_k1']:g}" if "scan_k1" in p else f"full grid: {list(p['scan_values'])}")
-        self.proposal.setText(f"Awaiting approval · {p['phase']} · I={p['current_a']:g} A · {details}")
-        self.approve_button.setEnabled(not self.worker.abort.is_set())
-
-    def approve_current(self):
-        self.approve_button.setEnabled(False)
-        if self.busy(): self.worker.decide()
 
     def start_scan(self,request):
         self.request=request
@@ -263,15 +252,17 @@ class InfoBAXPage(QWidget):
         if self.scan is not None: self.scan.stop()
 
     def stop(self,pause=False):
-        self.approve_button.setEnabled(False)
         if self.busy(): self.worker.stop(pause=pause);self.cancel_scan()
 
     def show_progress(self,payload):
         self.render()
-        if payload.get("status")!="awaiting_approval":
-            self.approve_button.setEnabled(False)
+        request = payload.get("request")
+        if request:
+            details = (f"K1={request['scan_k1']:g}" if "scan_k1" in request
+                       else f"{request['remaining_points']} K1 points")
+            self.proposal.setText(f"{request['phase']} · I={request['current_a']:g} A · {details}")
+        else:
             self.proposal.setText(f"InfoBAX · {payload.get('status')} · {payload.get('record_count',0)} point records")
-            self.dialog.status.setText(f"InfoBAX · {payload.get('status')} · {payload.get('record_count',0)} point records · {payload.get('error') or ''}")
 
     def render(self):
         state=self.state()
@@ -302,7 +293,7 @@ class InfoBAXPage(QWidget):
         if self.workflow:self.workflow.confirmed=False
 
     def finished(self):
-        self.approve_button.setEnabled(False);self.render()
+        self.render()
         state=self.state()
         self.dialog.fault=bool(state and state["restoration_status"] in {"failed","pending"})
         if not self.dialog.fault:self.dialog.unlock_host()

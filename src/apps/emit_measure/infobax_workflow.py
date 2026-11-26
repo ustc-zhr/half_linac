@@ -128,17 +128,18 @@ def current_candidates(low, high, initial, count=DEFAULT_CURRENT_CANDIDATES):
 class InfoBAXWorkflow:
     """Persist every intent before motion; always restore under the control lease.
 
-    ``approve(request, check)`` must block cancellably and return True only for
-    explicit approval. Omitting the callback rejects execution, including Fake.
+    With ``automatic_measurements=True``, starting the workflow authorizes its
+    measurements. Otherwise ``approve(request, check)`` must approve each request.
     """
     filename = "infobax_workflow.json"
 
-    def __init__(self, config, machine, run_dir, *, approve=None, progress=None,
+    def __init__(self, config, machine, run_dir, *, approve=None, automatic_measurements=False, progress=None,
                  numerical_config=None, clock=time.monotonic, full_scan=None, control_lease=None):
         self.config, self.machine, self.run_dir = config, machine, Path(run_dir)
         self.full_scan, self.control_lease = full_scan, control_lease
         self.scan_results = {}
         self.approve, self.progress, self.clock = approve, progress, clock
+        self.automatic_measurements = automatic_measurements
         self.numerical_config = numerical_config or InfoBAXConfig()
         self.cancelled, self.pause_requested = Event(), Event()
         self.status, self.error, self.restoration_status = "ready", None, "not_required"
@@ -233,17 +234,22 @@ class InfoBAXWorkflow:
             finally:
                 fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
-    def _approval(self, request):
+    def _begin_measurement(self, request):
         self.check()
-        expected = self.machine.snapshot()
-        self.status = "awaiting_approval"
-        self.save()
-        self.emit(request=request)
-        if self.approve is None or not self.approve(request, self.check):
-            raise WorkflowInterrupted("stopped")
-        self.check()
-        self.machine.verify_snapshot(expected)
+        if not self.automatic_measurements:
+            expected = self.machine.snapshot()
+            self.status = "awaiting_approval"
+            self.save()
+            self.emit(request=request)
+            if self.approve is None or not self.approve(request, self.check):
+                raise WorkflowInterrupted("stopped")
+            self.check()
+            self.machine.verify_snapshot(expected)
         self.status = request["phase"]
+        if self.automatic_measurements:
+            self.save()
+            self.emit(request=request)
+            self.check()
 
     def _point(self, candidate, scan_index, phase, *, approved=False, suggestion=None):
         self.check()
@@ -259,7 +265,7 @@ class InfoBAXWorkflow:
         self.save()
         try:
             if not approved:
-                self._approval(record.copy())
+                self._begin_measurement(record.copy())
             self.check()
             if self._last_confirmed is not None:
                 self.machine.verify_snapshot(self._last_confirmed)
@@ -313,6 +319,8 @@ class InfoBAXWorkflow:
                 records.append(self._point(candidate, i, phase, approved=True))
                 self.save()
             return self._fit(records)
+        if self.automatic_measurements:
+            self.machine.verify_snapshot(self._last_confirmed)
         self.machine.apply_current(candidate)
         completed = [r["measurement"]["metadata"]["point_result"] for r in records]
         def commit_point(result):
@@ -388,9 +396,9 @@ class InfoBAXWorkflow:
                 initial_index = self.candidates.index(self.initial["current_a"])
                 n = len(self.config.scan_values)
                 if len(self.baseline) < n:
-                    self._approval({"phase": "baseline", "current_a": self.initial["current_a"],
-                                    "scan_values": self.config.scan_values[len(self.baseline):],
-                                    "remaining_points": n-len(self.baseline)})
+                    self._begin_measurement({"phase": "baseline", "current_a": self.initial["current_a"],
+                                             "scan_values": self.config.scan_values[len(self.baseline):],
+                                             "remaining_points": n-len(self.baseline)})
                     self.baseline_fit = self._full_scan_phase(initial_index, "baseline", self.baseline)
                 elif self.baseline_fit is None:
                     self.baseline_fit = self._full_scan_phase(initial_index, "baseline", self.baseline)
@@ -420,9 +428,9 @@ class InfoBAXWorkflow:
                     self.status = "invalid_recommendation"
                     raise WorkflowInterrupted(self.status)
                 if len(self.verification) < n:
-                    self._approval({"phase": "verification", "current_a": self.candidates[candidate],
-                                    "scan_values": self.config.scan_values[len(self.verification):],
-                                    "remaining_points": n-len(self.verification)})
+                    self._begin_measurement({"phase": "verification", "current_a": self.candidates[candidate],
+                                             "scan_values": self.config.scan_values[len(self.verification):],
+                                             "remaining_points": n-len(self.verification)})
                     self.verification_fit = self._full_scan_phase(candidate, "verification", self.verification)
                 elif self.verification_fit is None:
                     self.verification_fit = self._full_scan_phase(candidate, "verification", self.verification)

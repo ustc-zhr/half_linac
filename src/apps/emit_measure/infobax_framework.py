@@ -131,7 +131,8 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
                              active_queries=3,max_minutes=120,solenoid_settle=2,
                              current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
                              initial_points_per_end=DEFAULT_INITIAL_POINTS_PER_END,
-                             approve=None,progress=None,full_scan=None,resume=False,lease=None):
+                             approve=None,automatic_measurements=False,progress=None,full_scan=None,
+                             resume=False,lease=None):
     if paras.samples < 3:
         raise ValueError("InfoBAX requires at least 3 main-window Samples per point")
     if paras.defer_measurement_prepare:
@@ -169,7 +170,8 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
             plane,model,active_queries,max_minutes,json.dumps(settings,sort_keys=True,allow_nan=False),
             current_candidate_count=current_candidate_count,initial_points_per_end=initial_points_per_end)
     machine=FrameworkInfoBAXMachine(paras,variable,config,solenoid_settle=solenoid_settle)
-    kwargs=dict(approve=approve,progress=progress,full_scan=full_scan,control_lease=lease)
+    kwargs=dict(approve=approve,automatic_measurements=automatic_measurements,progress=progress,
+                full_scan=full_scan,control_lease=lease)
     if resume:
         return InfoBAXWorkflow.load(config,machine,run_dir,**kwargs)
     return InfoBAXWorkflow(config,machine,run_dir,**kwargs)
