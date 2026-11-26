@@ -41,7 +41,7 @@ class EpicsIO:
             self.pvs[name] = self.epics.PV(name, auto_monitor=False)
         pv = self.pvs[name]
         if not pv.wait_for_connection(timeout=1):
-            raise RuntimeError(f'PV 未连接: {name}')
+            raise RuntimeError(f'Could not connect to PV {name}.')
         return pv
 
     def read(self, m):
@@ -49,10 +49,10 @@ class EpicsIO:
 
     def write(self, m, value):
         if not m.low <= finite(value) <= m.high:
-            raise ValueError(f'{m.name}: 写入越限')
+            raise ValueError(f'{m.name} write is outside the cycle limits.')
         pv = self.pv(m.set_pv)
         if not pv.write_access or pv.put(value, wait=True, timeout=1) != 1:
-            raise RuntimeError(f'PV 写入失败: {m.set_pv}')
+            raise RuntimeError(f'Write failed for PV {m.set_pv}.')
 
     def close(self):
         for pv in self.pvs.values():
@@ -65,19 +65,22 @@ def run_cycles(magnets, parameters, io, stop, report, record=lambda event: None)
 
     def check_stop():
         if stop.is_set():
-            raise Stopped('已停止后续写入；电源可能继续到最后设定值')
+            raise Stopped('Writes stopped. Supplies may still reach their last commanded setpoints.')
 
     # Validate every initial value before making any writes.
     for group in groups:
         check_stop()
         m = group[0]
         setpoint, readback = io.read(m)
-        cycle = Cycle(m.low, m.high, setpoint, readback, parameters, time.monotonic())
+        try:
+            cycle = Cycle(m.low, m.high, setpoint, readback, parameters, time.monotonic())
+        except ValueError as exc:
+            raise ValueError(f'{m.name}: {exc}') from exc
         states.append((group, cycle))
         record(dict(event='initial', magnets=[x.name for x in group], set_pv=m.set_pv,
                     read_pv=m.read_pv, initial=cycle.initial, low=m.low, high=m.high))
         for member in group:
-            report(member.name, cycle.initial, setpoint, readback, '准备')
+            report(member.name, cycle.initial, setpoint, readback, cycle.status)
     while any(not cycle.done for _, cycle in states):
         check_stop()
         for group, cycle in states:

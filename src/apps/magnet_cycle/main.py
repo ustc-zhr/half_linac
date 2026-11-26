@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 import sys
@@ -13,18 +13,42 @@ sys.path.insert(0, str(ROOT))
 from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                            QLabel, QPushButton, QComboBox, QDoubleSpinBox, QSpinBox,
-                            QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox,
-                            QFormLayout, QMessageBox)
+from PyQt5.QtCore import QSignalBlocker, Qt, QThread, pyqtSignal
+from PyQt5.QtGui import QColor, QFontDatabase, QPalette
+from PyQt5.QtWidgets import (
+    QApplication, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFrame,
+    QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox,
+    QPlainTextEdit, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
+)
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import load_app_context, require_workflow_write_allowed
 from half_linac.src.shared.machine_profile.control_lock import EnergyControlLock
 from half_linac.src.shared.machine_profile.app_runtime import new_app_run_dir
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
-from half_linac.src.apps.magnet_cycle.model import Parameters
-from half_linac.src.apps.magnet_cycle.profile_runtime import KINDS, load_magnets
+from half_linac.src.apps.magnet_cycle.model import COMPLETE, READY, Parameters
+from half_linac.src.apps.magnet_cycle.profile_runtime import KINDS, group_magnets, load_magnets
 from half_linac.src.apps.magnet_cycle.runner import Simulator, EpicsIO, Stopped, run_cycles
+
+
+LOWER_COLUMN = 2
+UPPER_COLUMN = 3
+STATUS_COLUMN = 7
+ENDPOINT_COLUMNS = {LOWER_COLUMN: 'lower', UPPER_COLUMN: 'upper'}
+EMPTY = '—'
+
+THEMES = {
+    'dark': {
+        'window': '#0f1519', 'panel': '#172027', 'base': '#121b21',
+        'border': '#31434e', 'text': '#e6edf2', 'muted': '#9eafbb',
+        'accent': '#45d0bc', 'action': '#1a5851', 'warning': '#e4b86f',
+    },
+    'light': {
+        'window': '#f2ede5', 'panel': '#f5f0e8', 'base': '#fffdf9',
+        'border': '#d5cbbd', 'text': '#2c3942', 'muted': '#5d686b',
+        'accent': '#216b5c', 'action': '#275e52', 'warning': '#875513',
+    },
+}
 
 
 class Worker(QThread):
@@ -39,11 +63,11 @@ class Worker(QThread):
     def run(self):
         io = None
         lock = None
-        message = '完成：已恢复初始设定'
+        message = 'Cycle complete. Initial setpoints restored.'
         try:
             mode = self.context.control_backend.name
             if not self.simulate:
-                require_workflow_write_allowed(self.context, 'magnet_cycle', 'Magnet cycle')
+                require_workflow_write_allowed(self.context, 'magnet_cycle', 'Magnet Cycle')
                 lock = EnergyControlLock(Path('/tmp') / f'half_linac_{self.context.machine.id}_{mode}_magnet_cycle.lock', {'app': 'magnet_cycle'})
                 lock.acquire()
             folder = new_app_run_dir(Path(__file__).parent, self.context, kind='simulation' if self.simulate else 'cycle')
@@ -61,23 +85,23 @@ class Worker(QThread):
                     record(dict(event='stopped' if isinstance(exc, Stopped) else 'error', reason=str(exc)))
                     raise
                 record(dict(event='complete'))
-            message += f'；日志：{folder}'
+            message += f'\nLog: {folder}'
         except Stopped as exc:
-            message = str(exc)
+            message = 'Simulation stopped.' if self.simulate else str(exc)
         except Exception as exc:
-            message = f'已停止：{exc}；未自动恢复初始设定'
+            message = f'Cycle stopped. {exc}\nAutomatic restore was skipped.'
         finally:
             try:
                 if io is not None:
                     io.close()
             except Exception as exc:
-                message += f'；连接清理失败：{exc}'
+                message += f'\nConnection cleanup failed: {exc}'
             finally:
                 try:
                     if lock is not None:
                         lock.release()
                 except Exception as exc:
-                    message += f'；锁清理失败：{exc}'
+                    message += f'\nControl lock release failed: {exc}'
                 self.outcome.emit(message)
 
 
@@ -88,85 +112,233 @@ class CycleWindow(QMainWindow):
         self.worker = None
         self.magnets = load_magnets(context, simulate=simulate)
         self.rows = {m.name: i for i, m in enumerate(self.magnets)}
+        self.live = not simulate and context.control_backend.name == 'real'
+        self.mode = 'Offline simulation' if simulate else ('Real machine · EPICS' if self.live else 'VM · EPICS')
         self.setWindowTitle('Magnet Cycle')
-        self.resize(1080, 740)
+        self.resize(1120, 720)
         root = QWidget()
+        root.setObjectName('cycleRoot')
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        mode = '离线模拟（不连接 PV）' if simulate else f'EPICS · {context.control_backend.name.upper()}'
-        layout.addWidget(QLabel(f'Magnet Cycle  |  {context.machine.display_name}  |  {mode}'))
-        layout.addWidget(QLabel('下限 → [上限 → 下限] × N → 初始设定；双极磁铁使用完整正负范围。所有电流单位为 A。'))
+        layout.setContentsMargins(18, 16, 18, 14)
+        layout.setSpacing(10)
+
+        header = QHBoxLayout()
+        title = QLabel('Magnet Cycle')
+        title.setObjectName('title')
+        header.addWidget(title)
+        header.addStretch()
+        header.addWidget(QLabel(context.machine.display_name))
+        mode = QLabel(self.mode)
+        mode.setObjectName('modeLabel')
+        mode.setProperty('live', self.live)
+        header.addWidget(mode)
+        layout.addLayout(header)
+        sequence = QLabel('Lower → [Upper → Lower] × cycles → Initial setpoint')
+        sequence.setProperty('muted', True)
+        layout.addWidget(sequence)
+
         controls = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText('Search magnets by name')
+        self.search.setAccessibleName('Search magnets by name')
+        self.search.setClearButtonEnabled(True)
+        controls.addWidget(self.search, 1)
         self.filter = QComboBox()
-        self.filter.addItem('全部磁铁', '')
+        self.filter.setAccessibleName('Magnet type')
+        self.filter.addItem('All types', '')
         for kind, label in KINDS.items():
             self.filter.addItem(label, kind)
-        self.filter.currentIndexChanged.connect(self.filter_rows)
         controls.addWidget(self.filter)
-        self.select = QPushButton('选择当前类型')
+        self.select = QPushButton('Select Visible')
         self.select.clicked.connect(lambda: self.select_visible(True))
         controls.addWidget(self.select)
-        self.clear = QPushButton('清空选择')
+        self.clear = QPushButton('Clear Selection')
         self.clear.clicked.connect(lambda: self.select_visible(False, all_rows=True))
         controls.addWidget(self.clear)
         controls.addStretch()
+        self.selection_label = QLabel()
+        self.selection_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        controls.addWidget(self.selection_label)
         layout.addLayout(controls)
+
+        self.build_table()
+        layout.addWidget(self.table, 1)
+        layout.addWidget(self.build_settings())
+
+        actions = QHBoxLayout()
+        status = READY
+        if not any(not m.error for m in self.magnets):
+            status = 'No magnets are available in this mode. Hover over a Status cell for details.'
+        self.status = QLabel(status)
+        self.status.setWordWrap(True)
+        self.status.setTextFormat(Qt.PlainText)
+        actions.addWidget(self.status, 1)
+        self.start = QPushButton('Start Simulation' if simulate else 'Start Cycle')
+        self.start.setObjectName('startButton')
+        self.start.clicked.connect(self.start_cycle)
+        self.stop = QPushButton('Stop')
+        self.stop.setObjectName('stopButton')
+        self.stop.setEnabled(False)
+        self.stop.clicked.connect(self.stop_cycle)
+        actions.addWidget(self.start)
+        actions.addWidget(self.stop)
+        layout.addLayout(actions)
+        if not self.simulate:
+            stop_note = QLabel(
+                'Stop halts further writes and leaves the last commanded setpoints in place. '
+                'Supplies may still move toward those setpoints.'
+            )
+            stop_note.setProperty('muted', True)
+            stop_note.setWordWrap(True)
+            layout.addWidget(stop_note)
+
+        self.search.textChanged.connect(self.filter_rows)
+        self.filter.currentIndexChanged.connect(self.filter_rows)
+        self.table.itemChanged.connect(self.selection_changed)
+        self.refresh_selection()
+        self.apply_appearance()
+
+    def build_table(self):
         self.table = QTableWidget(len(self.magnets), 8)
-        self.table.setHorizontalHeaderLabels(['磁铁', '类型', '下限', '上限', '初始设定', '当前设定', '读回', '状态'])
+        self.table.setHorizontalHeaderLabels(
+            ['Magnet', 'Type', 'Lower (A)', 'Upper (A)', 'Initial (A)', 'Setpoint (A)', 'Readback (A)', 'Status']
+        )
+        self.table.horizontalHeaderItem(STATUS_COLUMN).setToolTip('Hover over a status to read the full message.')
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.Stretch)
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().hide()
+        self.table.verticalHeader().setDefaultSectionSize(32)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(STATUS_COLUMN, QHeaderView.Stretch)
+        for col, endpoint in ENDPOINT_COLUMNS.items():
+            header.setSectionResizeMode(col, QHeaderView.Interactive)
+            self.table.setColumnWidth(col, 112)
+            self.table.horizontalHeaderItem(col).setToolTip(f'Edit the {endpoint} endpoint for each magnet.')
         for row, m in enumerate(self.magnets):
-            values = [m.name, KINDS[m.kind], m.low, m.high, None, None, None, m.error or '就绪']
+            status = 'Unavailable' if m.error else READY
+            values = [m.name, KINDS[m.kind], m.low, m.high, None, None, None, status]
             for col, value in enumerate(values):
-                item = QTableWidgetItem('—' if value is None else str(value))
+                if col in ENDPOINT_COLUMNS and not m.error:
+                    editor = QLineEdit(str(value))
+                    editor.setObjectName('cycleEndpoint')
+                    editor.setAlignment(Qt.AlignRight)
+                    editor.setAccessibleName(f'{m.name} {ENDPOINT_COLUMNS[col]} endpoint in amperes')
+                    editor.setToolTip(
+                        f'Configured range: {m.low} to {m.high} A. '
+                        'The lower endpoint must be below the upper endpoint.'
+                    )
+                    self.table.setCellWidget(row, col, editor)
+                    continue
+                item = QTableWidgetItem(EMPTY if value is None else str(value))
+                item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 if col == 0:
-                    item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | (Qt.ItemIsUserCheckable if not m.error else Qt.NoItemFlags))
                     if not m.error:
+                        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                         item.setCheckState(Qt.Unchecked)
-                item.setToolTip(m.error or f'设定: {m.set_pv}\n读回: {m.read_pv}')
+                if LOWER_COLUMN <= col < STATUS_COLUMN:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                item.setToolTip(m.error or f'Setpoint PV: {m.set_pv}\nReadback PV: {m.read_pv}')
+                if col == STATUS_COLUMN and m.error:
+                    item.setData(Qt.AccessibleDescriptionRole, m.error)
                 self.table.setItem(row, col, item)
-        layout.addWidget(self.table)
-        self.parameters = QWidget()
-        parameter_layout = QHBoxLayout(self.parameters)
+
+    def build_settings(self):
+        panel = QFrame()
+        panel.setObjectName('settingsPanel')
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
+        basic = QWidget()
+        self.parameters = basic
         self.cycles = QSpinBox()
         self.cycles.setRange(1, 100)
         self.cycles.setValue(3)
-        parameter_layout.addWidget(QLabel('循环次数'))
-        parameter_layout.addWidget(self.cycles)
         self.rate = self.spin(1, 0.001, 10000)
-        parameter_layout.addWidget(QLabel('升降速率 A/s'))
-        parameter_layout.addWidget(self.rate)
         self.hold = self.spin(2, 0.01, 3600)
-        parameter_layout.addWidget(QLabel('端点保持 s'))
-        parameter_layout.addWidget(self.hold)
-        layout.addWidget(self.parameters)
-        self.advanced = QGroupBox('高级设置')
-        advanced = QFormLayout(self.advanced)
+        self.toggle = QPushButton('Advanced Settings')
+        self.toggle.setCheckable(True)
+        basic_fields = self.settings_row(basic, [
+            ('Cycles', self.cycles), ('Ramp rate (A/s)', self.rate), ('Endpoint hold (s)', self.hold),
+        ])
+        basic_fields.addWidget(self.toggle)
+        layout.addWidget(basic)
+        self.advanced = QWidget()
         self.tolerance = self.spin(0.05, 0.000001, 100, 6)
         self.stable = self.spin(1, 0.01, 3600)
         self.timeout = self.spin(30, 0.1, 10000)
-        for label, widget in [('跟踪与到位容差 A', self.tolerance), ('连续稳定时间 s', self.stable), ('跟踪 / 端点等待超时 s', self.timeout)]:
-            advanced.addRow(label, widget)
+        self.settings_row(self.advanced, [
+            ('Readback tolerance (A)', self.tolerance), ('Stable time (s)', self.stable), ('Timeout (s)', self.timeout),
+        ])
         self.advanced.setVisible(False)
-        self.toggle = QPushButton('高级设置')
-        self.toggle.clicked.connect(lambda: self.advanced.setVisible(not self.advanced.isVisible()))
+        self.toggle.toggled.connect(self.advanced.setVisible)
         layout.addWidget(self.advanced)
-        buttons = QHBoxLayout()
-        buttons.addWidget(self.toggle)
-        buttons.addStretch()
-        self.start = QPushButton('开始模拟' if simulate else '开始 cycle')
-        self.start.clicked.connect(self.start_cycle)
-        self.stop = QPushButton('停止')
-        self.stop.setEnabled(False)
-        self.stop.clicked.connect(self.stop_cycle)
-        buttons.addWidget(self.start)
-        buttons.addWidget(self.stop)
-        layout.addLayout(buttons)
-        self.status = QLabel('请选择磁铁。参数为初始建议值，实际电源需设置合适的速率和容差。')
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        layout.addWidget(QLabel('停止只终止后续写入，不自动归零或恢复；电源仍可能走到最后下发的设定值。'))
+        return panel
+
+    @staticmethod
+    def settings_row(parent, fields):
+        layout = QHBoxLayout(parent)
+        layout.setContentsMargins(0, 0, 0, 0)
+        for name, widget in fields:
+            label = QLabel(name)
+            label.setBuddy(widget)
+            widget.setAccessibleName(name)
+            layout.addWidget(label)
+            layout.addWidget(widget)
+            layout.addSpacing(12)
+        layout.addStretch()
+        return layout
+
+    def apply_appearance(self):
+        colors = THEMES[resolve_initial_theme()]
+        palette = QPalette(self.palette())
+        for role, name in (
+            (QPalette.Window, 'window'), (QPalette.Base, 'base'), (QPalette.AlternateBase, 'panel'),
+            (QPalette.Button, 'panel'), (QPalette.WindowText, 'text'), (QPalette.Text, 'text'),
+            (QPalette.ButtonText, 'text'), (QPalette.PlaceholderText, 'muted'),
+            (QPalette.Highlight, 'action'), (QPalette.ToolTipBase, 'panel'), (QPalette.ToolTipText, 'text'),
+        ):
+            palette.setColor(role, QColor(colors[name]))
+        palette.setColor(QPalette.HighlightedText, QColor('#ffffff'))
+        for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+            palette.setColor(QPalette.Disabled, role, QColor(colors['muted']))
+        self.setPalette(palette)
+        self.setStyleSheet(f"""
+            QWidget#cycleRoot, QDialog#cycleConfirmation {{ background: {colors['window']}; }}
+            QLabel#title {{ font-size: 23px; font-weight: 700; }}
+            QLabel[muted="true"] {{ color: {colors['muted']}; }}
+            QLabel#modeLabel {{ color: {colors['accent']}; border: 1px solid {colors['border']};
+                                border-radius: 6px; padding: 4px 9px; font-weight: 700; }}
+            QLabel#modeLabel[live="true"] {{ color: {colors['warning']}; border-color: {colors['warning']}; }}
+            QFrame#settingsPanel {{ background: {colors['panel']}; border: 1px solid {colors['border']};
+                                     border-radius: 7px; }}
+            QTableWidget {{ border: 1px solid {colors['border']}; font-size: 14px; }}
+            QTableWidget::indicator:unchecked {{
+                width: 13px; height: 13px; border: 1px solid {colors['muted']};
+                border-radius: 3px; background: {colors['base']};
+            }}
+            QHeaderView::section {{ background: {colors['panel']}; color: {colors['text']};
+                                    border: none; border-bottom: 1px solid {colors['border']};
+                                    padding: 7px; font-size: 14px; font-weight: 600; }}
+            QLineEdit#cycleEndpoint {{ background: {colors['base']}; color: {colors['accent']};
+                                       border: 1px solid {colors['border']}; border-radius: 4px;
+                                       margin: 3px 7px; padding: 1px 6px; font-size: 14px; }}
+            QLineEdit#cycleEndpoint:focus {{ border-color: {colors['accent']}; }}
+            QLineEdit#cycleEndpoint:read-only {{ color: {colors['muted']}; border-color: transparent; }}
+            QPushButton {{ min-height: 27px; padding: 1px 10px; }}
+            QPushButton#startButton:disabled {{ background: {colors['panel']}; color: {colors['muted']};
+                                               border: 1px solid {colors['border']}; border-radius: 5px;
+                                               font-weight: 700; }}
+            QPushButton#startButton:enabled {{ background: {colors['action']}; color: #fff;
+                                              border: 1px solid {colors['accent']}; border-radius: 5px;
+                                              font-weight: 700; }}
+            QPushButton#startButton:enabled:hover, QPushButton#startButton:enabled:focus {{
+                border: 2px solid {colors['accent']}; padding: 0 9px;
+            }}
+            QPushButton#stopButton:enabled {{ color: {colors['warning']}; font-weight: 700; }}
+        """)
 
     @staticmethod
     def spin(value, low, high, decimals=3):
@@ -177,61 +349,176 @@ class CycleWindow(QMainWindow):
         return widget
 
     def filter_rows(self):
-        for i, m in enumerate(self.magnets):
-            self.table.setRowHidden(i, bool(self.filter.currentData() and m.kind != self.filter.currentData()))
+        kind = self.filter.currentData()
+        query = self.search.text().strip().casefold()
+        for row, magnet in enumerate(self.magnets):
+            matches = (not kind or kind == magnet.kind) and query in magnet.name.casefold()
+            self.table.setRowHidden(row, not matches)
+        self.refresh_selection()
 
     def select_visible(self, checked, all_rows=False):
-        for i, m in enumerate(self.magnets):
-            if not m.error and (all_rows or not self.table.isRowHidden(i)):
-                self.table.item(i, 0).setCheckState(Qt.Checked if checked else Qt.Unchecked)
+        with QSignalBlocker(self.table):
+            for row, magnet in enumerate(self.magnets):
+                if not magnet.error and (all_rows or not self.table.isRowHidden(row)):
+                    self.table.item(row, 0).setCheckState(Qt.Checked if checked else Qt.Unchecked)
+        self.refresh_selection()
+
+    def checked_magnets(self):
+        return [
+            magnet for row, magnet in enumerate(self.magnets)
+            if not magnet.error and self.table.item(row, 0).checkState() == Qt.Checked
+        ]
+
+    def selection_changed(self, item):
+        if item.column() == 0:
+            self.refresh_selection()
+
+    def refresh_selection(self):
+        selected = self.checked_magnets()
+        hidden = sum(self.table.isRowHidden(self.rows[magnet.name]) for magnet in selected)
+        visible = [magnet for row, magnet in enumerate(self.magnets) if not self.table.isRowHidden(row)]
+        summary = f'{len(selected)} selected'
+        if hidden:
+            summary += f' · {hidden} hidden'
+        if not visible and self.magnets:
+            summary += ' · No matches'
+        self.selection_label.setText(summary)
+        self.selection_label.setToolTip('Every selected magnet is included, even when a filter hides it.')
+        idle = self.worker is None
+        self.start.setEnabled(idle and bool(selected))
+        self.clear.setEnabled(idle and bool(selected))
+        self.select.setEnabled(idle and any(not magnet.error for magnet in visible))
+
+    def with_cycle_endpoints(self, magnet):
+        row = self.rows[magnet.name]
+        values = []
+        for col, endpoint in ENDPOINT_COLUMNS.items():
+            editor = self.table.cellWidget(row, col)
+            try:
+                value = float(editor.text())
+            except ValueError:
+                raise ValueError(f'Enter a numeric {endpoint} endpoint in amperes for {magnet.name}.') from None
+            if not magnet.low <= value <= magnet.high:
+                raise ValueError(
+                    f'{magnet.name} {endpoint} endpoint must be within '
+                    f'the configured range [{magnet.low}, {magnet.high}] A.'
+                )
+            values.append(value)
+        low, high = values
+        if low >= high:
+            raise ValueError(f'{magnet.name} lower endpoint must be below the upper endpoint.')
+        return replace(magnet, low=low, high=high)
+
+    def confirm_cycle(self, magnets, parameters):
+        dialog = QDialog(self)
+        dialog.setAttribute(Qt.WA_WindowPropagation)
+        dialog.setObjectName('cycleConfirmation')
+        dialog.setWindowTitle('Confirm Magnet Cycle')
+        dialog.resize(540, 310)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(f'{self.context.machine.display_name} · {self.mode}'))
+        p = parameters
+        settings = QLabel(
+            f'{p.cycles} cycles · Ramp rate {p.rate:g} A/s · Endpoint hold {p.hold:g} s\n'
+            f'Tolerance {p.tolerance:g} A · Stable time {p.stable:g} s · Timeout {p.timeout:g} s'
+        )
+        settings.setWordWrap(True)
+        layout.addWidget(settings)
+        endpoints = QPlainTextEdit()
+        endpoints.setReadOnly(True)
+        endpoints.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        endpoints.setLineWrapMode(QPlainTextEdit.NoWrap)
+        endpoints.setAccessibleName('Selected magnets and cycle endpoints')
+        endpoints.setPlainText('\n'.join(f'{m.name}: {m.low} → {m.high} A' for m in magnets))
+        layout.addWidget(endpoints, 1)
+        note = QLabel('Check the rate and tolerance for these supplies. A complete cycle restores the initial setpoints.')
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
+        begin = buttons.addButton('Start Cycle', QDialogButtonBox.AcceptRole)
+        begin.setObjectName('startButton')
+        begin.setAutoDefault(False)
+        cancel = buttons.button(QDialogButtonBox.Cancel)
+        cancel.setDefault(True)
+        cancel.setFocus()
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        confirmed = dialog.exec_() == QDialog.Accepted
+        dialog.deleteLater()
+        return confirmed
 
     def start_cycle(self):
-        selected = [m for i, m in enumerate(self.magnets) if not m.error and self.table.item(i, 0).checkState() == Qt.Checked]
+        selected = self.checked_magnets()
         try:
             if not selected:
-                raise ValueError('请先选择磁铁')
-            p = Parameters(self.cycles.value(), self.rate.value(), self.hold.value(), self.tolerance.value(), self.stable.value(), self.timeout.value())
+                raise ValueError('Select at least one magnet.')
+            group_magnets(selected)
+            selected = [self.with_cycle_endpoints(m) for m in selected]
+            group_magnets(selected)
+            p = Parameters(
+                self.cycles.value(), self.rate.value(), self.hold.value(),
+                self.tolerance.value(), self.stable.value(), self.timeout.value(),
+            )
             if not self.simulate:
-                require_workflow_write_allowed(self.context, 'magnet_cycle', 'Magnet cycle')
-                detail = '\n'.join(f'{m.name}: {m.low:g} → {m.high:g} A' for m in selected)
-                if QMessageBox.question(self, '开始磁铁 cycle', f'{self.context.machine.id} / {self.context.control_backend.name}\n{detail}\n循环 {p.cycles} 次，速率 {p.rate:g} A/s，保持 {p.hold:g} s\n正常完成后恢复初始设定。开始？', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+                require_workflow_write_allowed(self.context, 'magnet_cycle', 'Magnet Cycle')
+                if not self.confirm_cycle(selected, p):
                     return
             self.selected = selected
             for m in selected:
-                self.table.item(self.rows[m.name], 7).setText('启动检查')
-            self.set_running(True)
+                row = self.rows[m.name]
+                for col in range(UPPER_COLUMN + 1, STATUS_COLUMN):
+                    self.table.item(row, col).setText(EMPTY)
+                self.set_row_status(row, 'Checking initial setpoint')
             self.worker = Worker(self.context, selected, p, self.simulate)
             self.worker.progress.connect(self.update_row)
             self.worker.outcome.connect(self.finished_message)
             self.worker.finished.connect(self.worker_finished)
+            self.set_running(True)
+            count = len(selected)
+            self.status.setText(f'Running on {count} {"magnet" if count == 1 else "magnets"}…')
             self.worker.start()
-            self.status.setText(f'运行中：{len(selected)} 台磁铁；所有勾选项均参与，包括被筛选隐藏的项。')
         except Exception as exc:
-            QMessageBox.warning(self, '无法开始', str(exc))
+            QMessageBox.warning(self, 'Could Not Start', str(exc))
 
     def set_running(self, running):
-        for widget in (self.table, self.parameters, self.advanced, self.select, self.clear, self.start):
-            widget.setEnabled(not running)
+        self.parameters.setEnabled(not running)
+        self.advanced.setEnabled(not running)
+        with QSignalBlocker(self.table):
+            for row, magnet in enumerate(self.magnets):
+                if magnet.error:
+                    continue
+                item = self.table.item(row, 0)
+                flags = item.flags()
+                item.setFlags(flags & ~Qt.ItemIsUserCheckable if running else flags | Qt.ItemIsUserCheckable)
+                for col in ENDPOINT_COLUMNS:
+                    self.table.cellWidget(row, col).setReadOnly(running)
+        self.refresh_selection()
         self.stop.setEnabled(running)
+
+    def set_row_status(self, row, status):
+        item = self.table.item(row, STATUS_COLUMN)
+        item.setText(status)
+        item.setToolTip(status)
 
     def update_row(self, name, initial, setpoint, readback, status):
         row = self.rows[name]
-        for col, value in enumerate((initial, setpoint, readback), 4):
+        for col, value in enumerate((initial, setpoint, readback), UPPER_COLUMN + 1):
             self.table.item(row, col).setText(f'{value:.6g}')
-        self.table.item(row, 7).setText(status)
+        self.set_row_status(row, status)
 
     def stop_cycle(self):
         if self.worker:
             self.worker.stop.set()
             self.stop.setEnabled(False)
-            self.status.setText('正在停止；等待当前通信返回…')
+            self.status.setText('Stopping after the current operation returns…')
 
     def finished_message(self, message):
         self.status.setText(message)
         for m in self.selected:
-            item = self.table.item(self.rows[m.name], 7)
-            if item.text() != '完成':
-                item.setText('已停止，未恢复')
+            row = self.rows[m.name]
+            if self.table.item(row, STATUS_COLUMN).text() != COMPLETE:
+                self.set_row_status(row, 'Stopped')
 
     def worker_finished(self):
         self.worker.deleteLater()
@@ -242,18 +529,20 @@ class CycleWindow(QMainWindow):
         if self.worker is not None:
             self.stop_cycle()
             event.ignore()
-            self.status.setText('正在停止；停止完成后可关闭窗口。')
+            self.status.setText('Stopping. Close the window once the run has stopped.')
         else:
             event.accept()
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Magnet cycle; default: offline simulation, VM mappings')
+    parser = argparse.ArgumentParser(description='Cycle magnet currents. Defaults to offline simulation.')
     parser.add_argument('--machine')
     parser.add_argument('--backend', choices=['vm', 'real'], help='EPICS: inherit Control Room/environment/profile; simulation: default vm')
     parser.add_argument('--epics', action='store_true', help='Enable actual PV connections and writes for the selected backend')
     args = parser.parse_args()
     app = QApplication(sys.argv[:1])
+    app.setAttribute(Qt.AA_UseStyleSheetPropagationInWidgetStyles)
+    app.setStyle('Fusion')
     try:
         context = load_app_context('magnet_cycle', machine_id=args.machine, control_backend=args.backend or (None if args.epics else "vm"))
         window = CycleWindow(context, simulate=not args.epics)
