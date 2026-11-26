@@ -76,8 +76,10 @@ def main(argv=None):
     parser.add_argument("--headless", action="store_true", help="Fake workflow only")
     parser.add_argument("--approve-fake", action="store_true", help="Explicitly approve simulated motions")
     parser.add_argument("--quick", action="store_true", help="Reduced Monte Carlo settings for Fake smoke tests")
-    parser.add_argument("--active-queries", type=int, choices=range(4), default=3)
+    parser.add_argument("--active-queries", type=int, default=3, help="Maximum active queries for a headless Fake run")
     args=parser.parse_args(argv)
+    if args.active_queries < 0:
+        parser.error("--active-queries must be non-negative")
     if args.headless:
         if args.backend!="fake" or not args.approve_fake:
             parser.error("Headless execution requires --backend fake --approve-fake")

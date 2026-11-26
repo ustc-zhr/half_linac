@@ -13,6 +13,8 @@ import time
 
 import numpy as np
 from scipy.linalg import qr
+from scipy.spatial.distance import pdist
+from scipy.stats import qmc
 
 from half_linac.src.optimization.infobax import FinitePoolSpec, InfoBAXCore, InfoBAXConfig, PointObservation
 from half_linac.src.shared.beam_matrix import (
@@ -26,14 +28,18 @@ DEFAULT_CURRENT_CANDIDATES = 5
 DEFAULT_INITIAL_POINTS_PER_END = 3
 
 
+def current_vector(value):
+    return tuple(value) if isinstance(value, (tuple, list)) else (value,)
+
+
 class WorkflowInterrupted(RuntimeError):
     pass
 
 
 @dataclass(frozen=True)
 class WorkflowConfig:
-    current_low: float
-    current_high: float
+    current_low: float | tuple[float, ...]
+    current_high: float | tuple[float, ...]
     scan_values: tuple[float, ...]
     projections: tuple[tuple[float, float], ...]
     energy_mev: float
@@ -46,12 +52,17 @@ class WorkflowConfig:
     initial_points_per_end: int = DEFAULT_INITIAL_POINTS_PER_END
 
     def __post_init__(self):
-        if (not all(math.isfinite(v) for v in (self.current_low, self.current_high, self.energy_mev, self.max_minutes))
-                or self.current_low >= self.current_high or self.energy_mev <= 0 or self.max_minutes <= 0):
+        low, high = current_vector(self.current_low), current_vector(self.current_high)
+        if (not low or len(low) != len(high)
+                or not all(math.isfinite(v) for v in (*low, *high, self.energy_mev, self.max_minutes))
+                or any(a >= b for a, b in zip(low, high)) or self.energy_mev <= 0 or self.max_minutes <= 0):
             raise ValueError("Invalid current range, energy or time budget")
-        if (self.plane not in {"x", "y"} or self.model not in {"M0", "transport_moments"}
-                or type(self.active_queries) is not int or not 0 <= self.active_queries <= 3):
-            raise ValueError("Invalid plane/model or active-query budget (0..3)")
+        object.__setattr__(self, "current_low", low[0] if len(low) == 1 else low)
+        object.__setattr__(self, "current_high", high[0] if len(high) == 1 else high)
+        if self.plane not in {"x", "y"} or self.model not in {"M0", "transport_moments"}:
+            raise ValueError("Invalid plane or posterior model")
+        if type(self.active_queries) is not int or self.active_queries < 0:
+            raise ValueError("Active query limit must be a non-negative integer")
         scans = tuple(float(v) for v in self.scan_values)
         projections = tuple(tuple(float(v) for v in row) for row in self.projections)
         if len(scans) < 3 or len(set(scans)) != len(scans) or not all(math.isfinite(v) for v in scans):
@@ -115,6 +126,17 @@ class WorkflowConfig:
 
 
 def current_candidates(low, high, initial, count=DEFAULT_CURRENT_CANDIDATES):
+    if len(current_vector(low)) > 1:
+        lower, upper, start = (np.asarray(v, dtype=float) for v in (low, high, initial))
+        if start.shape != lower.shape or not np.all(np.isfinite(start) & (lower <= start) & (start <= upper)):
+            raise ValueError("Every initial current must be inside its selected search range")
+        design = qmc.LatinHypercube(d=len(lower), seed=0).random(count)
+        nearest = np.argmin(np.linalg.norm(design - (start - lower) / (upper - lower), axis=1))
+        values = qmc.scale(design, lower, upper)
+        values[nearest] = start
+        if len(np.unique(values, axis=0)) != count:
+            raise ValueError(f"{count} unique current candidates are required")
+        return tuple(tuple(row) for row in values.tolist())
     if not math.isfinite(initial) or not low <= initial <= high:
         raise ValueError("Initial current must be inside the selected search range")
     values = np.linspace(low, high, count)
@@ -284,10 +306,14 @@ class InfoBAXWorkflow:
     def _pool(self):
         cfg = self.config
         scans = np.asarray(cfg.scan_values)
-        currents = np.asarray(self.candidates)
+        currents = np.asarray([current_vector(point) for point in self.candidates])
+        if currents.shape[1] == 1:
+            coordinates = (currents - currents.min()) / np.ptp(currents)
+        else:
+            low, high = (np.asarray(v) for v in (cfg.current_low, cfg.current_high))
+            coordinates = (currents - low) / (high - low)
         noise = [r["measurement"]["noise_std_mm2"] for r in self.baseline]
-        return FinitePoolSpec(cfg.candidate_ids,
-                              ((currents-currents.min())/np.ptp(currents))[:, None],
+        return FinitePoolSpec(cfg.candidate_ids, coordinates,
                               scans, (scans-scans.min())/np.ptp(scans), cfg.design,
                               cfg.energy_mev, np.tile(noise, len(currents)),
                               fingerprint({"machine": self.machine.fingerprint, "config": cfg.fingerprint}))
@@ -296,11 +322,16 @@ class InfoBAXWorkflow:
         n = len(self.config.scan_values)
         initial_index = self.candidates.index(self.initial["current_a"])
         indices = [initial_index*n+i for i in range(n)]
-        endpoints = (0, len(self.candidates) - 1)
+        pool = self._pool()
+        if pool.candidate_dimension == 1:
+            endpoints = (0, pool.candidate_count - 1)
+        else:
+            left, right = np.triu_indices(pool.candidate_count, k=1)
+            index = int(np.argmax(pdist(pool.candidate_coordinates)))
+            endpoints = (int(left[index]), int(right[index]))
         scan_indices = self.config.initial_scan_indices()
         indices.extend(candidate*n + scan for candidate in endpoints for scan in scan_indices)
         indices = tuple(dict.fromkeys(indices))
-        pool = self._pool()
         self.machine.validate_pool(pool)
         core = InfoBAXCore(pool, replace(self.numerical_config, initial_actions=len(indices)),
                           model=self.config.model, initial_queries=indices)
@@ -510,7 +541,9 @@ class InfoBAXWorkflow:
                     "restoration_status", "elapsed_seconds"):
             setattr(obj, key, data[key])
         obj.scan_results = data.get("scan_results", {})
-        obj.candidates = tuple(data["candidates"])
+        obj.candidates = tuple(tuple(point) if isinstance(point, list) else point for point in data["candidates"])
+        if obj.initial is not None and isinstance(obj.initial["current_a"], list):
+            obj.initial["current_a"] = tuple(obj.initial["current_a"])
         if obj.status in {"awaiting_approval", "baseline", "initialization", "active", "selecting", "verification"}:
             obj.status = "paused" if obj.restoration_status == "succeeded" else "recovery_required"
         if data["core"] is not None:

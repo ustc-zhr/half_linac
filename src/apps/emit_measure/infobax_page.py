@@ -18,8 +18,8 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from half_linac.src.shared.machine_profile import resolve_app_runtime_paths
 from .control import emittance_lock
 from .infobax_gui import WorkflowWorker
-from .infobax_framework import build_framework_workflow, load_framework_recovery
-from .infobax_workflow import DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow
+from .infobax_framework import archived_variables, build_framework_workflow, load_framework_recovery
+from .infobax_workflow import DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow, WorkflowConfig
 
 
 class IntegratedInfoBAXWorker(WorkflowWorker):
@@ -27,12 +27,12 @@ class IntegratedInfoBAXWorker(WorkflowWorker):
     cancel_scan = pyqtSignal()
     frame = pyqtSignal(dict)
 
-    def __init__(self, paras, variable, run_dir, *, plane, model, active_queries,
+    def __init__(self, paras, variables, run_dir, *, plane, model, active_queries,
                  max_minutes, solenoid_settle, current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
                  initial_points_per_end=DEFAULT_INITIAL_POINTS_PER_END,
                  resume=False, workflow=None, action="run", parent=None,recovery_context=None):
         super().__init__(run_dir=run_dir,workflow=workflow,resume=resume,action=action,parent=parent)
-        self.paras,self.variable=paras,variable
+        self.paras,self.variables=paras,variables
         self.recovery_context=recovery_context
         self.arguments=dict(plane=plane,model=model,active_queries=active_queries,
                             current_candidate_count=current_candidate_count,initial_points_per_end=initial_points_per_end,
@@ -77,7 +77,7 @@ class IntegratedInfoBAXWorker(WorkflowWorker):
                 return
             with emittance_lock(self.paras.app_context.profile.machine.id,
                                 self.paras.app_context.control_backend.name) as lease:
-                self.workflow=build_framework_workflow(self.paras,self.variable,self.run_dir,
+                self.workflow=build_framework_workflow(self.paras,self.variables,self.run_dir,
                     **self.arguments,automatic_measurements=True,progress=self.progress.emit,
                     full_scan=self.full_scan,resume=self.resume,lease=lease)
                 self.workflow.machine.frame_progress=self.frame.emit
@@ -105,7 +105,11 @@ class InfoBAXPage(QWidget):
         row.addWidget(QLabel("Posterior"))
         self.model=QComboBox();self.model.addItems(["transport_moments","M0"]);row.addWidget(self.model)
         row.addWidget(QLabel("Active query limit"))
-        self.active=QSpinBox();self.active.setRange(0,3);self.active.setValue(3);row.addWidget(self.active)
+        self.active = QSpinBox()
+        self.active.setRange(0, 2**31 - 1)
+        self.active.setValue(3)
+        self.active.setToolTip("Maximum additional single-point measurements after initialization, within the remaining query pool and run time budget.")
+        row.addWidget(self.active)
         self.clear_button=QPushButton("Clear run / archive")
         self.clear_button.clicked.connect(self.clear_archive)
         row.addWidget(self.clear_button)
@@ -114,12 +118,12 @@ class InfoBAXPage(QWidget):
         self.current_candidate_count = QSpinBox()
         self.current_candidate_count.setRange(2, 99)
         self.current_candidate_count.setValue(DEFAULT_CURRENT_CANDIDATES)
-        self.current_candidate_count.setToolTip("Number of candidate currents, including the starting current.")
+        self.current_candidate_count.setToolTip("Number of candidate current settings, including the starting settings for all selected solenoids.")
         self.initial_points_per_end = QSpinBox()
         self.initial_points_per_end.setRange(3, 2**31 - 1)
         self.initial_points_per_end.setValue(DEFAULT_INITIAL_POINTS_PER_END)
         self.initial_points_per_end.setToolTip(
-            "K1 points at each of the lowest and highest candidate currents. "
+            "K1 points at each of the two most separated current candidates. "
             "Choose 3 to the number of K1 candidates in the main-window grid."
         )
         for label, control in (("Current candidates", self.current_candidate_count),
@@ -185,8 +189,8 @@ class InfoBAXPage(QWidget):
         try:
             d.check_idle()
             if self.read_only: raise ValueError("Prototype v1 archives are read-only; start a new run after clearing the archive")
-            if len(d.selected_names())!=1:
-                raise ValueError("Select exactly one solenoid for InfoBAX")
+            if not d.selected_names():
+                raise ValueError("Select at least one solenoid for InfoBAX")
             variables=d.selected_variables()
             paras=d.host.optimization_parameters(variables,defer_io=True)
             if paras.samples<3: raise ValueError("Set main-window Samples per point to at least 3 for InfoBAX")
@@ -201,7 +205,7 @@ class InfoBAXPage(QWidget):
                 "infobax_"+datetime.now().strftime("%Y%m%d_%H%M%S")+"_"+uuid4().hex[:8])
             if not resume: self.workflow=self.saved=None;self.table.setRowCount(0)
             self.paras=paras
-            self.launch(IntegratedInfoBAXWorker(paras,variables[0],run_dir,plane=d.plane.currentData(),
+            self.launch(IntegratedInfoBAXWorker(paras,variables,run_dir,plane=d.plane.currentData(),
                 model=self.model.currentText(),active_queries=self.active.value(),max_minutes=d.minutes.value(),
                 current_candidate_count=self.current_candidate_count.value(),initial_points_per_end=self.initial_points_per_end.value(),
                 solenoid_settle=d.solenoid_settle.value(),resume=resume,parent=self))
@@ -254,31 +258,42 @@ class InfoBAXPage(QWidget):
     def stop(self,pause=False):
         if self.busy(): self.worker.stop(pause=pause);self.cancel_scan()
 
+    def format_current(self, current, names):
+        if isinstance(current, (list, tuple)):
+            return self.dialog.format_currents(dict(zip(names, current, strict=True)))
+        return f"{current:g} A"
+
     def show_progress(self,payload):
         self.render()
         request = payload.get("request")
         if request:
+            names = json.loads(self.workflow.config.settings_json).get("variables", ())
+            current = self.format_current(request["current_a"], names)
             details = (f"K1={request['scan_k1']:g}" if "scan_k1" in request
                        else f"{request['remaining_points']} K1 points")
-            self.proposal.setText(f"{request['phase']} · I={request['current_a']:g} A · {details}")
+            self.proposal.setText(f"{request['phase']} · {current} · {details}")
         else:
             self.proposal.setText(f"InfoBAX · {payload.get('status')} · {payload.get('record_count',0)} point records")
 
     def render(self):
         state=self.state()
         if not state:return
+        names = json.loads(state["config"]["settings_json"]).get("variables", ())
         records=list(state["records"])
         self.table.setRowCount(len(records));x=[];y=[]
         for i,r in enumerate(records):
             m=r.get("measurement",{})
-            values=(r["phase"],r["current_a"],r["scan_k1"],m.get("variance_mm2","—"),m.get("noise_std_mm2","—"),r["state"])
+            current = self.format_current(r["current_a"], names) if names else r["current_a"]
+            values=(r["phase"],current,r["scan_k1"],m.get("variance_mm2","—"),m.get("noise_std_mm2","—"),r["state"])
             for j,v in enumerate(values):self.table.setItem(i,j,QTableWidgetItem(f"{v:.6g}" if isinstance(v,float) else str(v)))
+            if names:
+                self.table.item(i, 1).setToolTip(current)
             if m:x.append(i);y.append(m["variance_mm2"])
         self.axes.clear();self.axes.plot(x,y,".-");self.axes.set(xlabel="Measurement",ylabel="Variance (mm²)")
         self.style_plot();self.canvas.draw_idle()
         r=state.get("recommendation")
         if r:
-            items=[f"{current:g} A: {prob:.1%}" for current,prob in zip(state['candidates'],r['best_probabilities'])]
+            items=[f"{self.format_current(current, names)}: {prob:.1%}" for current,prob in zip(state['candidates'],r['best_probabilities'])]
             self.posterior.setText("P(best) · "+" | ".join(items)+f" · INVALID: {r['invalid_output_probability']:.1%}")
         else:self.posterior.setText("Best-workpoint probabilities: —")
         baseline=state.get("baseline_fit") or {};verify=state.get("verification_fit") or {}
@@ -335,11 +350,13 @@ class InfoBAXPage(QWidget):
                 if "measurement_contract" not in settings:self.read_only=True
                 else:
                     d=self.dialog
+                    variables = {variable.element_id: variable for variable in archived_variables(WorkflowConfig(**cfg), settings)}
                     for name,row in d.variable_rows.items():
                         item=d.variables.item(row,0)
-                        item.setCheckState(2 if name==settings["variable"] else 0)
-                        if name==settings["variable"]:
-                            d.variables.item(row,3).setText(str(cfg["current_low"]));d.variables.item(row,4).setText(str(cfg["current_high"]))
+                        item.setCheckState(2 if name in variables else 0)
+                        if name in variables:
+                            d.variables.item(row,3).setText(str(variables[name].low))
+                            d.variables.item(row,4).setText(str(variables[name].high))
                     d.plane.setCurrentIndex(d.plane.findData(cfg["plane"]));d.minutes.setValue(cfg["max_minutes"])
                     d.solenoid_settle.setValue(settings["solenoid_settle"])
                     self.model.setCurrentText(cfg["model"]);self.active.setValue(cfg["active_queries"])

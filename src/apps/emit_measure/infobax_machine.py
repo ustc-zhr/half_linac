@@ -6,9 +6,11 @@ import math
 import time
 
 import numpy as np
+from scipy.spatial.distance import pdist
 
 from .measurement_service import fingerprint
 from .infobax_session import PointMeasurement
+from .infobax_workflow import current_vector
 
 
 class FakeInfoBAXMachine:
@@ -80,7 +82,7 @@ class HalfRealInfoBAXMachine:
 
     def __init__(self, context, variable, config, camera, *, scan_quad, get=None, put=None,
                  settle_time=8.0, motion_timeout=10.0, tolerance=0.01, model_checks=None):
-        from .optimization import EpicsVariableGroup, OptimizationConfig
+        from .optimization import EpicsVariableGroup, OptimizationConfig, OptimizationVariable
         from half_linac.src.shared.machine_profile import resolve_channel, resolve_write_target
         if context.profile.machine.id != "half" or context.control_backend.name != "real":
             raise ValueError("HALF real backend required")
@@ -95,7 +97,10 @@ class HalfRealInfoBAXMachine:
         self.candidate_ids = config.candidate_ids
         self.scan_quad = scan_quad
         self.settle_time, self.motion_timeout, self.tolerance = settle_time, motion_timeout, tolerance
-        device_config = OptimizationConfig((variable,), config.plane, None,
+        variables = (variable,) if isinstance(variable, OptimizationVariable) else tuple(variable)
+        if len(variables) != len(current_vector(config.current_low)):
+            raise ValueError("Selected solenoids do not match the workflow current vector")
+        device_config = OptimizationConfig(variables, config.plane, None,
             settle_time=settle_time, motion_timeout=motion_timeout, readback_tolerance=tolerance)
         self.device = EpicsVariableGroup(context, device_config, get=get, put=put)
         self.device.validate(read_values=False)
@@ -108,8 +113,10 @@ class HalfRealInfoBAXMachine:
         self.quad = None
         self._pending_query = None
         self.model_checks = dict(model_checks or {})
+        declared = [asdict(item) for item in variables]
         self._fingerprint = fingerprint({"adapter": "half-real-current-v1", "camera": camera.fingerprint,
-            "variable": asdict(variable), "quad": self.quad_pvs, "config": config.fingerprint,
+            "variable": declared[0] if len(declared) == 1 else declared,
+            "quad": self.quad_pvs, "config": config.fingerprint,
             "solenoid": [(target.pv_name, read) for target, read in self.device.channels],
             "motion": [settle_time, motion_timeout, tolerance], "model_checks": self.model_checks})
 
@@ -122,10 +129,9 @@ class HalfRealInfoBAXMachine:
         self.candidates = tuple(candidates)
         if len(self.candidates) != self.config.current_candidate_count:
             raise ValueError("Current candidate count does not match the workflow")
-        if np.min(np.diff(self.candidates)) <= 2*self.tolerance:
+        points = [self.device._validate_point(current_vector(value)) for value in self.candidates]
+        if np.min(pdist(points, metric="chebyshev")) <= 2*self.tolerance:
             raise ValueError("Candidate spacing must exceed twice the current readback tolerance")
-        for value in self.candidates:
-            self.device._validate_point((value,))
         if self.archive_dir is not None:
             from pathlib import Path
             self.camera.archive_dir = self.archive_dir
@@ -157,10 +163,11 @@ class HalfRealInfoBAXMachine:
 
     def snapshot(self):
         self._model_check()
-        current, readback = self.device.initial()[0], self.device.readback()[0]
-        if abs(current-readback) > self.tolerance:
+        currents = self.device.initial()
+        if not self._currents_match(self.device.readback(), currents):
             raise RuntimeError("Solenoid has not reached its setpoint")
-        snap = {"current_a": current, "scan_k1": self.device.read(self.quad_pvs["K1"]),
+        snap = {"current_a": currents[0] if len(currents) == 1 else currents,
+                "scan_k1": self.device.read(self.quad_pvs["K1"]),
                 "quad_current_a": self.device.read(self.quad_pvs["current_set"]),
                 "quad_readback_a": self.device.read(self.quad_pvs["current_readback"]),
                 "exposure": self.camera.exposure()}
@@ -180,9 +187,16 @@ class HalfRealInfoBAXMachine:
             raise RuntimeError("Camera exposure changed during snapshot acquisition")
         return snap
 
+    def _currents_match(self, actual, target):
+        return len(actual) == len(target) and all(abs(a-b) <= self.tolerance for a, b in zip(actual, target))
+
     def verify_snapshot(self, expected):
         actual = self.snapshot()
+        if not self._currents_match(current_vector(actual["current_a"]), current_vector(expected["current_a"])):
+            raise RuntimeError("Device/settings drift: current_a")
         for key, value in expected.items():
+            if key == "current_a":
+                continue
             tolerance = self.tolerance if key.endswith("_a") else 1e-6
             if not math.isclose(actual[key], value, rel_tol=0, abs_tol=tolerance):
                 raise RuntimeError(f"Device/settings drift: {key}")
@@ -192,11 +206,10 @@ class HalfRealInfoBAXMachine:
     def apply_current(self, candidate):
         self.check()
         self._model_check()
-        target = self.candidates[candidate]
-        if (abs(self.device.initial()[0]-target) <= self.tolerance
-                and abs(self.device.readback()[0]-target) <= self.tolerance):
+        target = current_vector(self.candidates[candidate])
+        if self._currents_match(self.device.initial(), target) and self._currents_match(self.device.readback(), target):
             return
-        self.device.move((target,), self.check)
+        self.device.move(target, self.check)
 
     def apply_query(self, candidate, scan_value):
         from half_linac.src.shared.machine_profile import require_workflow_write_allowed
@@ -218,7 +231,7 @@ class HalfRealInfoBAXMachine:
             raise RuntimeError("No confirmed query is pending")
         candidate, k1 = self._pending_query
         actual = self.snapshot()
-        if (abs(actual["current_a"]-self.candidates[candidate]) > self.tolerance
+        if (not self._currents_match(current_vector(actual["current_a"]), current_vector(self.candidates[candidate]))
                 or abs(actual["scan_k1"]-k1) > 1e-6):
             raise RuntimeError("Device drifted from the pending query")
 
@@ -233,7 +246,8 @@ class HalfRealInfoBAXMachine:
     def restore(self, initial):
         from half_linac.src.shared.machine_profile import require_workflow_write_allowed
         errors = []
-        for operation in (lambda: self.device.restore((initial["current_a"],)),
+        initial_currents = current_vector(initial["current_a"])
+        for operation in (lambda: self.device.restore(initial_currents),
                           lambda: self._restore_quad(initial)):
             try:
                 require_workflow_write_allowed(self.context, "emit_measure", "InfoBAX restore")
@@ -242,9 +256,10 @@ class HalfRealInfoBAXMachine:
                 errors.append(str(exc))
         if not errors:
             try:
+                for read_currents in (self.device.initial, self.device.readback):
+                    if not self._currents_match(read_currents(), initial_currents):
+                        raise RuntimeError("Final solenoid restore verification failed")
                 for pv, expected, tolerance in (
-                    (self.device.channels[0][0].pv_name, initial["current_a"], self.tolerance),
-                    (self.device.channels[0][1], initial["current_a"], self.tolerance),
                     (self.quad_pvs["K1"], initial["scan_k1"], 1e-6),
                     (self.quad_pvs["current_set"], initial["quad_current_a"], self.tolerance),
                     (self.quad_pvs["current_readback"], initial["quad_current_a"], self.tolerance),

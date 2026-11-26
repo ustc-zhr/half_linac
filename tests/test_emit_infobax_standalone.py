@@ -180,8 +180,8 @@ class WorkflowTests(unittest.TestCase):
         checkpoint["model"]="bad-model"
         with self.assertRaises(CheckpointError): InfoBAXCore.from_checkpoint(w.core.pool,checkpoint)
 
-    def test_three_active_suggestions_are_capped_and_never_repeat(self):
-        self.cfg=config(active_queries=3)
+    def test_active_suggestions_stop_when_the_candidate_pool_is_exhausted(self):
+        self.cfg=config(active_queries=30)
         self.machine=FakeInfoBAXMachine(self.cfg)
         original=InfoBAXCore.propose
         def predictable(core, **kwargs):
@@ -191,8 +191,10 @@ class WorkflowTests(unittest.TestCase):
         with patch.object(InfoBAXCore,"propose",predictable):
             w=self.workflow(); result=w.run()
         self.assertEqual(result["status"],"completed")
-        self.assertEqual(len([r for r in w.records if r["phase"]=="active"]),3)
-        self.assertEqual(len(w.core.observations),14)
+        self.assertEqual(len([r for r in w.records if r["phase"]=="active"]),14)
+        observed = [point.query_index for point in w.core.observations]
+        self.assertEqual(len(observed), w.core.pool.query_count)
+        self.assertEqual(len(set(observed)), len(observed))
         self.assertEqual(result["cost"]["accepted_frames"],len(w.records)*5)
 
     def test_endpoint_baseline_reuses_existing_initial_points(self):

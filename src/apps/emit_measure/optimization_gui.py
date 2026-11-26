@@ -934,7 +934,7 @@ class OptimizationDialog(QDialog):
             self.infobax_page.refresh_note()
             self.infobax_page.render()
             if self.infobax_page.state() is None:
-                self.status.setText("InfoBAX ready. Select one solenoid and configure the main-window measurement.")
+                self.status.setText("InfoBAX ready. Select solenoids and configure the main-window measurement.")
                 self.progress_bar.setRange(0,1);self.progress_bar.setValue(0)
                 self.progress_bar.setFormat("0 point observations")
         else:

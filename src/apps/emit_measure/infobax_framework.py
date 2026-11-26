@@ -11,8 +11,9 @@ from .control import emittance_lock
 from .measurement_service import MeasurementSnapshot, PointAcquirer, fingerprint, prepare_measurement
 from .infobax_machine import HalfRealInfoBAXMachine
 from .infobax_workflow import (
-    DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow, WorkflowConfig,
+    DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow, WorkflowConfig, current_vector,
 )
+from .optimization import OptimizationVariable
 
 
 def grid_for_parameters(paras, initial_k1):
@@ -127,6 +128,13 @@ class FrameworkInfoBAXMachine(HalfRealInfoBAXMachine):
         return paras
 
 
+def archived_variables(config, settings):
+    names = settings["variables"] if "variables" in settings else (settings["variable"],)
+    return tuple(OptimizationVariable(name, low, high) for name, low, high in zip(
+        names, current_vector(config.current_low), current_vector(config.current_high), strict=True,
+    ))
+
+
 def build_framework_workflow(paras, variable, run_dir, *, plane, model="transport_moments",
                              active_queries=3,max_minutes=120,solenoid_settle=2,
                              current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
@@ -135,6 +143,9 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
                              resume=False,lease=None):
     if paras.samples < 3:
         raise ValueError("InfoBAX requires at least 3 main-window Samples per point")
+    variables = (variable,) if isinstance(variable, OptimizationVariable) else tuple(variable)
+    if not variables:
+        raise ValueError("Select at least one solenoid for InfoBAX")
     if paras.defer_measurement_prepare:
         prepare_measurement(paras)
     contract=measurement_contract(paras)
@@ -146,8 +157,7 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
         settings=json.loads(config.settings_json)
         if settings.get("measurement_contract")!=json.loads(json.dumps(contract)):
             raise ValueError("Main-window measurement/model settings differ from the saved run")
-        if (variable.element_id!=settings["variable"] or variable.low!=config.current_low
-                or variable.high!=config.current_high or plane!=config.plane
+        if (variables != archived_variables(config, settings) or plane!=config.plane
                 or model!=config.model or active_queries!=config.active_queries or max_minutes!=config.max_minutes
                 or current_candidate_count!=config.current_candidate_count
                 or initial_points_per_end!=config.initial_points_per_end):
@@ -164,12 +174,17 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
             matrix=np.asarray(backend.get_map(paras.quad_name,paras.flag_name,k1=k1,
                 lattice_overrides=paras.model_lattice_overrides,seq="ent2exit",twiss_only=True))
             projections.append((float(matrix[offset,offset]),float(matrix[offset,offset+1])))
-        settings={"measurement_contract":contract,"variable":variable.element_id,
-                  "solenoid_settle":solenoid_settle}
-        config=WorkflowConfig(variable.low,variable.high,scans,tuple(projections),paras.EnergyMeV,
+        settings = {"measurement_contract": contract, "solenoid_settle": solenoid_settle}
+        if len(variables) == 1:
+            settings["variable"] = variables[0].element_id
+            low, high = variables[0].low, variables[0].high
+        else:
+            settings["variables"] = [item.element_id for item in variables]
+            low, high = tuple(item.low for item in variables), tuple(item.high for item in variables)
+        config=WorkflowConfig(low,high,scans,tuple(projections),paras.EnergyMeV,
             plane,model,active_queries,max_minutes,json.dumps(settings,sort_keys=True,allow_nan=False),
             current_candidate_count=current_candidate_count,initial_points_per_end=initial_points_per_end)
-    machine=FrameworkInfoBAXMachine(paras,variable,config,solenoid_settle=solenoid_settle)
+    machine=FrameworkInfoBAXMachine(paras,variables,config,solenoid_settle=solenoid_settle)
     kwargs=dict(approve=approve,automatic_measurements=automatic_measurements,progress=progress,
                 full_scan=full_scan,control_lease=lease)
     if resume:
@@ -183,7 +198,6 @@ def load_framework_recovery(context,run_dir):
     Measurement identity is retained from the archive, but this handle cannot
     run queries or apply a recommendation. Device mappings/limits must match.
     """
-    from .optimization import OptimizationVariable
     from half_linac.src.shared.machine_profile import resolve_write_target
     data=json.loads((Path(run_dir)/InfoBAXWorkflow.filename).read_text())
     if data.get("schema")!="half_infobax_workflow_v2":raise ValueError("Prototype archives are read-only")
@@ -191,7 +205,8 @@ def load_framework_recovery(context,run_dir):
     settings=json.loads(config.settings_json)
     contract=settings.get("measurement_contract")
     if not contract:raise ValueError("Only framework archives support device recovery")
-    for name in (settings["variable"],contract["quad"]):
+    variables = archived_variables(config, settings)
+    for name in (*(variable.element_id for variable in variables), contract["quad"]):
         element=context.profile.get_element(name)
         actual={"channels":element.channels,"limits":element.limits,"geometry":element.image_geometry}
         if json.loads(json.dumps(actual))!=contract["channels"][name]:
@@ -201,8 +216,7 @@ def load_framework_recovery(context,run_dir):
         raise ValueError("Saved scan K1 is outside the current machine limit")
     camera=SimpleNamespace(settings=SimpleNamespace(plane=config.plane),background=None,
         fingerprint=fingerprint(contract["measurement"]),statistics={},archive_dir=None)
-    machine=HalfRealInfoBAXMachine(context,
-        OptimizationVariable(settings["variable"],config.current_low,config.current_high),
+    machine=HalfRealInfoBAXMachine(context, variables,
         config,camera,scan_quad=contract["quad"],settle_time=settings["solenoid_settle"])
     machine.recovery_only=True
     # Only device restoration is authorized by this handle. Measurement identity

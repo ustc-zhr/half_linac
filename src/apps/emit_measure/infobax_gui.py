@@ -110,7 +110,7 @@ class InfoBAXWindow(QMainWindow):
         self.energy, self.settle, self.interval = self.number(2200, positive=True), self.number(8, positive=True), self.number(0, positive=True)
         self.scan_points, self.samples, self.active, self.minutes = QSpinBox(), QSpinBox(), QSpinBox(), QSpinBox()
         for widget, minimum, maximum, value in ((self.scan_points,3,101,15),(self.samples,3,100,5),
-                                               (self.active,0,3,3),(self.minutes,1,1440,120)):
+                                               (self.active,0,2**31 - 1,3),(self.minutes,1,1440,120)):
             widget.setRange(minimum, maximum)
             widget.setValue(value)
         self.roi = QLineEdit()

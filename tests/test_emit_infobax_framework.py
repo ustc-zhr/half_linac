@@ -38,15 +38,17 @@ class FrameworkTests(unittest.TestCase):
         self.q,self.screen='QT02','PRF07'
         self.pvs={key:resolve_channel(self.context,e,ch) for key,e,ch in (
             ('sol','SS01','current_set'),('sol_rb','SS01','current_readback'),
+            ('sol2','SS02','current_set'),('sol2_rb','SS02','current_readback'),
             ('k1',self.q,'K1'),('qset',self.q,'current_set'),('qrb',self.q,'current_readback'),
             ('image',self.screen,'image'))}
         self.values={v:1. if k.startswith('sol') else 0. for k,v in self.pvs.items() if k!='image'}
+        self.values[self.pvs['sol2']] = self.values[self.pvs['sol2_rb']] = 1.2
         def get(pv,*a,**kw):
             self.pv_reads.append(pv)
             if pv==self.pvs['image']:
                 self.frame+=1
                 k=self.values[self.pvs['k1']];current=self.values[self.pvs['sol']]
-                scale=1.+.5*((current-.5)/2)**2
+                scale=1.+.5*((current-.5)/2)**2 + .15*(self.values[self.pvs['sol2']] - 1.2)
                 variance=(.08-.03*k+.06*k*k)*scale*(1+.002*np.sin(self.frame))
                 a=np.linspace(-3.2,3.2,64);x,y=np.meshgrid(a,a)
                 return (1000*np.exp(-x*x/(2*variance)-y*y/(2*(.07+.04*k*k)))).ravel()
@@ -54,6 +56,7 @@ class FrameworkTests(unittest.TestCase):
         def put(pv,value,*a,**kw):
             self.pv_writes.append((pv,value));self.values[pv]=value
             if pv==self.pvs['sol']:self.values[self.pvs['sol_rb']]=value
+            if pv==self.pvs['sol2']:self.values[self.pvs['sol2_rb']]=value
             if pv==self.pvs['k1']:self.values[self.pvs['qset']]=self.values[self.pvs['qrb']]=value
             return 1
         patch.object(main.epics,'caget',side_effect=get).start()
@@ -127,7 +130,7 @@ class FrameworkTests(unittest.TestCase):
             self.complete()
 
     def test_actual_scan_thread_full_loop_without_frame_id(self):
-        self.page.active.setValue(1)
+        self.page.active.setValue(5)
         self.dialog.start();self.complete()
         w=self.page.workflow
         self.assertIsNotNone(w,self.dialog.status.text())
@@ -136,8 +139,9 @@ class FrameworkTests(unittest.TestCase):
         self.assertEqual(w.baseline_fit['source'],'existing_scan')
         self.assertEqual(w.verification_fit['source'],'existing_scan')
         self.assertEqual(len(w.baseline),3);self.assertEqual(len(w.verification),3)
-        self.assertEqual(len(w.records),13)
-        self.assertEqual(sum(row['phase'] == 'active' for row in w.records), 1)
+        self.assertEqual(w.config.active_queries, 5)
+        self.assertEqual(len(w.records),17)
+        self.assertEqual(sum(row['phase'] == 'active' for row in w.records), 5)
         self.assertNotIn('current_candidate_count', w.payload()['config'])
         self.assertNotIn('initial_points_per_end', w.payload()['config'])
         self.assertEqual(self.values[self.pvs['sol']],1.)
@@ -214,11 +218,60 @@ class FrameworkTests(unittest.TestCase):
         error.assert_called_once();self.assertIn('Samples',error.call_args.args[0])
         self.assertEqual(self.pv_writes,[])
 
-    def test_multiple_solenoids_rejected_before_read_or_write(self):
-        row=self.dialog.variable_rows['SS02'];self.dialog.variables.item(row,0).setCheckState(Qt.Checked)
+    def test_empty_solenoid_selection_is_rejected_before_motion(self):
+        row = self.dialog.variable_rows['SS01']
+        self.dialog.variables.item(row, 0).setCheckState(Qt.Unchecked)
         self.pv_writes.clear()
-        with patch.object(self.dialog,'error') as error:self.dialog.start()
-        self.assertIn('exactly one',error.call_args.args[0]);self.assertEqual(self.pv_writes,[])
+        with patch.object(self.dialog, 'error') as error:
+            self.dialog.start()
+        self.assertIn('at least one', error.call_args.args[0])
+        self.assertEqual(self.pv_writes, [])
+
+    def test_two_solenoids_resume_and_apply_the_verified_current_vector(self):
+        initial = (1., 1.2)
+        row = self.dialog.variable_rows['SS02']
+        self.dialog.variables.item(row, 0).setCheckState(Qt.Checked)
+        self.dialog.variables.item(row, 3).setText('0')
+        self.dialog.variables.item(row, 4).setText('2')
+        self.page.active.setValue(2)
+        self.start_paused('verification')
+
+        workflow = self.page.workflow
+        self.assertEqual(workflow.status, 'paused', workflow.error)
+        self.assertEqual(workflow.initial['current_a'], initial)
+        self.assertIn(initial, workflow.candidates)
+        self.assertEqual(workflow.core.pool.candidate_coordinates.shape, (5, 2))
+        self.assertEqual(sum(record['phase'] == 'active' for record in workflow.records), 2)
+        self.assertTrue(all(pv in {entry[0] for entry in self.pv_writes}
+                            for pv in (self.pvs['sol'], self.pvs['sol2'])))
+        self.assertEqual(tuple(self.values[self.pvs[key]] for key in ('sol', 'sol2')), initial)
+
+        self.dialog.variables.item(row, 0).setCheckState(Qt.Unchecked)
+        with patch('half_linac.src.apps.emit_measure.infobax_page.QFileDialog.getOpenFileName',
+                   return_value=(str(workflow.path), '')):
+            self.page.load_run()
+        self.assertEqual(self.dialog.selected_names(), ['SS01', 'SS02'])
+        self.assertIn('SS02=', self.page.table.item(0, 1).text())
+        self.dialog.start()
+        self.complete()
+
+        workflow = self.page.workflow
+        self.assertEqual(workflow.status, 'completed', workflow.error)
+        self.assertEqual(workflow.restoration_status, 'succeeded')
+        self.assertTrue(workflow.confirmed)
+        self.assertEqual(tuple(self.values[self.pvs[key]] for key in ('sol', 'sol2')), initial)
+        recommendation = workflow.candidates[workflow.recommendation['recommended_candidate_index']]
+        with patch.object(main.QMessageBox, 'question', return_value=main.QMessageBox.Yes):
+            self.page.manual('best')
+            self.complete()
+        self.assertEqual(tuple(self.values[self.pvs[key]] for key in ('sol', 'sol2')), recommendation)
+        with patch('half_linac.src.apps.emit_measure.infobax_page.QFileDialog.getOpenFileName',
+                   return_value=(str(workflow.path), '')):
+            self.page.load_run()
+        self.page.manual('initial')
+        self.complete()
+        self.assertTrue(self.page.workflow.machine.recovery_only)
+        self.assertEqual(tuple(self.values[self.pvs[key]] for key in ('sol', 'sol2')), initial)
 
     def test_partial_baseline_resumes_only_missing_grid_points(self):
         from half_linac.src.apps.emit_measure.infobax_framework import FrameworkInfoBAXMachine
