@@ -28,7 +28,7 @@
       "model_line": "EMIT_QT02_PRF07",
       "scan": {
         "quadrupole": {"low": -1, "high": 5, "steps": 15, "unit": "1/m^2", "mode": "absolute"},
-        "sampling": {"samples_per_point": 3, "settle_time_s": 8, "sample_interval_s": 8},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 8},
         "adaptive": {
           "low": -10,
           "high": 10,

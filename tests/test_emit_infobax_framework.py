@@ -64,7 +64,7 @@ class FrameworkTests(unittest.TestCase):
         self.host._show_optimization();self.dialog=self.host.optimization_dialog
         self.page=self.dialog.infobax_page
         self.dialog.tabs.setCurrentIndex(1)
-        self.page.upstream.setChecked(True);self.page.active.setValue(0)
+        self.page.active.setValue(0)
         self.dialog.solenoid_settle.setValue(0)
         # Freeze a small camera while keeping the real profile's PV resolution.
         paras=self.host.get_setting(show_warning=False)
@@ -126,6 +126,8 @@ class FrameworkTests(unittest.TestCase):
         self.assertEqual(w.verification_fit['source'],'existing_scan')
         self.assertEqual(len(w.baseline),3);self.assertEqual(len(w.verification),3)
         self.assertEqual(len(w.records),12)
+        self.assertNotIn('current_candidate_count', w.payload()['config'])
+        self.assertNotIn('initial_points_per_end', w.payload()['config'])
         self.assertEqual(self.values[self.pvs['sol']],1.)
         self.assertEqual(self.values[self.pvs['k1']],0.)
         self.assertFalse(any('frame_id' in pv for pv in self.pv_reads))
@@ -134,6 +136,47 @@ class FrameworkTests(unittest.TestCase):
             self.assertEqual(r['measurement']['metadata']['freshness'],'timed_unverified')
         self.assertFalse(self.host._optimization_locked)
         self.assertTrue(self.dialog.tabs.tabBar().isEnabled())
+
+    def test_custom_candidate_and_initialization_counts_resume_from_archive(self):
+        self.paras.k1_steps = 4
+        self.page.current_candidate_count.setValue(7)
+        self.page.initial_points_per_end.setValue(4)
+        self.dialog.start()
+        for _ in range(9):
+            self.pump(lambda: self.page.approve_button.isEnabled() or not self.page.busy())
+            self.assertTrue(self.page.approve_button.isEnabled(), self.dialog.status.text())
+            self.assertFalse(self.page.current_candidate_count.isEnabled())
+            self.assertFalse(self.page.initial_points_per_end.isEnabled())
+            self.page.approve_current()
+        self.pump(lambda: self.page.approve_button.isEnabled() or not self.page.busy())
+        self.assertIn('verification', self.page.proposal.text())
+        self.page.stop(pause=True)
+        self.pump(lambda: not self.page.busy())
+
+        workflow = self.page.workflow
+        self.assertEqual(workflow.status, 'paused')
+        self.assertEqual(len(workflow.candidates), 7)
+        self.assertEqual(workflow.core.pool.query_count, 28)
+        initialization = [r for r in workflow.records if r['phase'] == 'initialization']
+        self.assertEqual([(r['candidate_index'], r['scan_index']) for r in initialization],
+                         [(candidate, scan) for candidate in (0, 6) for scan in range(4)])
+
+        self.page.current_candidate_count.setValue(5)
+        self.page.initial_points_per_end.setValue(3)
+        self.pv_writes.clear()
+        self.dialog.start()
+        self.pump(lambda: not self.page.busy())
+        self.assertIn('settings differ', self.dialog.status.text())
+        self.assertEqual(self.pv_writes, [])
+
+        with patch('half_linac.src.apps.emit_measure.infobax_page.QFileDialog.getOpenFileName',
+                   return_value=(str(workflow.path), '')):
+            self.page.load_run()
+        self.assertEqual(self.page.current_candidate_count.value(), 7)
+        self.assertEqual(self.page.initial_points_per_end.value(), 4)
+        self.dialog.start()
+        self.complete()
+        self.assertEqual(self.page.workflow.status, 'completed', self.page.workflow.error)
 
     def test_waiting_has_no_writes_and_pause_reapproval(self):
         self.pv_writes.clear();self.dialog.start()

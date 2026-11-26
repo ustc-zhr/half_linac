@@ -330,6 +330,28 @@ class DialogTests(unittest.TestCase):
         self.assertFalse(self.dialog.rcds_settings.isHidden())
         self.assertTrue(self.dialog.bo_settings.isHidden())
 
+    def test_switching_back_to_constrained_bo_reveals_both_constraints(self):
+        dialog = self.dialog
+        dialog.resize(800, 720)
+        dialog.algorithm.setCurrentIndex(dialog.algorithm.findData('cbo'))
+        dialog.other_limit.setText('3.5')
+        dialog.charge_retention.setValue(93.)
+        self.app.processEvents()
+
+        dialog.tabs.setCurrentIndex(1)
+        self.app.processEvents()
+        self.assertFalse(dialog.other_limit.isVisible())
+        self.assertFalse(dialog.charge_retention.isVisible())
+        scroll = dialog.scroll_area.verticalScrollBar()
+        scroll.setValue(scroll.maximum())
+
+        dialog.tabs.setCurrentIndex(0)
+        self.app.processEvents()
+        for control in (dialog.other_limit, dialog.charge_retention):
+            self.assertEqual(control.visibleRegion().boundingRect().height(), control.height())
+        self.assertEqual(dialog.other_limit.text(), '3.5')
+        self.assertEqual(dialog.charge_retention.value(), 93.)
+
     def test_constrained_bo_settings_create_optional_ict01_monitor(self):
         from half_linac.src.apps.emit_measure.optimization import OptimizationVariable
         ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')

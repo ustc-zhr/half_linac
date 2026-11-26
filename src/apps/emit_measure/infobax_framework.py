@@ -10,7 +10,9 @@ import numpy as np
 from .control import emittance_lock
 from .measurement_service import MeasurementSnapshot, PointAcquirer, fingerprint, prepare_measurement
 from .infobax_machine import HalfRealInfoBAXMachine
-from .infobax_workflow import InfoBAXWorkflow, WorkflowConfig
+from .infobax_workflow import (
+    DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow, WorkflowConfig,
+)
 
 
 def grid_for_parameters(paras, initial_k1):
@@ -127,6 +129,8 @@ class FrameworkInfoBAXMachine(HalfRealInfoBAXMachine):
 
 def build_framework_workflow(paras, variable, run_dir, *, plane, model="transport_moments",
                              active_queries=3,max_minutes=120,solenoid_settle=2,
+                             current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
+                             initial_points_per_end=DEFAULT_INITIAL_POINTS_PER_END,
                              approve=None,progress=None,full_scan=None,resume=False,lease=None):
     if paras.samples < 3:
         raise ValueError("InfoBAX requires at least 3 main-window Samples per point")
@@ -143,7 +147,9 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
             raise ValueError("Main-window measurement/model settings differ from the saved run")
         if (variable.element_id!=settings["variable"] or variable.low!=config.current_low
                 or variable.high!=config.current_high or plane!=config.plane
-                or model!=config.model or active_queries!=config.active_queries or max_minutes!=config.max_minutes):
+                or model!=config.model or active_queries!=config.active_queries or max_minutes!=config.max_minutes
+                or current_candidate_count!=config.current_candidate_count
+                or initial_points_per_end!=config.initial_points_per_end):
             raise ValueError("Optimization settings differ from the saved run")
         if solenoid_settle!=settings["solenoid_settle"]:
             raise ValueError("Solenoid settle setting differs from the saved run")
@@ -160,7 +166,8 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
         settings={"measurement_contract":contract,"variable":variable.element_id,
                   "solenoid_settle":solenoid_settle}
         config=WorkflowConfig(variable.low,variable.high,scans,tuple(projections),paras.EnergyMeV,
-            plane,model,active_queries,max_minutes,json.dumps(settings,sort_keys=True,allow_nan=False))
+            plane,model,active_queries,max_minutes,json.dumps(settings,sort_keys=True,allow_nan=False),
+            current_candidate_count=current_candidate_count,initial_points_per_end=initial_points_per_end)
     machine=FrameworkInfoBAXMachine(paras,variable,config,solenoid_settle=solenoid_settle)
     kwargs=dict(approve=approve,progress=progress,full_scan=full_scan,control_lease=lease)
     if resume:

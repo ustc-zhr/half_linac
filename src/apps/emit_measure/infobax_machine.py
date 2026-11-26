@@ -13,10 +13,10 @@ from .infobax_session import PointMeasurement
 
 class FakeInfoBAXMachine:
     machine_id, backend = "half", "fake"
-    candidate_ids = tuple(f"current-{i}" for i in range(5))
 
     def __init__(self, config, *, initial_current=0.0, seed=0):
         self.config, self.current, self.k1 = config, float(initial_current), 0.0
+        self.candidate_ids = config.candidate_ids
         self.candidates = ()
         self.check = lambda: None
         self.archive_dir = None
@@ -77,7 +77,6 @@ def camera_contract(context, screen):
 
 class HalfRealInfoBAXMachine:
     machine_id, backend = "half", "real"
-    candidate_ids = tuple(f"current-{i}" for i in range(5))
 
     def __init__(self, context, variable, config, camera, *, scan_quad, get=None, put=None,
                  settle_time=8.0, motion_timeout=10.0, tolerance=0.01, model_checks=None):
@@ -93,6 +92,7 @@ class HalfRealInfoBAXMachine:
         if camera.settings.plane != config.plane:
             raise ValueError("Camera plane must match the workflow target")
         self.context, self.config, self.camera = context, config, camera
+        self.candidate_ids = config.candidate_ids
         self.scan_quad = scan_quad
         self.settle_time, self.motion_timeout, self.tolerance = settle_time, motion_timeout, tolerance
         device_config = OptimizationConfig((variable,), config.plane, None,
@@ -120,7 +120,9 @@ class HalfRealInfoBAXMachine:
     def configure(self, candidates):
         self.device.validate(read_values=False)
         self.candidates = tuple(candidates)
-        if len(self.candidates) != 5 or np.min(np.diff(self.candidates)) <= 2*self.tolerance:
+        if len(self.candidates) != self.config.current_candidate_count:
+            raise ValueError("Current candidate count does not match the workflow")
+        if np.min(np.diff(self.candidates)) <= 2*self.tolerance:
             raise ValueError("Candidate spacing must exceed twice the current readback tolerance")
         for value in self.candidates:
             self.device._validate_point((value,))

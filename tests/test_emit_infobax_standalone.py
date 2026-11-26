@@ -281,6 +281,11 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(current_candidates(-1,1,0),(-1.,-.5,0.,.5,1.))
         self.assertIn(.13,current_candidates(-1,1,.13))
         with self.assertRaises(ValueError): current_candidates(-1,1,2)
+        self.assertEqual(current_candidates(-1, 1, 0, count=3), (-1., 0., 1.))
+        with self.assertRaisesRegex(ValueError, 'two current candidates'):
+            config(current_candidate_count=1)
+        with self.assertRaisesRegex(ValueError, 'Initial K1 points'):
+            config(initial_points_per_end=len(self.cfg.scan_values) + 1)
         with self.assertRaises(ValueError):
             WorkflowConfig(-1,1,(-1.,0.,1.),((1.,0.),)*3,225)
 

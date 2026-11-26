@@ -595,29 +595,24 @@ class OptimizationDialog(QDialog):
         self.energy = QLabel(self.settings)
         fields = (
             ('Algorithm', self.algorithm), ('Minimize', self.plane),
-            ('Limit other plane', self.other_limit_enabled),
-            ('Other-plane upper limit (mm·mrad)', self.other_limit),
             ('Max. scans', self.count), ('Time budget (min)', self.minutes),
             ('Main-window energy (MeV)', self.energy), ('Solenoid settle time (s)', self.solenoid_settle),
+            ('Limit other plane', self.other_limit_enabled),
+            ('Other-plane upper limit (mm·mrad)', self.other_limit),
         )
-        self._bo_option_widgets = []
         self._option_fields = []
         self.options_grid = options_grid
-        for index, (text, control) in enumerate(fields):
-            row, column = divmod(index, 2)
+        for text, control in fields:
             label = QLabel(text, self.settings)
             label.setProperty('role', 'caption')
             label.setBuddy(control)
             label.setWordWrap(True)
-            if control in (self.algorithm, self.other_limit_enabled, self.other_limit, self.count):
-                self._bo_option_widgets.extend((label, control))
             self._option_fields.append((label, control))
-            options_grid.addWidget(label, row * 2, column, alignment=Qt.AlignBottom)
             control.setMinimumWidth(0)
             control.setFixedHeight(32)
             control.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-            options_grid.addWidget(control, row * 2 + 1, column, alignment=Qt.AlignTop)
-            options_grid.setColumnStretch(column, 1)
+        options_grid.setColumnStretch(0, 1)
+        options_grid.setColumnStretch(1, 1)
         settings_layout.addWidget(self.options_panel, 2)
         setup_layout.addWidget(self.settings)
 
@@ -729,7 +724,7 @@ class OptimizationDialog(QDialog):
         self.bo_seed.setToolTip('Controls repeatable initial and candidate sampling.')
         advanced_layout.addWidget(seed_label)
         advanced_layout.addWidget(self.bo_seed)
-        self.charge_settings = QWidget(self.algorithm_settings)
+        self.charge_settings = QWidget(self.options_panel)
         self.charge_settings.setObjectName('optChargeSettings')
         charge_layout = QGridLayout(self.charge_settings)
         charge_layout.setContentsMargins(0, 0, 0, 0)
@@ -756,10 +751,8 @@ class OptimizationDialog(QDialog):
         charge_layout.setColumnStretch(1, 1)
         algorithm_layout.addWidget(self.rcds_settings)
         algorithm_layout.addWidget(self.bo_settings)
-        algorithm_layout.addWidget(self.charge_settings)
         algorithm_layout.addWidget(self.advanced_button, alignment=Qt.AlignLeft)
         algorithm_layout.addWidget(self.bo_advanced)
-        options_grid.addWidget(self.algorithm_settings, 8, 0, 1, 2)
         setup_layout.addWidget(self.budget_note)
         self.measurement_note = QLabel(self)
         self.measurement_note.setProperty('role', 'caption')
@@ -870,7 +863,6 @@ class OptimizationDialog(QDialog):
         self.tabs = QTabWidget(self)
         conventional = QWidget(self.tabs)
         conventional_layout = QVBoxLayout(conventional)
-        layout.removeWidget(self.algorithm_settings)
         layout.removeWidget(results_card)
         conventional_layout.addWidget(self.algorithm_settings)
         conventional_layout.addWidget(results_card, 1)
@@ -887,6 +879,7 @@ class OptimizationDialog(QDialog):
         buttons.insertWidget(2, self.pause_button)
         self.pause_button.clicked.connect(lambda: self.infobax_page.stop(pause=True))
         self.tabs.currentChanged.connect(self.optimization_tab_changed)
+        self.update_search_options()
         self.refresh_note()
         self.update_algorithm_settings()
         self.update_budget_note()
@@ -908,6 +901,24 @@ class OptimizationDialog(QDialog):
     def info_active(self):
         return hasattr(self, "tabs") and self.tabs.currentIndex() == 1
 
+    def update_search_options(self):
+        while self.options_grid.count():
+            self.options_grid.takeAt(0)
+        conventional_only = (self.algorithm, self.other_limit_enabled, self.other_limit, self.count)
+        visible = []
+        for label, control in self._option_fields:
+            show = not self.info_active() or control not in conventional_only
+            label.setVisible(show)
+            control.setVisible(show)
+            if show:
+                visible.append((label, control))
+        for index, (label, control) in enumerate(visible):
+            row, column = divmod(index, 2)
+            self.options_grid.addWidget(label, row * 2, column, alignment=Qt.AlignBottom)
+            self.options_grid.addWidget(control, row * 2 + 1, column, alignment=Qt.AlignTop)
+        charge_row = 2 * ((len(visible) + 1) // 2)
+        self.options_grid.addWidget(self.charge_settings, charge_row, 0, 1, 2)
+
     def optimization_tab_changed(self, index):
         if (self.busy() or self.fault) and index != self._active_tab:
             blocked=self.tabs.blockSignals(True)
@@ -915,27 +926,15 @@ class OptimizationDialog(QDialog):
             self.tabs.blockSignals(blocked)
             return
         self._active_tab=index
-        while self.options_grid.count():
-            self.options_grid.takeAt(0)
-        visible=[]
-        for label,control in self._option_fields:
-            is_visible=index==0 or control not in (self.algorithm,self.other_limit_enabled,self.other_limit,self.count)
-            label.setVisible(is_visible);control.setVisible(is_visible)
-            if is_visible: visible.append((label,control))
-        for i,(label,control) in enumerate(visible):
-            row,column=divmod(i,2)
-            self.options_grid.addWidget(label,row*2,column,alignment=Qt.AlignBottom)
-            self.options_grid.addWidget(control,row*2+1,column,alignment=Qt.AlignTop)
-        self.options_grid.setAlignment(Qt.AlignTop)
-        for widget in self._bo_option_widgets:
-            widget.setVisible(index == 0)
+        self.update_search_options()
+        self.update_algorithm_settings()
         self.budget_note.setVisible(index == 0)
         self.pause_button.setVisible(index == 1)
         if index == 1:
             self.infobax_page.refresh_note()
             self.infobax_page.render()
             if self.infobax_page.state() is None:
-                self.status.setText("InfoBAX ready. Configure the main-window measurement and confirm the upstream solenoid.")
+                self.status.setText("InfoBAX ready. Select one solenoid and configure the main-window measurement.")
                 self.progress_bar.setRange(0,1);self.progress_bar.setValue(0)
                 self.progress_bar.setFormat("0 point observations")
         else:
@@ -980,13 +979,20 @@ class OptimizationDialog(QDialog):
 
     def update_algorithm_settings(self):
         is_bo = self.algorithm.currentData() in ('bo', 'cbo')
-        is_cbo = self.algorithm.currentData() == 'cbo'
+        show_charge = self.algorithm.currentData() == 'cbo' and not self.info_active()
         self.rcds_settings.setVisible(not is_bo)
         self.bo_settings.setVisible(is_bo)
-        self.charge_settings.setVisible(is_cbo)
+        self.charge_settings.setVisible(show_charge)
         self.advanced_button.setVisible(is_bo)
         self.bo_advanced.setVisible(is_bo and self.advanced_button.isChecked())
         self.update_bo_acquisition_settings()
+        if show_charge:
+            QTimer.singleShot(0, self.reveal_cbo_constraints)
+
+    def reveal_cbo_constraints(self):
+        if self.charge_settings.isVisible():
+            self.scroll_area.ensureWidgetVisible(self.other_limit_enabled, 0, 24)
+            self.scroll_area.ensureWidgetVisible(self.charge_settings, 0, 8)
 
     def bo_acquisition_changed(self, *_args):
         self.update_bo_acquisition_settings()
@@ -1178,7 +1184,8 @@ class OptimizationDialog(QDialog):
             self.settings.setEnabled(not busy and not self.fault)
             page.model.setEnabled(not busy and not self.fault)
             page.active.setEnabled(not busy and not self.fault)
-            page.upstream.setEnabled(not busy and not self.fault)
+            page.current_candidate_count.setEnabled(not busy and not self.fault)
+            page.initial_points_per_end.setEnabled(not busy and not self.fault)
             recovery_needed=bool(state and state.get("restoration_status") in {"failed","pending"})
             runnable = not busy and not self.fault and self.host.machine_type == "real" and not page.read_only and not recovery_needed
             page.clear_button.setEnabled(not busy and not self.fault)

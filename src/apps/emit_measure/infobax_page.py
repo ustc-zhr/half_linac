@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QCheckBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
+    QSpinBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFileDialog, QAbstractItemView)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -19,7 +19,7 @@ from half_linac.src.shared.machine_profile import resolve_app_runtime_paths
 from .control import emittance_lock
 from .infobax_gui import WorkflowWorker
 from .infobax_framework import build_framework_workflow, load_framework_recovery
-from .infobax_workflow import InfoBAXWorkflow
+from .infobax_workflow import DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow
 
 
 class IntegratedInfoBAXWorker(WorkflowWorker):
@@ -28,11 +28,14 @@ class IntegratedInfoBAXWorker(WorkflowWorker):
     frame = pyqtSignal(dict)
 
     def __init__(self, paras, variable, run_dir, *, plane, model, active_queries,
-                 max_minutes, solenoid_settle, resume=False, workflow=None, action="run", parent=None,recovery_context=None):
+                 max_minutes, solenoid_settle, current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
+                 initial_points_per_end=DEFAULT_INITIAL_POINTS_PER_END,
+                 resume=False, workflow=None, action="run", parent=None,recovery_context=None):
         super().__init__(run_dir=run_dir,workflow=workflow,resume=resume,action=action,parent=parent)
         self.paras,self.variable=paras,variable
         self.recovery_context=recovery_context
         self.arguments=dict(plane=plane,model=model,active_queries=active_queries,
+                            current_candidate_count=current_candidate_count,initial_points_per_end=initial_points_per_end,
                             max_minutes=max_minutes,solenoid_settle=solenoid_settle)
 
     def full_scan(self,phase,completed,on_point):
@@ -103,11 +106,30 @@ class InfoBAXPage(QWidget):
         self.model=QComboBox();self.model.addItems(["transport_moments","M0"]);row.addWidget(self.model)
         row.addWidget(QLabel("Active query limit"))
         self.active=QSpinBox();self.active.setRange(0,3);self.active.setValue(3);row.addWidget(self.active)
-        self.upstream=QCheckBox("Selected solenoid is upstream of the scan segment")
         self.clear_button=QPushButton("Clear run / archive")
         self.clear_button.clicked.connect(self.clear_archive)
         row.addWidget(self.clear_button)
-        box.addLayout(row);box.addWidget(self.upstream)
+        box.addLayout(row)
+        design_row = QHBoxLayout()
+        self.current_candidate_count = QSpinBox()
+        self.current_candidate_count.setRange(2, 99)
+        self.current_candidate_count.setValue(DEFAULT_CURRENT_CANDIDATES)
+        self.current_candidate_count.setToolTip("Number of candidate currents, including the starting current.")
+        self.initial_points_per_end = QSpinBox()
+        self.initial_points_per_end.setRange(3, 2**31 - 1)
+        self.initial_points_per_end.setValue(DEFAULT_INITIAL_POINTS_PER_END)
+        self.initial_points_per_end.setToolTip(
+            "K1 points at each of the lowest and highest candidate currents. "
+            "Choose 3 to the number of K1 candidates in the main-window grid."
+        )
+        for label, control in (("Current candidates", self.current_candidate_count),
+                               ("Initial K1 points per end", self.initial_points_per_end)):
+            caption = QLabel(label)
+            caption.setBuddy(control)
+            design_row.addWidget(caption)
+            design_row.addWidget(control)
+        design_row.addStretch()
+        box.addLayout(design_row)
         self.note=QLabel();self.note.setWordWrap(True);box.addWidget(self.note)
         self.proposal=QLabel("Baseline: full scan → endpoint initialization → model-selected queries → full verification")
         self.proposal.setWordWrap(True);box.addWidget(self.proposal)
@@ -123,7 +145,8 @@ class InfoBAXPage(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.cellDoubleClicked.connect(self.open_diagnostics)
         box.addWidget(self.table,1)
-        for signal in (self.model.currentTextChanged,self.active.valueChanged,self.upstream.toggled):
+        for signal in (self.model.currentTextChanged,self.active.valueChanged,
+                       self.current_candidate_count.valueChanged,self.initial_points_per_end.valueChanged):
             signal.connect(self.settings_changed)
         self.style_plot()
         self.refresh_note()
@@ -153,7 +176,7 @@ class InfoBAXPage(QWidget):
             self.note.setText(f"Main measurement: {p.quad_name} → {p.flag_name} · {p.beam_width_method} · {p.samples} frames/point · "
                 f"{p.sample_interval:g} s interval · {p.k1_steps} K1 candidates over [{bounds[0]:g}, {bounds[1]:g}]. "
                 "Timed sampling; independent new frames are unverified. At least 3 frames/point are required. "
-                "5 current candidates; initialization adds up to 6 points. Only baseline/verification scan the full grid.")
+                "Baseline and verification run as full scans.")
 
     def settings_changed(self,*args):
         if self.workflow is not None and not self.busy(): self.workflow.confirmed=False
@@ -165,12 +188,12 @@ class InfoBAXPage(QWidget):
             d.check_idle()
             if self.read_only: raise ValueError("Prototype v1 archives are read-only; start a new run after clearing the archive")
             if len(d.selected_names())!=1:
-                raise ValueError("InfoBAX supports exactly one upstream solenoid")
+                raise ValueError("Select exactly one solenoid for InfoBAX")
             variables=d.selected_variables()
-            if len(variables)!=1: raise ValueError("InfoBAX supports exactly one upstream solenoid")
-            if not self.upstream.isChecked(): raise ValueError("Confirm the selected solenoid is upstream of the scan segment")
             paras=d.host.optimization_parameters(variables,defer_io=True)
             if paras.samples<3: raise ValueError("Set main-window Samples per point to at least 3 for InfoBAX")
+            if self.initial_points_per_end.value()>paras.k1_steps:
+                raise ValueError("Initial K1 points per end cannot exceed the number of K1 candidates")
             state=self.state()
             resume=bool(state and state["status"] in {"paused","recovery_required","restore_failed"})
             if state and state.get("restoration_status")=="failed" and self.workflow is not None:
@@ -182,6 +205,7 @@ class InfoBAXPage(QWidget):
             self.paras=paras
             self.launch(IntegratedInfoBAXWorker(paras,variables[0],run_dir,plane=d.plane.currentData(),
                 model=self.model.currentText(),active_queries=self.active.value(),max_minutes=d.minutes.value(),
+                current_candidate_count=self.current_candidate_count.value(),initial_points_per_end=self.initial_points_per_end.value(),
                 solenoid_settle=d.solenoid_settle.value(),resume=resume,parent=self))
         except Exception as exc: d.error(str(exc))
 
@@ -328,6 +352,8 @@ class InfoBAXPage(QWidget):
                     d.plane.setCurrentIndex(d.plane.findData(cfg["plane"]));d.minutes.setValue(cfg["max_minutes"])
                     d.solenoid_settle.setValue(settings["solenoid_settle"])
                     self.model.setCurrentText(cfg["model"]);self.active.setValue(cfg["active_queries"])
+                    self.current_candidate_count.setValue(cfg.get("current_candidate_count", DEFAULT_CURRENT_CANDIDATES))
+                    self.initial_points_per_end.setValue(cfg.get("initial_points_per_end", DEFAULT_INITIAL_POINTS_PER_END))
             self.render()
             if self.read_only:self.proposal.setText("Read-only prototype archive. Clear it to start a new framework run.")
             elif self.saved["status"]=="recovery_required":self.proposal.setText("Restore Initial before resuming; recovery does not require a working camera.")

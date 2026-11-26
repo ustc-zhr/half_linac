@@ -22,6 +22,10 @@ from .control import emittance_lock
 from .measurement_service import fingerprint, PointAcquisitionResult, fit_grid_results
 
 
+DEFAULT_CURRENT_CANDIDATES = 5
+DEFAULT_INITIAL_POINTS_PER_END = 3
+
+
 class WorkflowInterrupted(RuntimeError):
     pass
 
@@ -38,6 +42,8 @@ class WorkflowConfig:
     active_queries: int = 3
     max_minutes: float = 120.0
     settings_json: str = "{}"  # frozen profile/model/measurement snapshot
+    current_candidate_count: int = DEFAULT_CURRENT_CANDIDATES
+    initial_points_per_end: int = DEFAULT_INITIAL_POINTS_PER_END
 
     def __post_init__(self):
         if (not all(math.isfinite(v) for v in (self.current_low, self.current_high, self.energy_mev, self.max_minutes))
@@ -50,6 +56,10 @@ class WorkflowConfig:
         projections = tuple(tuple(float(v) for v in row) for row in self.projections)
         if len(scans) < 3 or len(set(scans)) != len(scans) or not all(math.isfinite(v) for v in scans):
             raise ValueError("At least three distinct finite K1 values are required")
+        if type(self.current_candidate_count) is not int or self.current_candidate_count < 2:
+            raise ValueError("At least two current candidates are required")
+        if type(self.initial_points_per_end) is not int or not 3 <= self.initial_points_per_end <= len(scans):
+            raise ValueError("Initial K1 points per end must be between 3 and the number of K1 candidates")
         p = np.asarray(projections)
         if p.shape != (len(scans), 2) or not np.all(np.isfinite(p)):
             raise ValueError("Transport projections must match scan values")
@@ -64,6 +74,10 @@ class WorkflowConfig:
         p = np.asarray(self.projections)
         return np.column_stack((p[:, 0]**2, 2*p[:, 0]*p[:, 1], p[:, 1]**2))
 
+    @property
+    def candidate_ids(self):
+        return tuple(f"current-{i}" for i in range(self.current_candidate_count))
+
     def initial_scan_indices(self):
         design = self.design
         scales = np.linalg.norm(design, axis=0)
@@ -71,26 +85,43 @@ class WorkflowConfig:
             raise ValueError("Transport design is rank deficient")
         scaled = design / scales
         _, _, pivots = qr(scaled.T, pivoting=True, mode="economic")
-        selected = tuple(sorted(int(i) for i in pivots[:3]))
+        selected = sorted(int(i) for i in pivots[:3])
         if (np.linalg.matrix_rank(scaled) != 3
                 or np.linalg.cond(scaled) > DEFAULT_MAX_CONDITION_NUMBER
-                or np.linalg.cond(scaled[list(selected)]) > DEFAULT_MAX_CONDITION_NUMBER):
+                or np.linalg.cond(scaled[selected]) > DEFAULT_MAX_CONDITION_NUMBER):
             raise ValueError("Transport design is singular or ill-conditioned")
-        return selected
+
+        # Keep the independent QR points and fill gaps for extra measurements.
+        scans = np.asarray(self.scan_values)
+        distances = np.min(np.abs(scans[:, None] - scans[selected]), axis=1)
+        while len(selected) < self.initial_points_per_end:
+            index = int(np.argmax(distances))
+            selected.append(index)
+            distances = np.minimum(distances, np.abs(scans - scans[index]))
+        return tuple(sorted(selected))
+
+    def to_dict(self):
+        data = asdict(self)
+        # Keep default configurations compatible with existing archive and pool hashes.
+        if self.current_candidate_count == DEFAULT_CURRENT_CANDIDATES:
+            data.pop("current_candidate_count")
+        if self.initial_points_per_end == DEFAULT_INITIAL_POINTS_PER_END:
+            data.pop("initial_points_per_end")
+        return data
 
     @property
     def fingerprint(self):
-        return fingerprint(asdict(self))
+        return fingerprint(self.to_dict())
 
 
-def current_candidates(low, high, initial):
+def current_candidates(low, high, initial, count=DEFAULT_CURRENT_CANDIDATES):
     if not math.isfinite(initial) or not low <= initial <= high:
         raise ValueError("Initial current must be inside the selected search range")
-    values = np.linspace(low, high, 5)
+    values = np.linspace(low, high, count)
     values[int(np.argmin(np.abs(values - initial)))] = initial
     values.sort()
-    if len(np.unique(values)) != 5:
-        raise ValueError("Five unique current candidates are required")
+    if len(np.unique(values)) != count:
+        raise ValueError(f"{count} unique current candidates are required")
     return tuple(float(v) for v in values)
 
 
@@ -146,7 +177,7 @@ class InfoBAXWorkflow:
                            "confirmed": self.confirmed, "elapsed_seconds": self.elapsed(), **extra})
 
     def payload(self):
-        return {"schema": "half_infobax_workflow_v2", "config": asdict(self.config),
+        return {"schema": "half_infobax_workflow_v2", "config": self.config.to_dict(),
                 "config_fingerprint": self.config.fingerprint,
                 "machine_fingerprint": self.machine.fingerprint,
                 "numerical_config": self.numerical_config.to_dict(),
@@ -249,17 +280,19 @@ class InfoBAXWorkflow:
         scans = np.asarray(cfg.scan_values)
         currents = np.asarray(self.candidates)
         noise = [r["measurement"]["noise_std_mm2"] for r in self.baseline]
-        return FinitePoolSpec(tuple(f"current-{i}" for i in range(5)),
+        return FinitePoolSpec(cfg.candidate_ids,
                               ((currents-currents.min())/np.ptp(currents))[:, None],
                               scans, (scans-scans.min())/np.ptp(scans), cfg.design,
-                              cfg.energy_mev, np.tile(noise, 5),
+                              cfg.energy_mev, np.tile(noise, len(currents)),
                               fingerprint({"machine": self.machine.fingerprint, "config": cfg.fingerprint}))
 
     def _create_core(self):
         n = len(self.config.scan_values)
         initial_index = self.candidates.index(self.initial["current_a"])
         indices = [initial_index*n+i for i in range(n)]
-        indices += [c*n+i for c in (0, 4) for i in self.config.initial_scan_indices()]
+        endpoints = (0, len(self.candidates) - 1)
+        scan_indices = self.config.initial_scan_indices()
+        indices.extend(candidate*n + scan for candidate in endpoints for scan in scan_indices)
         indices = tuple(dict.fromkeys(indices))
         pool = self._pool()
         self.machine.validate_pool(pool)
@@ -341,8 +374,10 @@ class InfoBAXWorkflow:
                 self.check()
                 if self.initial is None:
                     self.initial = dict(self.machine.snapshot())
-                    self.candidates = current_candidates(self.config.current_low, self.config.current_high,
-                                                         self.initial["current_a"])
+                    self.candidates = current_candidates(
+                        self.config.current_low, self.config.current_high,
+                        self.initial["current_a"], self.config.current_candidate_count,
+                    )
                 else:
                     self.machine.verify_snapshot(self.initial)
                 self.machine.configure(self.candidates)
