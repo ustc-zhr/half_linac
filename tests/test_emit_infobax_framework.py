@@ -153,6 +153,128 @@ class FrameworkTests(unittest.TestCase):
         self.assertFalse(self.host._optimization_locked)
         self.assertTrue(self.dialog.tabs.tabBar().isEnabled())
 
+    def mock_ict1(self, charge):
+        from half_linac.src.apps.emit_measure import infobax_framework
+
+        configured_settings = infobax_framework.monitor_settings
+        patch.object(infobax_framework, "monitor_settings", side_effect=lambda paras, retention: dict(
+            configured_settings(paras, retention), sample_interval_s=.001,
+        )).start()
+        pv = SimpleNamespace(wait_for_connection=lambda timeout: True,
+                             get_with_metadata=lambda **kwargs: {"value": charge(), "timestamp": time.time()})
+        patch.object(main.epics, "PV", return_value=pv).start()
+        self.page.ict1_enabled.setChecked(True)
+        return pv
+
+    def test_ict1_search_records_low_charge_and_replays_active_ranking(self):
+        from scripts.replay_emit_infobax import replay
+
+        pv = self.mock_ict1(lambda: .85 if self.page.workflow.status == "initialization" and
+                            self.values[self.pvs["sol"]] == 0 else 1.)
+        self.page.active.setValue(5)
+        self.dialog.start()
+        self.complete()
+        workflow = self.page.workflow
+        self.assertEqual(workflow.status, "completed", workflow.error)
+        self.assertEqual(workflow.payload()["schema"], "half_infobax_workflow_v3")
+        self.assertEqual(len(workflow.baseline), 3)
+        self.assertEqual(len(workflow.verification), 3)
+        self.assertEqual(workflow.ict1_baseline["minimum_nc"], .95)
+        self.assertTrue(workflow.ict1_verification["feasible"])
+        self.assertTrue(any(observation.charge_nc < .95 for observation in workflow.core.ict1_observations))
+        self.assertFalse(any(observation.window_id in {r["ict1_window_id"] for r in workflow.verification}
+                             for observation in workflow.core.ict1_observations))
+        report = replay(workflow.run_dir)
+        self.assertEqual(report["active_attempts"], 5)
+        self.assertEqual(len(report["active_queries"]), 5)
+        self.assertEqual(report["restore_readback"]["current_a"], [1.])
+        self.assertEqual(self.page.table.columnCount(), 7)
+        self.assertTrue(workflow.confirmed, workflow.verification_fit)
+        pv.get_with_metadata = lambda **kwargs: {"value": .85, "timestamp": time.time()}
+        with patch("half_linac.src.apps.emit_measure.infobax_page.QMessageBox.question",
+                   return_value=main.QMessageBox.Yes):
+            self.page.manual("best")
+        self.complete()
+        self.assertFalse(workflow.confirmed)
+        self.assertEqual(workflow.actions[-1]["state"], "failed")
+        self.assertFalse(workflow.actions[-1]["ict1"]["feasible"])
+        self.assertEqual(workflow.restoration_status, "succeeded")
+        self.assertEqual(self.values[self.pvs["sol"]], 1.)
+
+    def test_ict1_verification_failure_prevents_apply(self):
+        self.mock_ict1(lambda: .85 if self.page.workflow.status == "verification" else 1.)
+        self.dialog.start()
+        self.complete()
+        workflow = self.page.workflow
+        self.assertEqual(workflow.status, "completed", workflow.error)
+        self.assertFalse(workflow.ict1_verification["feasible"])
+        self.assertFalse(workflow.confirmed)
+        self.assertFalse(self.dialog.apply_button.isEnabled())
+        self.assertEqual(workflow.restoration_status, "succeeded")
+
+    def test_ict1_camera_failure_retains_committed_charge_and_restores(self):
+        self.mock_ict1(lambda: 1.)
+        original = main.epics.caget.side_effect
+
+        def fail_active_image(pv, *args, **kwargs):
+            workflow = self.page.workflow
+            if pv == self.pvs["image"] and workflow is not None and workflow.status == "active":
+                raise RuntimeError("camera failed after ICT1 window")
+            return original(pv, *args, **kwargs)
+
+        main.epics.caget.side_effect = fail_active_image
+        self.page.active.setValue(1)
+        self.dialog.start()
+        self.complete()
+        workflow = self.page.workflow
+        self.assertIsNotNone(workflow, self.page.error)
+        self.assertEqual(workflow.status, "failed", workflow.error)
+        self.assertEqual(workflow.restoration_status, "succeeded")
+        failed = workflow.records[-1]
+        self.assertEqual(failed["state"], "failed")
+        self.assertEqual(failed["phase"], "active")
+        self.assertNotIn("measurement", failed)
+        self.assertEqual(workflow.core.ict1_observations[-1].window_id, failed["ict1_window_id"])
+        self.assertTrue((workflow.run_dir / "ict1_windows" / f"{failed['ict1_window_id']}.json").is_file())
+
+        # Replay the interruption boundary immediately after the window file
+        # was saved, before its id and observation reached the checkpoint.
+        saved = json.loads(workflow.path.read_text())
+        saved["records"][-1]["state"] = "pending"
+        del saved["records"][-1]["ict1_window_id"]
+        del saved["records"][-1]["ict1"]
+        saved["core"]["ict1_observations"].pop()
+        saved.update(status="active", restoration_status="pending")
+        workflow.path.write_text(json.dumps(saved))
+        recovered = InfoBAXWorkflow.load(workflow.config, workflow.machine, workflow.run_dir)
+        self.assertEqual(recovered.status, "recovery_required")
+        self.assertEqual(recovered.records[-1]["state"], "interrupted")
+        self.assertEqual(recovered.records[-1]["ict1_window_id"], failed["ict1_window_id"])
+        self.assertEqual(recovered.core.ict1_observations, workflow.core.ict1_observations)
+
+    def test_ict1_pause_open_restore_and_resume(self):
+        pv = self.mock_ict1(lambda: 1.)
+        self.start_paused("verification")
+        workflow = self.page.workflow
+        self.assertEqual(workflow.status, "paused", workflow.error)
+        count = len(workflow.core.ict1_observations)
+        with patch("half_linac.src.apps.emit_measure.infobax_page.QFileDialog.getOpenFileName",
+                   return_value=(str(workflow.path), "")):
+            self.page.load_run()
+        self.assertTrue(self.page.ict1_enabled.isChecked())
+        self.assertEqual(self.page.ict1_retention.value(), 95.)
+        original = pv.get_with_metadata
+        pv.get_with_metadata = lambda **kw: self.fail("ICT1 unavailable during restore")
+        self.page.manual("initial")
+        self.complete()
+        self.assertIsNone(self.page.error)
+        self.assertTrue(self.page.workflow.machine.recovery_only)
+        pv.get_with_metadata = original
+        self.dialog.start()
+        self.complete()
+        self.assertEqual(self.page.workflow.status, "completed", self.page.workflow.error)
+        self.assertEqual(len(self.page.workflow.core.ict1_observations), count)
+
     def test_m0_one_initial_k1_per_end_resumes_from_archive(self):
         points = self.page.initial_points_per_end
         self.assertEqual(points.minimum(), 3)

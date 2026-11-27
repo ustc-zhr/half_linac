@@ -1242,6 +1242,8 @@ class OptimizationDialog(QDialog):
             page.active.setEnabled(not busy and not self.fault)
             page.current_candidate_count.setEnabled(not busy and not self.fault)
             page.initial_points_per_end.setEnabled(not busy and not self.fault)
+            page.ict1_enabled.setEnabled(not busy and not self.fault and not page.read_only)
+            page.ict1_retention.setEnabled(page.ict1_enabled.isEnabled() and page.ict1_enabled.isChecked())
             recovery_needed=bool(state and state.get("restoration_status") in {"failed","pending"})
             runnable = not busy and not self.fault and self.host.machine_type == "real" and not page.read_only and not recovery_needed
             page.clear_button.setEnabled(not busy and not self.fault)

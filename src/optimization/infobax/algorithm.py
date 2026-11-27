@@ -27,6 +27,8 @@ class OutputSummary:
     all_candidates_physical_probability: float
     candidate_physical_probabilities: np.ndarray
     entropy_nats: float
+    no_feasible_probability: float = 0.0
+    ict1_feasibility_probabilities: np.ndarray | None = None
 
 
 def categorical_entropy(categories: np.ndarray, category_count: int) -> float:
@@ -51,14 +53,15 @@ class BeamEmittanceAlgorithm:
     maps to the explicit final ``INVALID`` category.
     """
 
-    def __init__(self, pool: FinitePoolSpec) -> None:
+    def __init__(self, pool: FinitePoolSpec, *, constrain_ict1: bool = False) -> None:
         self.pool = pool
         self.candidate_count = pool.candidate_count
-        self.category_count = self.candidate_count + 1
         self.invalid_category = self.candidate_count
+        self.no_feasible_category = self.candidate_count + 1 if constrain_ict1 else None
+        self.category_count = self.candidate_count + (2 if constrain_ict1 else 1)
         self._design_pseudoinverse = np.linalg.pinv(pool.design_matrix)
 
-    def evaluate(self, state_samples: np.ndarray) -> AlgorithmSamples:
+    def evaluate(self, state_samples: np.ndarray, ict1_samples: np.ndarray | None = None) -> AlgorithmSamples:
         samples = np.asarray(state_samples, dtype=float)
         if samples.ndim != 2 or samples.shape[1] != self.pool.query_count:
             raise ValueError(
@@ -87,8 +90,17 @@ class BeamEmittanceAlgorithm:
 
         any_physical = np.any(candidate_physical, axis=1)
         categories = np.full(len(samples), self.invalid_category, dtype=int)
-        masked = np.where(candidate_physical, emittances, np.inf)
-        categories[any_physical] = np.argmin(masked[any_physical], axis=1)
+        eligible = candidate_physical
+        any_eligible = any_physical
+        if self.no_feasible_category is not None:
+            margins = np.asarray(ict1_samples, dtype=float)
+            if margins.shape != candidate_physical.shape or not np.all(np.isfinite(margins)):
+                raise ValueError("ICT1 samples must provide a finite margin for every workpoint and draw")
+            eligible = candidate_physical & (margins >= 0.0)
+            any_eligible = np.any(eligible, axis=1)
+            categories[any_physical & ~any_eligible] = self.no_feasible_category
+        masked = np.where(eligible, emittances, np.inf)
+        categories[any_eligible] = np.argmin(masked[any_eligible], axis=1)
         return AlgorithmSamples(
             categories=categories,
             emittances_mm_mrad=emittances,
@@ -99,17 +111,20 @@ class BeamEmittanceAlgorithm:
     def summarize(
         self,
         state_samples: np.ndarray,
+        ict1_samples: np.ndarray | None = None,
         *,
         recommendation_invalid_threshold: float,
     ) -> OutputSummary:
-        evaluated = self.evaluate(state_samples)
+        evaluated = self.evaluate(state_samples, ict1_samples)
         counts = np.bincount(
             evaluated.categories, minlength=self.category_count
         ).astype(float)
         probabilities = counts / len(evaluated.categories)
         invalid_probability = float(probabilities[self.invalid_category])
+        no_feasible_probability = (0.0 if self.no_feasible_category is None else
+                                   float(probabilities[self.no_feasible_category]))
         recommended = None
-        if invalid_probability < recommendation_invalid_threshold:
+        if invalid_probability + no_feasible_probability < recommendation_invalid_threshold:
             recommended = int(np.argmax(probabilities[: self.candidate_count]))
         return OutputSummary(
             recommended_candidate=recommended,
@@ -124,5 +139,8 @@ class BeamEmittanceAlgorithm:
             entropy_nats=categorical_entropy(
                 evaluated.categories, self.category_count
             ),
+            no_feasible_probability=no_feasible_probability,
+            ict1_feasibility_probabilities=(None if ict1_samples is None else
+                                            np.mean(np.asarray(ict1_samples) >= 0.0, axis=0)),
         )
 

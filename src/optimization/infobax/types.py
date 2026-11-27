@@ -322,6 +322,12 @@ class QuerySuggestion:
 
 
 @dataclass(frozen=True)
+class ConstrainedQuerySuggestion(QuerySuggestion):
+    acquisition_seed: int = 0
+    direct_prior_probabilities: tuple[float, ...] = ()
+
+
+@dataclass(frozen=True)
 class RecommendationResult:
     recommended_candidate_index: int | None
     recommended_candidate_id: str | None
@@ -332,4 +338,10 @@ class RecommendationResult:
     entropy_nats: float
     sample_count: int
     status: str
+
+
+@dataclass(frozen=True)
+class ConstrainedRecommendation(RecommendationResult):
+    no_feasible_probability: float
+    ict1_feasibility_probabilities: tuple[float, ...]
 

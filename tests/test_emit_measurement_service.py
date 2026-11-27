@@ -11,7 +11,7 @@ import numpy as np
 from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 from half_linac.src.apps.emit_measure.measurement_service import (
-    MeasurementSnapshot,PointAcquirer,PointAcquisitionResult,read_flag_image_fit,solve_beam_matrix)
+    MeasurementSnapshot,PointAcquirer,PointAcquisitionResult,ScanChargeMonitor,read_flag_image_fit,solve_beam_matrix)
 from half_linac.src.shared.beam_diagnostics.image_fit import analyze_raw_beam_image,analyze_beam_image
 from functools import partial
 
@@ -29,6 +29,18 @@ def image(width=4.):
 
 
 class MeasurementServiceTests(unittest.TestCase):
+    def test_ict1_stable_window_rejects_old_missing_and_duplicate_times(self):
+        monitor = ScanChargeMonitor({"element_id": "ICT01", "scale": 1., "stale_timeout_s": 3.})
+        readings = iter(({}, {"timestamp": 95.}, {"timestamp": 98.}, {"timestamp": 98.}, {"timestamp": 101.}))
+        monitor.pv = SimpleNamespace(get_with_metadata=lambda **kw: dict(next(readings), value=.85))
+        with patch("half_linac.src.apps.emit_measure.measurement_service.time.time", return_value=100.):
+            captured = [monitor.read(window_opened_at=96., after_timestamp=98. if i >= 3 else None)
+                        for i in range(5)]
+        self.assertEqual([row["status"] for row in captured], ["invalid", "invalid", "valid", "invalid", "invalid"])
+        self.assertIn("missing source timestamp", captured[0]["error"])
+        self.assertIn("duplicate", captured[3]["error"])
+        self.assertEqual(captured[2]["value"], .85)
+
     def test_all_width_methods_match_existing_image_analysis(self):
         for method in ('Gaussian fit','RMS moments','Robust RMS moments'):
             with self.subTest(method=method):

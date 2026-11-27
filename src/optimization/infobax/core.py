@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
+from dataclasses import asdict
 from typing import Any
 
 import numpy as np
 
 from .acquisition import InfoBAXEstimator
 from .algorithm import BeamEmittanceAlgorithm
+from .charge import ICT1Config, ICT1Observation, fit_ict1_posterior
 from .posterior import FinitePoolM0
 from .types import (
     CHECKPOINT_SCHEMA,
     IMPLEMENTATION_VERSION,
     CheckpointError,
+    ConstrainedQuerySuggestion,
+    ConstrainedRecommendation,
     DuplicateObservationError,
     EIGDiagnostic,
     FinitePoolSpec,
@@ -28,6 +32,8 @@ from .types import (
 
 
 MODEL_IMPLEMENTATION_VERSION = "finite-pool-models-v2"
+ICT1_CHECKPOINT_SCHEMA = "half_infobax_checkpoint_v3"
+ICT1_IMPLEMENTATION_VERSION = "finite-pool-ict1-v1"
 
 
 def stable_seed(*values: object) -> int:
@@ -40,8 +46,8 @@ def stable_seed(*values: object) -> int:
 class InfoBAXCore:
     """Pure numerical finite-pool InfoBAX kernel (M0 remains the default).
 
-    This class owns no machine I/O.  A caller executes the returned query and
-    submits only its scalar beam-size variance through :meth:`observe`.
+    This class owns no machine I/O. A caller submits beam-size variance through
+    :meth:`observe` and, when enabled, ICT1 measurements through :meth:`observe_ict1`.
     """
 
     def __init__(
@@ -51,6 +57,7 @@ class InfoBAXCore:
         *,
         model: str = "M0",
         initial_queries: tuple[int, ...] | None = None,
+        ict1: ICT1Config | None = None,
     ) -> None:
         if not isinstance(pool, FinitePoolSpec):
             raise TypeError("pool must be a FinitePoolSpec")
@@ -63,6 +70,10 @@ class InfoBAXCore:
         if model not in {"M0", "transport_moments"}:
             raise ValueError("unsupported posterior model")
         self.model = model
+        if ict1 is not None and not isinstance(ict1, ICT1Config):
+            raise TypeError("ict1 must be an ICT1Config")
+        self.ict1 = ict1
+        self._ict1_observations: dict[str, ICT1Observation] = {}
         self._explicit_initial = initial_queries is not None
         if initial_queries is not None:
             initial_queries = tuple(initial_queries)
@@ -82,6 +93,10 @@ class InfoBAXCore:
     @property
     def initial_design(self) -> tuple[int, ...]:
         return self._initial_design
+
+    @property
+    def ict1_observations(self) -> tuple[ICT1Observation, ...]:
+        return tuple(self._ict1_observations.values())
 
     @property
     def available_indices(self) -> tuple[int, ...]:
@@ -125,9 +140,16 @@ class InfoBAXCore:
         negative_eig_fraction: float | None = None,
         evaluated_query_count: int = 0,
         diagnostics: tuple[EIGDiagnostic, ...] = (),
+        acquisition_seed: int | None = None,
+        direct_prior_probabilities: tuple[float, ...] = (),
     ) -> QuerySuggestion:
         candidate_index, scan_index = self.pool.query_parts(query_index)
-        return QuerySuggestion(
+        suggestion_type = QuerySuggestion if acquisition_seed is None else ConstrainedQuerySuggestion
+        extra = {} if acquisition_seed is None else {
+            "acquisition_seed": acquisition_seed,
+            "direct_prior_probabilities": direct_prior_probabilities,
+        }
+        return suggestion_type(
             query_index=query_index,
             candidate_index=candidate_index,
             candidate_id=self.pool.candidate_ids[candidate_index],
@@ -140,6 +162,7 @@ class InfoBAXCore:
             negative_eig_fraction=negative_eig_fraction,
             evaluated_query_count=evaluated_query_count,
             diagnostics=diagnostics,
+            **extra,
         )
 
     def _posterior(self):
@@ -160,12 +183,18 @@ class InfoBAXCore:
                 return self._suggestion(index, phase="initial", status="ready")
 
         posterior = self._posterior()
-        algorithm = BeamEmittanceAlgorithm(self.pool)
+        algorithm = BeamEmittanceAlgorithm(self.pool, constrain_ict1=self.ict1 is not None)
         active_step = len(self._observations) - self.config.initial_actions + 1
         seed = stable_seed(
             "acquisition", self.config.seed, self.model, "infobax", active_step
         )
-        estimator = InfoBAXEstimator(posterior, algorithm, self.config, seed=seed)
+        estimator_options = {}
+        if self.ict1 is not None:
+            estimator_options = {
+                "ict1_posterior": fit_ict1_posterior(self.pool, self.ict1, self.ict1_observations),
+                "scans_per_candidate": self.pool.scan_count,
+            }
+        estimator = InfoBAXEstimator(posterior, algorithm, self.config, seed=seed, **estimator_options)
         selected, diagnostics = (estimator.select(self.available_indices) if check is None
                                  else estimator.select(self.available_indices, check=check))
         negative_fraction = float(
@@ -185,6 +214,10 @@ class InfoBAXCore:
             negative_eig_fraction=negative_fraction,
             evaluated_query_count=len(diagnostics),
             diagnostics=diagnostics,
+            **({} if self.ict1 is None else {
+                "acquisition_seed": seed,
+                "direct_prior_probabilities": tuple(map(float, estimator.direct_prior_probabilities)),
+            }),
         )
 
     def observe(self, observation: PointObservation) -> None:
@@ -200,6 +233,17 @@ class InfoBAXCore:
             )
         self._observations.append(observation)
         self._observed_indices.add(observation.query_index)
+
+    def observe_ict1(self, observation: ICT1Observation) -> None:
+        if self.ict1 is None:
+            raise ValueError("ICT1 constraints are disabled")
+        if not isinstance(observation, ICT1Observation):
+            raise TypeError("observation must be an ICT1Observation")
+        if observation.candidate_index >= self.pool.candidate_count:
+            raise IndexError("ICT1 observation index outside finite pool")
+        if observation.window_id in self._ict1_observations:
+            raise DuplicateObservationError(f"ICT1 window {observation.window_id} has already been observed")
+        self._ict1_observations[observation.window_id] = observation
 
     def _require_initial_design(self) -> None:
         missing = [
@@ -218,20 +262,32 @@ class InfoBAXCore:
 
         self._require_initial_design()
         posterior = self._posterior()
-        algorithm = BeamEmittanceAlgorithm(self.pool)
+        algorithm = BeamEmittanceAlgorithm(self.pool, constrain_ict1=self.ict1 is not None)
         active_step = len(self._observations) - self.config.initial_actions
         samples = posterior.sample(
             self.config.summary_samples,
             stable_seed("summary", self.config.seed, self.model, active_step),
         )
+        ict1_samples = None
+        if self.ict1 is not None:
+            ict1_posterior = fit_ict1_posterior(self.pool, self.ict1, self.ict1_observations)
+            ict1_samples = ict1_posterior.sample(
+                self.config.summary_samples, stable_seed("ict1_summary", self.config.seed, self.model, active_step),
+            )
         summary = algorithm.summarize(
             samples,
+            ict1_samples,
             recommendation_invalid_threshold=(
                 self.config.recommendation_invalid_threshold
             ),
         )
         recommended = summary.recommended_candidate
-        return RecommendationResult(
+        result_type = RecommendationResult if self.ict1 is None else ConstrainedRecommendation
+        extra = {} if self.ict1 is None else {
+            "no_feasible_probability": summary.no_feasible_probability,
+            "ict1_feasibility_probabilities": tuple(map(float, summary.ict1_feasibility_probabilities)),
+        }
+        return result_type(
             recommended_candidate_index=recommended,
             recommended_candidate_id=(
                 self.pool.candidate_ids[recommended]
@@ -250,7 +306,9 @@ class InfoBAXCore:
             ),
             entropy_nats=summary.entropy_nats,
             sample_count=self.config.summary_samples,
-            status="ready" if recommended is not None else "invalid_mass_too_high",
+            status=("ready" if recommended is not None else
+                    "invalid_mass_too_high" if self.ict1 is None else "no_recommendable_candidate"),
+            **extra,
         )
 
     def to_checkpoint(self) -> dict[str, Any]:
@@ -264,7 +322,11 @@ class InfoBAXCore:
             "observations": [item.to_dict() for item in self._observations],
         }
 
-        if self.model != "M0" or self._explicit_initial:
+        if self.ict1 is not None:
+            payload.update(schema=ICT1_CHECKPOINT_SCHEMA, implementation=ICT1_IMPLEMENTATION_VERSION,
+                           model=self.model, initial_queries=list(self.initial_design),
+                           ict1=asdict(self.ict1), ict1_observations=[asdict(item) for item in self.ict1_observations])
+        elif self.model != "M0" or self._explicit_initial:
             payload.update(schema="half_infobax_checkpoint_v2",
                            implementation=MODEL_IMPLEMENTATION_VERSION,
                            model=self.model, initial_queries=list(self.initial_design))
@@ -287,14 +349,20 @@ class InfoBAXCore:
             "config",
             "observations",
         }
-        extended = checkpoint.get("schema") == "half_infobax_checkpoint_v2"
+        schema = checkpoint.get("schema")
+        constrained = schema == ICT1_CHECKPOINT_SCHEMA
+        extended = constrained or schema == "half_infobax_checkpoint_v2"
         if extended:
             expected_fields |= {"model", "initial_queries"}
+        if constrained:
+            expected_fields |= {"ict1", "ict1_observations"}
         if set(checkpoint) != expected_fields:
             raise CheckpointError("checkpoint fields do not match this version")
         if not extended and checkpoint["schema"] != CHECKPOINT_SCHEMA:
             raise CheckpointError("checkpoint schema is not supported")
         implementation = MODEL_IMPLEMENTATION_VERSION if extended else IMPLEMENTATION_VERSION
+        if constrained:
+            implementation = ICT1_IMPLEMENTATION_VERSION
         if checkpoint["implementation"] != implementation:
             raise CheckpointError("checkpoint implementation is not supported")
         if checkpoint["pool_fingerprint"] != pool.fingerprint:
@@ -304,8 +372,11 @@ class InfoBAXCore:
         if not isinstance(observations, list):
             raise CheckpointError("checkpoint observations must be a list")
         try:
-            core = cls(pool, config, **({"model": checkpoint["model"],
-                       "initial_queries": checkpoint["initial_queries"]} if extended else {}))
+            kwargs = ({"model": checkpoint["model"], "initial_queries": checkpoint["initial_queries"]}
+                      if extended else {})
+            if constrained:
+                kwargs["ict1"] = ICT1Config(**checkpoint["ict1"])
+            core = cls(pool, config, **kwargs)
         except (TypeError, ValueError) as error:
             raise CheckpointError(f"invalid model or initialization: {error}") from error
         for row in observations:
@@ -319,4 +390,12 @@ class InfoBAXCore:
                 core.observe(PointObservation(**dict(row)))
             except (TypeError, ValueError, IndexError, DuplicateObservationError) as error:
                 raise CheckpointError(f"invalid checkpoint observation: {error}") from error
+        if constrained:
+            if not isinstance(checkpoint["ict1_observations"], list):
+                raise CheckpointError("checkpoint ICT1 observations must be a list")
+            for row in checkpoint["ict1_observations"]:
+                try:
+                    core.observe_ict1(ICT1Observation(**row))
+                except (TypeError, ValueError, IndexError, DuplicateObservationError) as error:
+                    raise CheckpointError(f"invalid checkpoint ICT1 observation: {error}") from error
         return core

@@ -246,6 +246,7 @@ class HalfRealInfoBAXMachine:
     def restore(self, initial):
         from half_linac.src.shared.machine_profile import require_workflow_write_allowed
         errors = []
+        readback = {}
         initial_currents = current_vector(initial["current_a"])
         for operation in (lambda: self.device.restore(initial_currents),
                           lambda: self._restore_quad(initial)):
@@ -256,20 +257,23 @@ class HalfRealInfoBAXMachine:
                 errors.append(str(exc))
         if not errors:
             try:
-                for read_currents in (self.device.initial, self.device.readback):
-                    if not self._currents_match(read_currents(), initial_currents):
+                for key, read_currents in (("current_set_a", self.device.initial), ("current_a", self.device.readback)):
+                    readback[key] = read_currents()
+                    if not self._currents_match(readback[key], initial_currents):
                         raise RuntimeError("Final solenoid restore verification failed")
-                for pv, expected, tolerance in (
-                    (self.quad_pvs["K1"], initial["scan_k1"], 1e-6),
-                    (self.quad_pvs["current_set"], initial["quad_current_a"], self.tolerance),
-                    (self.quad_pvs["current_readback"], initial["quad_current_a"], self.tolerance),
+                for key, pv, expected, tolerance in (
+                    ("scan_k1", self.quad_pvs["K1"], initial["scan_k1"], 1e-6),
+                    ("quad_current_a", self.quad_pvs["current_set"], initial["quad_current_a"], self.tolerance),
+                    ("quad_readback_a", self.quad_pvs["current_readback"], initial["quad_current_a"], self.tolerance),
                 ):
-                    if abs(self.device.read(pv)-expected) > tolerance:
+                    readback[key] = self.device.read(pv)
+                    if abs(readback[key]-expected) > tolerance:
                         raise RuntimeError(f"Final restore verification failed: {pv}")
             except Exception as exc:
                 errors.append(str(exc))
         if errors:
             raise RuntimeError("; ".join(errors))
+        return readback
 
     def _restore_quad(self, initial):
         self._make_quad(initial)(initial["scan_k1"])

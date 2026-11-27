@@ -10,22 +10,29 @@ import json
 import math
 import os
 import time
+from uuid import uuid4
 
 import numpy as np
 from scipy.linalg import qr
 from scipy.spatial.distance import pdist
 from scipy.stats import qmc
 
-from half_linac.src.optimization.infobax import FinitePoolSpec, InfoBAXCore, InfoBAXConfig, PointObservation
+from half_linac.src.optimization.infobax import (
+    FinitePoolSpec, ICT1Observation, InfoBAXCore, InfoBAXConfig, PointObservation,
+)
 from half_linac.src.shared.beam_matrix import (
     DEFAULT_MAX_CONDITION_NUMBER,
 )
 from .control import emittance_lock
+from .infobax_ict1 import numerical_ict1_config, read_ict1_window, scan_charge_summary
 from .measurement_service import fingerprint, PointAcquisitionResult, fit_grid_results
 
 
 DEFAULT_CURRENT_CANDIDATES = 5
 DEFAULT_INITIAL_POINTS_PER_END = 3
+WORKFLOW_SCHEMA = "half_infobax_workflow_v2"
+ICT1_WORKFLOW_SCHEMA = "half_infobax_workflow_v3"
+FRAMEWORK_WORKFLOW_SCHEMAS = {WORKFLOW_SCHEMA, ICT1_WORKFLOW_SCHEMA}
 
 
 def minimum_initial_points_per_end(model):
@@ -130,6 +137,10 @@ class WorkflowConfig:
     def fingerprint(self):
         return fingerprint(self.to_dict())
 
+    @property
+    def ict1_settings(self):
+        return json.loads(self.settings_json).get("ict1")
+
 
 def current_candidates(low, high, initial, count=DEFAULT_CURRENT_CANDIDATES):
     if len(current_vector(low)) > 1:
@@ -153,6 +164,20 @@ def current_candidates(low, high, initial, count=DEFAULT_CURRENT_CANDIDATES):
     return tuple(float(v) for v in values)
 
 
+def workflow_pool(config, candidates, baseline, machine_fingerprint):
+    scans = np.asarray(config.scan_values)
+    currents = np.asarray([current_vector(point) for point in candidates])
+    if currents.shape[1] == 1:
+        coordinates = (currents - currents.min()) / np.ptp(currents)
+    else:
+        low, high = (np.asarray(v) for v in (config.current_low, config.current_high))
+        coordinates = (currents - low) / (high - low)
+    noise = [record["measurement"]["noise_std_mm2"] for record in baseline]
+    return FinitePoolSpec(config.candidate_ids, coordinates, scans, (scans - scans.min()) / np.ptp(scans),
+                          config.design, config.energy_mev, np.tile(noise, len(currents)),
+                          fingerprint({"machine": machine_fingerprint, "config": config.fingerprint}))
+
+
 class InfoBAXWorkflow:
     """Persist every intent before motion; always restore under the control lease.
 
@@ -166,6 +191,9 @@ class InfoBAXWorkflow:
         self.config, self.machine, self.run_dir = config, machine, Path(run_dir)
         self.full_scan, self.control_lease = full_scan, control_lease
         self.scan_results = {}
+        self.ict1_settings = config.ict1_settings
+        self.ict1_baseline = self.ict1_verification = self.restore_readback = None
+        self.eig_seconds = 0.0
         self.approve, self.progress, self.clock = approve, progress, clock
         self.automatic_measurements = automatic_measurements
         self.numerical_config = numerical_config or InfoBAXConfig()
@@ -206,7 +234,7 @@ class InfoBAXWorkflow:
                            "confirmed": self.confirmed, "elapsed_seconds": self.elapsed(), **extra})
 
     def payload(self):
-        return {"schema": "half_infobax_workflow_v2", "config": self.config.to_dict(),
+        payload = {"schema": WORKFLOW_SCHEMA, "config": self.config.to_dict(),
                 "config_fingerprint": self.config.fingerprint,
                 "machine_fingerprint": self.machine.fingerprint,
                 "numerical_config": self.numerical_config.to_dict(),
@@ -226,6 +254,12 @@ class InfoBAXWorkflow:
                          "accepted_frames": sum(r.get("measurement", {}).get("metadata", {}).get("frame_count", 0)
                                                 for r in self.records)},
                 "camera_statistics": dict(getattr(getattr(self.machine, "camera", None), "statistics", {}))}
+        if self.ict1_settings is not None:
+            payload.update(schema=ICT1_WORKFLOW_SCHEMA, ict1={
+                "baseline": self.ict1_baseline, "verification": self.ict1_verification,
+                "restore_readback": self.restore_readback, "eig_seconds": self.eig_seconds,
+            })
+        return payload
 
     def save(self):
         self.run_dir.mkdir(parents=True, exist_ok=True)
@@ -279,6 +313,62 @@ class InfoBAXWorkflow:
             self.emit(request=request)
             self.check()
 
+    @property
+    def _ict1_directory(self):
+        return self.run_dir / "ict1_windows"
+
+    def _capture_ict1(self, candidate, phase, k1, *, sequence=None):
+        window = {"window_id": uuid4().hex, "phase": phase, "sequence": sequence,
+                  "candidate_index": candidate, "target_current_a": self.candidates[candidate],
+                  "target_k1": k1, "samples": [], "completed": False}
+        directory = self._ict1_directory
+        directory.mkdir(exist_ok=True)
+        path = directory / (window["window_id"] + ".json")
+        try:
+            self.machine.measure_ict1(window)
+            window["completed"] = True
+        except BaseException as error:
+            window["summary"] = {"status": "invalid", "error": str(error)}
+            raise
+        finally:
+            window["closed_at"] = time.time()
+            if self.ict1_baseline is not None:
+                self._assess_ict1(window["summary"])
+            temporary = path.with_suffix(".tmp")
+            with temporary.open("w") as stream:
+                json.dump(window, stream, allow_nan=False, indent=2, sort_keys=True)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(path)
+        return window
+
+    def _assess_ict1(self, summary):
+        minimum = self.ict1_baseline["minimum_nc"]
+        summary["minimum_nc"] = minimum
+        summary["feasible"] = summary["status"] == "valid" and summary["value"] >= minimum
+
+    def _commit_point_charge(self, record, window):
+        summary = window["summary"]
+        record.update(ict1_window_id=window["window_id"], ict1=summary)
+        if summary["status"] == "valid" and window["phase"] in {"initialization", "active"}:
+            self.core.observe_ict1(ICT1Observation(window["window_id"], window["candidate_index"],
+                                                 summary["value"], summary["standard_error_nc"]))
+
+    def _full_scan_charge(self, records):
+        windows = [read_ict1_window(self._ict1_directory, record["ict1_window_id"])
+                   for record in records]
+        return scan_charge_summary(self.ict1_settings, windows)
+
+    def _active_attempts(self):
+        return sum(record["phase"] == "active" and record.get("motion_started", False)
+                   for record in self.records)
+
+    def _restore_initial(self):
+        self.restore_readback = None
+        readback = self.machine.restore(self.initial)
+        if self.ict1_settings is not None:
+            self.restore_readback = readback
+
     def _point(self, candidate, scan_index, phase, *, approved=False, suggestion=None):
         self.check()
         n = len(self.config.scan_values)
@@ -297,9 +387,21 @@ class InfoBAXWorkflow:
             self.check()
             if self._last_confirmed is not None:
                 self.machine.verify_snapshot(self._last_confirmed)
+            if self.ict1_settings is not None:
+                record["motion_started"] = True
+                self.save()
             self.machine.apply_query(candidate, record["scan_k1"])
             self.check()
-            measurement = self.machine.measure_point(query_index, 0.0)
+            options = {}
+            if self.ict1_settings is not None:
+                def before_images(k1):
+                    window = self._capture_ict1(candidate, phase, k1, sequence=record["sequence"])
+                    self._commit_point_charge(record, window)
+                    self.save()
+                    return window["window_id"]
+
+                options["before_images"] = before_images
+            measurement = self.machine.measure_point(query_index, 0.0, **options)
             self.check()
             record.update(state="observed", measurement=asdict(measurement))
             self._last_confirmed = dict(self.machine.snapshot())
@@ -310,19 +412,7 @@ class InfoBAXWorkflow:
         return record
 
     def _pool(self):
-        cfg = self.config
-        scans = np.asarray(cfg.scan_values)
-        currents = np.asarray([current_vector(point) for point in self.candidates])
-        if currents.shape[1] == 1:
-            coordinates = (currents - currents.min()) / np.ptp(currents)
-        else:
-            low, high = (np.asarray(v) for v in (cfg.current_low, cfg.current_high))
-            coordinates = (currents - low) / (high - low)
-        noise = [r["measurement"]["noise_std_mm2"] for r in self.baseline]
-        return FinitePoolSpec(cfg.candidate_ids, coordinates,
-                              scans, (scans-scans.min())/np.ptp(scans), cfg.design,
-                              cfg.energy_mev, np.tile(noise, len(currents)),
-                              fingerprint({"machine": self.machine.fingerprint, "config": cfg.fingerprint}))
+        return workflow_pool(self.config, self.candidates, self.baseline, self.machine.fingerprint)
 
     def _create_core(self):
         n = len(self.config.scan_values)
@@ -339,11 +429,15 @@ class InfoBAXWorkflow:
         indices.extend(candidate*n + scan for candidate in endpoints for scan in scan_indices)
         indices = tuple(dict.fromkeys(indices))
         self.machine.validate_pool(pool)
+        ict1 = None if self.ict1_settings is None else numerical_ict1_config(self.ict1_settings, self.ict1_baseline)
         core = InfoBAXCore(pool, replace(self.numerical_config, initial_actions=len(indices)),
-                          model=self.config.model, initial_queries=indices)
+                          model=self.config.model, initial_queries=indices, ict1=ict1)
         for r in self.baseline:
             core.observe(PointObservation(r["query_index"], r["measurement"]["variance_mm2"],
                                           r["measurement"]["noise_std_mm2"]))
+        if ict1 is not None:
+            core.observe_ict1(ICT1Observation("baseline", initial_index, ict1.baseline_nc,
+                                             self.ict1_baseline["standard_error_nc"]))
         return core
 
     def _fit(self, records):
@@ -371,6 +465,9 @@ class InfoBAXWorkflow:
                     "scan_index":index,"scan_k1":result.k1,"phase":phase,"state":"pending",
                     "point_result":result.to_dict()}
             self.records.append(record)
+            if result.ict1_window_id is not None:
+                window = read_ict1_window(self._ict1_directory, result.ict1_window_id)
+                self._commit_point_charge(record, window)
             camera=getattr(self.machine,"camera",None)
             if camera is not None:
                 camera.statistics["accepted_frames"]=camera.statistics.get("accepted_frames",0)+sum(
@@ -388,7 +485,13 @@ class InfoBAXWorkflow:
                 raise
             self.save()
             self.emit(record=record)
-        result=self.full_scan(phase,completed,commit_point)
+        options = {}
+        if self.ict1_settings is not None:
+            def before_images(k1):
+                return self._capture_ict1(candidate, phase, k1)["window_id"]
+
+            options["before_images"] = before_images
+        result=self.full_scan(phase,completed,commit_point,**options)
         self.scan_results[phase]=result
         self.save()
         if not result.get("restored"):
@@ -439,15 +542,33 @@ class InfoBAXWorkflow:
                     self.baseline_fit = self._full_scan_phase(initial_index, "baseline", self.baseline)
                 elif self.baseline_fit is None:
                     self.baseline_fit = self._full_scan_phase(initial_index, "baseline", self.baseline)
+                if self.ict1_settings is not None and self.ict1_baseline is None:
+                    baseline = self._full_scan_charge(self.baseline)
+                    if baseline["status"] != "valid":
+                        raise ValueError(baseline["error"])
+                    self.ict1_baseline = baseline
+                    baseline["minimum_nc"] = baseline["value"] * self.ict1_settings["retention"]
+                    self.save()
                 if self.core is None:
                     self.core = self._create_core()
                     self.save()
                 budget = len(self.core.initial_design) + self.config.active_queries
                 while len(self.core.observations) < min(budget, self.core.pool.query_count):
                     self.check()
+                    if (self.ict1_settings is not None
+                            and len(self.core.observations) >= len(self.core.initial_design)
+                            and self._active_attempts() >= self.config.active_queries):
+                        break
                     self.status = "selecting"
                     self.emit()
-                    suggestion = self.core.propose(check=self.check)
+                    if self.ict1_settings is None:
+                        suggestion = self.core.propose(check=self.check)
+                    else:
+                        started = self.clock()
+                        try:
+                            suggestion = self.core.propose(check=self.check)
+                        finally:
+                            self.eig_seconds += self.clock() - started
                     self.check()
                     if suggestion.status != "ready":
                         self.status = suggestion.status
@@ -457,12 +578,15 @@ class InfoBAXWorkflow:
                     m = record["measurement"]
                     self.core.observe(PointObservation(suggestion.query_index, m["variance_mm2"], m["noise_std_mm2"]))
                     self.save()
+                    if self.ict1_settings is not None and record["ict1"]["status"] != "valid":
+                        raise ValueError(record["ict1"]["error"])
                 if self.recommendation is None:
                     self.recommendation = asdict(self.core.recommend())
                     self.save()
                 candidate = self.recommendation["recommended_candidate_index"]
                 if candidate is None:
-                    self.status = "invalid_recommendation"
+                    self.status = ("invalid_recommendation" if self.ict1_settings is None else
+                                   self.recommendation["status"])
                     raise WorkflowInterrupted(self.status)
                 if len(self.verification) < n:
                     self._begin_measurement({"phase": "verification", "current_a": self.candidates[candidate],
@@ -471,8 +595,14 @@ class InfoBAXWorkflow:
                     self.verification_fit = self._full_scan_phase(candidate, "verification", self.verification)
                 elif self.verification_fit is None:
                     self.verification_fit = self._full_scan_phase(candidate, "verification", self.verification)
+                if self.ict1_settings is not None:
+                    self.ict1_verification = self._full_scan_charge(self.verification)
+                    self._assess_ict1(self.ict1_verification)
+                    if self.ict1_verification["status"] != "valid":
+                        raise ValueError(self.ict1_verification["error"])
                 self.confirmed = (self.verification_fit["normalized_emittance_mm_mrad"] <
-                                  self.baseline_fit["normalized_emittance_mm_mrad"])
+                                  self.baseline_fit["normalized_emittance_mm_mrad"] and
+                                  (self.ict1_verification is None or self.ict1_verification["feasible"]))
                 self.status = "completed"
             except WorkflowInterrupted as exc:
                 self.status = str(exc)
@@ -481,7 +611,7 @@ class InfoBAXWorkflow:
             finally:
                 if restore_needed:
                     try:
-                        self.machine.restore(self.initial)
+                        self._restore_initial()
                         self.restoration_status = "succeeded"
                     except Exception as exc:
                         self.status, self.error = "restore_failed", str(exc)
@@ -510,10 +640,16 @@ class InfoBAXWorkflow:
                 self.machine.configure(self.candidates)
                 if apply_verified:
                     self.machine.verify_snapshot(self.initial)
-                    self.machine.apply_current(self.recommendation["recommended_candidate_index"])
+                    candidate = self.recommendation["recommended_candidate_index"]
+                    self.machine.apply_current(candidate)
+                    if self.ict1_settings is not None:
+                        window = self._capture_ict1(candidate, "apply", self.initial["scan_k1"])
+                        action.update(ict1_window_id=window["window_id"], ict1=window["summary"])
+                        if not window["summary"]["feasible"]:
+                            raise ValueError(window["summary"].get("error", "ICT1 charge below the apply limit"))
                     self.restoration_status = "not_at_initial"
                 else:
-                    self.machine.restore(self.initial)
+                    self._restore_initial()
                     self.restoration_status = "succeeded"
                     if self.status in {"restore_failed", "recovery_required"}:
                         self.status, self.error = "paused", None
@@ -522,7 +658,7 @@ class InfoBAXWorkflow:
                 action.update(state="failed", error=str(exc))
                 self.confirmed = False
                 try:
-                    self.machine.restore(self.initial)
+                    self._restore_initial()
                     self.restoration_status = "succeeded"
                 except Exception as restore_error:
                     self.restoration_status = "failed"
@@ -536,7 +672,8 @@ class InfoBAXWorkflow:
     def load(cls, config, machine, run_dir, **kwargs):
         content = (Path(run_dir)/cls.filename).read_bytes()
         data = json.loads(content)
-        if (data.get("schema") != "half_infobax_workflow_v2"
+        expected_schema = WORKFLOW_SCHEMA if config.ict1_settings is None else ICT1_WORKFLOW_SCHEMA
+        if (data.get("schema") != expected_schema
                 or data["config_fingerprint"] != config.fingerprint
                 or data["machine_fingerprint"] != machine.fingerprint):
             raise ValueError("Workflow configuration or machine fingerprint changed")
@@ -547,6 +684,11 @@ class InfoBAXWorkflow:
                     "restoration_status", "elapsed_seconds"):
             setattr(obj, key, data[key])
         obj.scan_results = data.get("scan_results", {})
+        if expected_schema == ICT1_WORKFLOW_SCHEMA:
+            obj.ict1_baseline = data["ict1"]["baseline"]
+            obj.ict1_verification = data["ict1"]["verification"]
+            obj.restore_readback = data["ict1"]["restore_readback"]
+            obj.eig_seconds = data["ict1"]["eig_seconds"]
         obj.candidates = tuple(tuple(point) if isinstance(point, list) else point for point in data["candidates"])
         if obj.initial is not None and isinstance(obj.initial["current_a"], list):
             obj.initial["current_a"] = tuple(obj.initial["current_a"])
@@ -554,6 +696,10 @@ class InfoBAXWorkflow:
             obj.status = "paused" if obj.restoration_status == "succeeded" else "recovery_required"
         if data["core"] is not None:
             obj.core = InfoBAXCore.from_checkpoint(obj._pool(), data["core"])
+            if (obj.core.ict1 is None) != (expected_schema == WORKFLOW_SCHEMA):
+                raise ValueError("Workflow and checkpoint ICT1 settings disagree")
+            if expected_schema == ICT1_WORKFLOW_SCHEMA and not getattr(machine, "recovery_only", False):
+                obj._recover_point_charges()
         for action in obj.actions:
             if action["state"] == "pending":
                 action.update(state="interrupted", error="Interrupted manual device operation")
@@ -565,3 +711,20 @@ class InfoBAXWorkflow:
             machine.camera.statistics.update(data.get("camera_statistics", {}))
         obj._content = content
         return obj
+
+    def _recover_point_charges(self):
+        # A process can stop between writing the stable window and committing
+        # it to the workflow. Its beam-size observation will still be pending.
+        committed = {observation.window_id for observation in self.core.ict1_observations}
+        pending = {record["sequence"]: record for record in self.records
+                   if record["state"] in {"pending", "interrupted"} and "ict1_window_id" not in record}
+        if not pending:
+            return
+        for path in self._ict1_directory.glob("*.json"):
+            window = read_ict1_window(self._ict1_directory, path.stem)
+            record = pending.get(window["sequence"])
+            if (record is not None and window["window_id"] not in committed
+                    and window["phase"] == record["phase"]
+                    and window["candidate_index"] == record["candidate_index"]
+                    and window["target_k1"] == record["scan_k1"]):
+                self._commit_point_charge(record, window)

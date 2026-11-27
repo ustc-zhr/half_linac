@@ -80,14 +80,18 @@ class PointAcquisitionResult:
     k1: float
     frames: tuple[dict, ...]
     method: str
+    ict1_window_id: str | None = None
 
     def to_dict(self):
-        return {"k1": self.k1, "frames": list(self.frames), "method": self.method,
-                "freshness": "timed_unverified"}
+        result = {"k1": self.k1, "frames": list(self.frames), "method": self.method,
+                  "freshness": "timed_unverified"}
+        if self.ict1_window_id is not None:
+            result["ict1_window_id"] = self.ict1_window_id
+        return result
 
     @classmethod
     def from_dict(cls, data):
-        return cls(float(data["k1"]), tuple(data["frames"]), data["method"])
+        return cls(float(data["k1"]), tuple(data["frames"]), data["method"], data.get("ict1_window_id"))
 
     def observation(self, plane):
         from .infobax_session import PointMeasurement
@@ -147,6 +151,13 @@ def read_flag_image_fit(
                 f"expected {pixel_shape[0] * pixel_shape[1]}."
             ) from exc
         raise RuntimeError(f"Flag image PV is not numeric array data: {image_pv}.") from exc
+def trim_charge_values(values, trim_fraction):
+    ordered = np.sort(np.asarray(values, dtype=float))
+    trim_count = int(math.floor(len(ordered) * trim_fraction))
+    used = ordered[trim_count:len(ordered) - trim_count] if trim_count else ordered
+    return ordered, used, trim_count
+
+
 class ScanChargeMonitor:
     """Collect charge samples for one channel during a quadrupole scan."""
 
@@ -168,9 +179,15 @@ class ScanChargeMonitor:
         else:
             self.connection_error = f"{self.element_id} charge channel is disconnected."
 
-    def read(self):
+    def read(self, *, window_opened_at=None, after_timestamp=None):
         if self.pv is None:
-            return None
+            if window_opened_at is None:
+                return None
+            self.attempts += 1
+            sample = {"received_at": time.time(), "status": "invalid",
+                      "error": self.connection_error or "ICT1 charge channel is disconnected"}
+            self.samples.append(sample)
+            return sample
         self.attempts += 1
         received_at = time.time()
         sample = {"received_at": received_at, "status": "invalid"}
@@ -180,8 +197,28 @@ class ScanChargeMonitor:
             )
             if not isinstance(metadata, Mapping):
                 raise ValueError("read returned no metadata")
-            value = float(metadata.get("value")) * float(self.settings["scale"])
-            source_timestamp = float(metadata.get("timestamp", received_at))
+            raw_value = float(metadata.get("value"))
+            value = raw_value * float(self.settings["scale"])
+            if window_opened_at is None:
+                source_timestamp = float(metadata.get("timestamp", received_at))
+            else:
+                sample["raw_value"] = raw_value if math.isfinite(raw_value) else None
+                sample["value"] = value if math.isfinite(value) else None
+                for key, source in (("severity", "severity"), ("status_code", "status")):
+                    sample[key] = int(metadata[source]) if metadata.get(source) is not None else None
+                if metadata.get("timestamp") is None:
+                    raise ValueError("missing source timestamp")
+                source_timestamp = float(metadata["timestamp"])
+                if not math.isfinite(source_timestamp):
+                    raise ValueError("invalid source timestamp")
+                sample["source_timestamp"] = source_timestamp
+                sample["read_finished_at"] = time.time()
+                if source_timestamp < window_opened_at or source_timestamp > sample["read_finished_at"]:
+                    raise ValueError("sample timestamp is outside the stable window")
+                if after_timestamp is not None and source_timestamp <= after_timestamp:
+                    raise ValueError("duplicate or out-of-order source timestamp")
+                if (sample["severity"] or 0) >= 2:
+                    raise ValueError("charge PV alarm")
             stale_timeout = self.settings.get("stale_timeout_s")
             if not math.isfinite(value) or value <= 0:
                 raise ValueError("value is not finite and positive")
@@ -189,7 +226,8 @@ class ScanChargeMonitor:
                 raise ValueError("sample is stale")
             sample.update(
                 status="valid", value=value, source_timestamp=source_timestamp,
-                severity=metadata.get("severity"), status_code=metadata.get("status"),
+                severity=sample.get("severity", metadata.get("severity")),
+                status_code=sample.get("status_code", metadata.get("status")),
             )
         except Exception as exc:
             sample["error"] = str(exc)
@@ -221,9 +259,7 @@ class ScanChargeMonitor:
                        f"({len(valid)}/{self.attempts} valid)."),
             )
             return summary
-        ordered = np.sort(np.asarray(valid, dtype=float))
-        trim_count = int(math.floor(len(ordered) * summary["trim_fraction"]))
-        used = ordered[trim_count:len(ordered) - trim_count] if trim_count else ordered
+        ordered, used, trim_count = trim_charge_values(valid, summary["trim_fraction"])
         summary.update(
             status="valid", value=float(np.mean(used)),
             mean=float(np.mean(ordered)), median=float(np.median(ordered)),
@@ -235,7 +271,7 @@ class ScanChargeMonitor:
 
 
 def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, quality,
-                       format_status, read_charge_samples=None):
+                       format_status, read_charge_samples=None, before_images=None):
     checkpoint = getattr(self, "measurement_check", None)
     if checkpoint is not None:
         checkpoint()
@@ -257,6 +293,7 @@ def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, 
     if not self._sleep_or_stop(self.settle_time):
         return None
 
+    ict1_window_id = before_images(float(k1)) if before_images is not None else None
     frame_results = []
     sigx_values = []
     sigy_values = []
@@ -395,7 +432,7 @@ def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, 
 
     if not sigx_values:
         return None
-    result = PointAcquisitionResult(float(k1), tuple(frame_results), self.beam_width_method)
+    result = PointAcquisitionResult(float(k1), tuple(frame_results), self.beam_width_method, ict1_window_id)
     if not hasattr(self, "point_results"):
         self.point_results = []
     self.point_results.append(result.to_dict())
@@ -417,10 +454,11 @@ def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, 
 
 class PointAcquirer:
     """Qt-free owner of the same point operation used by the normal scan."""
-    def __init__(self, snapshot, *, move, check, get=None, progress=None, archive_dir=None):
+    def __init__(self, snapshot, *, move, check, get=None, progress=None, archive_dir=None, before_images=None):
         self.snapshot = snapshot
         self.move, self.check = move, check
         self.get, self.progress, self.archive_dir = get, progress, archive_dir
+        self.before_images = before_images
 
     def acquire_point(self, k1):
         s = self.snapshot
@@ -430,7 +468,7 @@ class PointAcquirer:
             return read_flag_image_fit(*args, get=self.get, **kwargs)
         result = acquire_scan_point(owner, float(k1), read_image_fit=read,
             read_sizes=lambda *a: (None, None), quality=assess_projection_quality,
-            format_status=str)
+            format_status=str, before_images=self.before_images)
         self.check()
         if result is None or not owner.point_results:
             raise RuntimeError("Point acquisition did not complete")

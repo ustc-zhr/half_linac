@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 import json
+import math
 from pathlib import Path
 from types import SimpleNamespace
 import numpy as np
@@ -10,8 +11,10 @@ import numpy as np
 from .control import emittance_lock
 from .measurement_service import MeasurementSnapshot, PointAcquirer, fingerprint, prepare_measurement
 from .infobax_machine import HalfRealInfoBAXMachine
+from .infobax_ict1 import ICT1WindowSampler, monitor_settings
 from .infobax_workflow import (
-    DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow, WorkflowConfig, current_vector,
+    DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, FRAMEWORK_WORKFLOW_SCHEMAS,
+    InfoBAXWorkflow, WorkflowConfig, current_vector,
 )
 from .optimization import OptimizationVariable
 
@@ -65,12 +68,13 @@ class _SharedCamera:
     def arm(self):
         self.frozen_exposure = self.exposure()
 
-    def measure(self, query_index):
+    def measure(self, query_index, *, before_images=None):
         machine = self.machine
         k1 = machine._pending_query[1]
         acquirer = PointAcquirer(self.measurement, move=machine.quad.move, check=machine.check,
             get=machine.device.get, progress=machine.frame_progress,
-            archive_dir=None if self.archive_dir is None else Path(self.archive_dir)/"frames")
+            archive_dir=None if self.archive_dir is None else Path(self.archive_dir)/"frames",
+            before_images=before_images)
         result = acquirer.acquire_point(k1)
         self.statistics["accepted_frames"] = self.statistics.get("accepted_frames",0)+len(result.frames)
         return result.observation(machine.config.plane)
@@ -86,6 +90,8 @@ class FrameworkInfoBAXMachine(HalfRealInfoBAXMachine):
                          settle_time=solenoid_settle,model_checks=checks,get=get,put=put,motion_timeout=motion_timeout)
         camera.machine = self
         self.paras, self.frame_progress = paras, None
+        settings = config.ict1_settings
+        self.ict1_sampler = None if settings is None else ICT1WindowSampler(settings)
 
     def apply_query(self,candidate,scan_value):
         if scan_value not in self.config.scan_values:
@@ -93,14 +99,35 @@ class FrameworkInfoBAXMachine(HalfRealInfoBAXMachine):
         self.apply_current(candidate)
         self._pending_query=(candidate,float(scan_value))
 
-    def measure_point(self,query_index,expected_noise_std_mm2):
+    def measure_point(self,query_index,expected_noise_std_mm2, *, before_images=None):
         self.check()
-        result=self.camera.measure(query_index)
+        result=self.camera.measure(query_index, before_images=before_images)
         self._verify_query()
         self._pending_query=None
         return result
 
-    def scan_parameters(self, directory, completed, on_point, lease):
+    def measure_ict1(self, window):
+        def readback():
+            currents = self.device.readback()
+            k1 = self.device.read(self.quad_pvs["K1"])
+            actual = {"current_a": currents, "scan_k1": k1,
+                      "quad_readback_a": self.device.read(self.quad_pvs["current_readback"])}
+            return actual
+
+        def verify(actual):
+            if (not self._currents_match(actual["current_a"], current_vector(window["target_current_a"]))
+                    or not math.isclose(actual["scan_k1"], window["target_k1"], rel_tol=0, abs_tol=1e-6)
+                    or not math.isclose(actual["quad_readback_a"], self.device.read(self.quad_pvs["current_set"]),
+                                        rel_tol=0, abs_tol=self.tolerance)):
+                raise RuntimeError("Device readback drifted during the ICT1 measurement")
+
+        window["readback_start"] = readback()
+        verify(window["readback_start"])
+        self.ict1_sampler.capture(window, self.check)
+        window["readback_end"] = readback()
+        verify(window["readback_end"])
+
+    def scan_parameters(self, directory, completed, on_point, lease, *, before_images=None):
         from .optimization import VerifiedQuadRestore
         paras=deepcopy(self.paras)
         paras.restore_quad=VerifiedQuadRestore(paras.app_context,paras.quad_name)
@@ -116,6 +143,7 @@ class FrameworkInfoBAXMachine(HalfRealInfoBAXMachine):
             paras.recal_points=[(p["k1"],f["sigx"],f["sigy"]) for p in completed
                                 for f in p["frames"] if "sigx" in f and "sigy" in f]
         paras.on_point_result=on_point
+        paras.before_point_images=before_images
         paras.measurement_check=self.check
         paras.require_point_quality=True
         paras.skip_parabolic=True
@@ -140,7 +168,7 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
                              current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
                              initial_points_per_end=DEFAULT_INITIAL_POINTS_PER_END,
                              approve=None,automatic_measurements=False,progress=None,full_scan=None,
-                             resume=False,lease=None):
+                             resume=False,lease=None,ict1_retention=None):
     if paras.samples < 3:
         raise ValueError("InfoBAX requires at least 3 main-window Samples per point")
     variables = (variable,) if isinstance(variable, OptimizationVariable) else tuple(variable)
@@ -149,12 +177,15 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
     if paras.defer_measurement_prepare:
         prepare_measurement(paras)
     contract=measurement_contract(paras)
+    ict1_settings = None if ict1_retention is None else monitor_settings(paras, ict1_retention)
     if resume:
         saved=json.loads((Path(run_dir)/InfoBAXWorkflow.filename).read_text())
-        if saved.get("schema")!="half_infobax_workflow_v2":
+        if saved.get("schema") not in FRAMEWORK_WORKFLOW_SCHEMAS:
             raise ValueError("Prototype v1 archives are read-only; start a new shared-measurement run")
         config=WorkflowConfig(**saved["config"])
         settings=json.loads(config.settings_json)
+        if config.ict1_settings != ict1_settings:
+            raise ValueError("ICT1 constraint settings differ from the saved run")
         if settings.get("measurement_contract")!=json.loads(json.dumps(contract)):
             raise ValueError("Main-window measurement/model settings differ from the saved run")
         if (variables != archived_variables(config, settings) or plane!=config.plane
@@ -175,6 +206,8 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
                 lattice_overrides=paras.model_lattice_overrides,seq="ent2exit",twiss_only=True))
             projections.append((float(matrix[offset,offset]),float(matrix[offset,offset+1])))
         settings = {"measurement_contract": contract, "solenoid_settle": solenoid_settle}
+        if ict1_settings is not None:
+            settings["ict1"] = ict1_settings
         if len(variables) == 1:
             settings["variable"] = variables[0].element_id
             low, high = variables[0].low, variables[0].high
@@ -200,7 +233,7 @@ def load_framework_recovery(context,run_dir):
     """
     from half_linac.src.shared.machine_profile import resolve_write_target
     data=json.loads((Path(run_dir)/InfoBAXWorkflow.filename).read_text())
-    if data.get("schema")!="half_infobax_workflow_v2":raise ValueError("Prototype archives are read-only")
+    if data.get("schema") not in FRAMEWORK_WORKFLOW_SCHEMAS:raise ValueError("Prototype archives are read-only")
     config=WorkflowConfig(**data["config"])
     settings=json.loads(config.settings_json)
     contract=settings.get("measurement_contract")

@@ -6206,6 +6206,7 @@ class scanThread(QThread):
         self.effective_k1_limit = None
         self.terminal_result = {"restored": False}
         self.restore_quad_callback = getattr(paras, "restore_quad", None)
+        self.before_point_images = getattr(paras, "before_point_images", None)
         self.charge_monitors = ()
         primary_monitor = getattr(paras, "charge_monitor", None)
         if primary_monitor:
@@ -6289,7 +6290,8 @@ class scanThread(QThread):
             self, k1, adaptive=adaptive, read_image_fit=_read_flag_image_fit,
             read_sizes=_read_optional_size_pvs, quality=_projection_measurement_quality,
             format_status=_display_fit_status,
-            read_charge_samples=self._read_charge_samples if self.charge_monitors else None)
+            read_charge_samples=self._read_charge_samples if self.charge_monitors else None,
+            before_images=self.before_point_images)
 
     def _run_grid_scan(self):
         self._emit_scan_progress(stage="grid")

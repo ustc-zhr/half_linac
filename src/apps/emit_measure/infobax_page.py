@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
+    QCheckBox, QDoubleSpinBox, QSpinBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFileDialog, QAbstractItemView)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -20,7 +20,8 @@ from .control import emittance_lock
 from .infobax_gui import WorkflowWorker
 from .infobax_framework import archived_variables, build_framework_workflow, load_framework_recovery
 from .infobax_workflow import (
-    DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, InfoBAXWorkflow, WorkflowConfig,
+    DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, FRAMEWORK_WORKFLOW_SCHEMAS,
+    InfoBAXWorkflow, WorkflowConfig,
     minimum_initial_points_per_end,
 )
 
@@ -33,18 +34,20 @@ class IntegratedInfoBAXWorker(WorkflowWorker):
     def __init__(self, paras, variables, run_dir, *, plane, model, active_queries,
                  max_minutes, solenoid_settle, current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
                  initial_points_per_end=DEFAULT_INITIAL_POINTS_PER_END,
-                 resume=False, workflow=None, action="run", parent=None,recovery_context=None):
+                 resume=False, workflow=None, action="run", parent=None,recovery_context=None,
+                 ict1_retention=None):
         super().__init__(run_dir=run_dir,workflow=workflow,resume=resume,action=action,parent=parent)
         self.paras,self.variables=paras,variables
         self.recovery_context=recovery_context
         self.arguments=dict(plane=plane,model=model,active_queries=active_queries,
                             current_candidate_count=current_candidate_count,initial_points_per_end=initial_points_per_end,
-                            max_minutes=max_minutes,solenoid_settle=solenoid_settle)
+                            max_minutes=max_minutes,solenoid_settle=solenoid_settle,ict1_retention=ict1_retention)
 
-    def full_scan(self,phase,completed,on_point):
+    def full_scan(self,phase,completed,on_point,*,before_images=None):
         points=Queue()
+        options = {} if before_images is None else {"before_images": before_images}
         paras=self.workflow.machine.scan_parameters(self.workflow.run_dir/phase,completed,
-                                                     points.put,self.workflow.control_lease)
+                                                     points.put,self.workflow.control_lease,**options)
         request={"paras":paras,"done":Event(),"result":None}
         self.scan_requested.emit(request)
         pending=None
@@ -143,6 +146,20 @@ class InfoBAXPage(QWidget):
             design_row.addWidget(control)
         design_row.addStretch()
         box.addLayout(design_row)
+        charge_row = QHBoxLayout()
+        self.ict1_enabled = QCheckBox("ICT1 constraint")
+        self.ict1_retention = QDoubleSpinBox()
+        self.ict1_retention.setDecimals(1)
+        self.ict1_retention.setRange(0.1, 100.0)
+        self.ict1_retention.setSuffix(" %")
+        self.ict1_retention.setValue(95.0)
+        self.ict1_retention.setAccessibleName("Minimum ICT1 charge retained")
+        self.ict1_retention.setToolTip("Minimum ICT1 charge retained relative to the baseline scan")
+        self.ict1_retention.setEnabled(False)
+        charge_row.addWidget(self.ict1_enabled)
+        charge_row.addWidget(self.ict1_retention)
+        charge_row.addStretch()
+        box.addLayout(charge_row)
         self.note=QLabel();self.note.setWordWrap(True);box.addWidget(self.note)
         self.proposal=QLabel("Baseline: full scan → endpoint initialization → model-selected queries → full verification")
         self.proposal.setWordWrap(True);box.addWidget(self.proposal)
@@ -158,7 +175,8 @@ class InfoBAXPage(QWidget):
         box.addWidget(self.table,1)
         self.model.currentIndexChanged.connect(self.update_initial_points_minimum)
         for signal in (self.model.currentIndexChanged,self.active.valueChanged,
-                       self.current_candidate_count.valueChanged,self.initial_points_per_end.valueChanged):
+                       self.current_candidate_count.valueChanged,self.initial_points_per_end.valueChanged,
+                       self.ict1_enabled.toggled,self.ict1_retention.valueChanged):
             signal.connect(self.settings_changed)
         self.style_plot()
         self.refresh_note()
@@ -221,7 +239,8 @@ class InfoBAXPage(QWidget):
             self.launch(IntegratedInfoBAXWorker(paras,variables,run_dir,plane=d.plane.currentData(),
                 model=self.model.currentData(),active_queries=self.active.value(),max_minutes=d.minutes.value(),
                 current_candidate_count=self.current_candidate_count.value(),initial_points_per_end=self.initial_points_per_end.value(),
-                solenoid_settle=d.solenoid_settle.value(),resume=resume,parent=self))
+                solenoid_settle=d.solenoid_settle.value(),resume=resume,parent=self,
+                ict1_retention=self.ict1_retention.value()/100 if self.ict1_enabled.isChecked() else None))
         except Exception as exc: d.error(str(exc))
 
     def launch(self,worker):
@@ -293,11 +312,18 @@ class InfoBAXPage(QWidget):
         if not state:return
         names = json.loads(state["config"]["settings_json"]).get("variables", ())
         records=list(state["records"])
+        charge = state.get("ict1")
+        self.table.setColumnCount(7 if charge is not None else 6)
+        if charge is not None:
+            self.table.setHorizontalHeaderItem(6, QTableWidgetItem("ICT1 (nC)"))
         self.table.setRowCount(len(records));x=[];y=[]
         for i,r in enumerate(records):
             m=r.get("measurement",{})
             current = self.format_current(r["current_a"], names) if names else r["current_a"]
             values=(r["phase"],current,r["scan_k1"],m.get("variance_mm2","—"),m.get("noise_std_mm2","—"),r["state"])
+            if charge is not None:
+                summary = r.get("ict1", {})
+                values += (summary.get("value", "Invalid" if summary.get("status") == "invalid" else "—"),)
             for j,v in enumerate(values):self.table.setItem(i,j,QTableWidgetItem(f"{v:.6g}" if isinstance(v,float) else str(v)))
             if names:
                 self.table.item(i, 1).setToolTip(current)
@@ -307,14 +333,29 @@ class InfoBAXPage(QWidget):
         r=state.get("recommendation")
         if r:
             items=[f"{self.format_current(current, names)}: {prob:.1%}" for current,prob in zip(state['candidates'],r['best_probabilities'])]
-            self.posterior.setText("P(best) · "+" | ".join(items)+f" · INVALID: {r['invalid_output_probability']:.1%}")
+            text = "P(best) · " + " | ".join(items) + f" · INVALID: {r['invalid_output_probability']:.1%}"
+            if charge is not None:
+                feasibility = [f"{self.format_current(current, names)}: {prob:.1%}" for current, prob in
+                               zip(state["candidates"], r["ict1_feasibility_probabilities"], strict=True)]
+                text += f" · NO_FEASIBLE: {r['no_feasible_probability']:.1%}\nICT1 P(pass) · " + " | ".join(feasibility)
+            self.posterior.setText(text)
         else:self.posterior.setText("Best-workpoint probabilities: —")
         baseline=state.get("baseline_fit") or {};verify=state.get("verification_fit") or {}
         self.dialog.progress_bar.setRange(0,len(state.get("candidates",[]))*len(state["config"]["scan_values"]))
         self.dialog.progress_bar.setValue(sum(r["state"]=="observed" for r in records))
         self.dialog.progress_bar.setFormat("%v point observations · grid %m")
-        self.dialog.status.setText(f"InfoBAX · {state['status']} · baseline εn={baseline.get('normalized_emittance_mm_mrad','—')} · "
-            f"verified εn={verify.get('normalized_emittance_mm_mrad','—')} · restore={state['restoration_status']} · {state.get('error') or ''}")
+        status = (f"InfoBAX · {state['status']} · baseline εn={baseline.get('normalized_emittance_mm_mrad','—')} · "
+                  f"verified εn={verify.get('normalized_emittance_mm_mrad','—')} · restore={state['restoration_status']}")
+        if charge and charge.get("baseline"):
+            status += f" · ICT1 minimum {charge['baseline']['minimum_nc']:.4g} nC"
+            verification = charge.get("verification") or {}
+            if verification.get("status") == "valid":
+                status += f" · verified ICT1 {verification['value']:.4g} nC"
+                if not verification["feasible"]:
+                    status += " (below minimum)"
+        if state.get("error"):
+            status += f" · {state['error']}"
+        self.dialog.status.setText(status)
 
     def failed(self,message):
         self.error=message
@@ -352,9 +393,9 @@ class InfoBAXPage(QWidget):
         if not path:return
         try:
             data=json.loads(Path(path).read_text())
-            if data.get("schema") not in {"half_infobax_workflow_v1","half_infobax_workflow_v2"}:raise ValueError("Unsupported InfoBAX archive")
+            if data.get("schema") not in FRAMEWORK_WORKFLOW_SCHEMAS | {"half_infobax_workflow_v1"}:raise ValueError("Unsupported InfoBAX archive")
             self.workflow=None;self.saved=dict(data,run_dir=str(Path(path).parent))
-            self.read_only=data["schema"]!="half_infobax_workflow_v2"
+            self.read_only=data["schema"] not in FRAMEWORK_WORKFLOW_SCHEMAS
             if not self.read_only and (data["restoration_status"] in {"pending","failed"}
                     or any(a["state"]=="pending" for a in data.get("actions",[]))):
                 self.saved["status"]="recovery_required"
@@ -376,6 +417,10 @@ class InfoBAXPage(QWidget):
                     self.active.setValue(cfg["active_queries"])
                     self.current_candidate_count.setValue(cfg.get("current_candidate_count", DEFAULT_CURRENT_CANDIDATES))
                     self.initial_points_per_end.setValue(cfg.get("initial_points_per_end", DEFAULT_INITIAL_POINTS_PER_END))
+                    charge = settings.get("ict1")
+                    self.ict1_enabled.setChecked(charge is not None)
+                    if charge is not None:
+                        self.ict1_retention.setValue(100 * charge["retention"])
             self.render()
             if self.read_only:self.proposal.setText("Read-only prototype archive. Clear it to start a new framework run.")
             elif self.saved["status"]=="recovery_required":self.proposal.setText("Restore Initial before resuming; recovery does not require a working camera.")
@@ -399,4 +444,6 @@ class InfoBAXPage(QWidget):
         if not state or not 0<=row<len(state["records"]):return
         record=state["records"][row]
         metadata=(record.get("measurement") or {}).get("metadata",{})
+        if "ict1" in record:
+            metadata = dict(metadata, ict1=record["ict1"], ict1_window_id=record["ict1_window_id"])
         QMessageBox.information(self,"InfoBAX measurement",json.dumps(metadata,ensure_ascii=False,indent=2))

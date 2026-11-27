@@ -62,7 +62,7 @@ def binary_sign_information_quadrature(observation_noise_std: float) -> float:
 
 
 class InfoBAXEstimator:
-    """Estimate information between a scalar query and categorical output."""
+    """Estimate information from a beam-size query with optional ICT1 observation."""
 
     def __init__(
         self,
@@ -71,6 +71,8 @@ class InfoBAXEstimator:
         config: InfoBAXConfig,
         *,
         seed: int,
+        ict1_posterior: GaussianStatePosterior | None = None,
+        scans_per_candidate: int = 1,
     ) -> None:
         self.posterior = posterior
         self.algorithm = algorithm
@@ -89,9 +91,24 @@ class InfoBAXEstimator:
         self._base_observation_noise = noise_rng.normal(
             size=(config.inner_samples, posterior.query_count)
         )
-        direct_categories = algorithm.evaluate(
-            posterior.sample(config.direct_prior_samples, self.seed + 1)
-        ).categories
+        self.ict1_posterior = ict1_posterior
+        self.scans_per_candidate = scans_per_candidate
+        direct_samples = posterior.sample(config.direct_prior_samples, self.seed + 1)
+        if ict1_posterior is None:
+            direct_categories = algorithm.evaluate(direct_samples).categories
+        else:
+            if ict1_posterior.query_count * scans_per_candidate != posterior.query_count:
+                raise ValueError("ICT1 posterior does not match the candidate-by-scan pool")
+            ict1_rng = np.random.default_rng(self.seed + 3)
+            # Pair the beam quantiles with an independent permutation of the ICT1
+            # quantiles. Every query uses the same two-dimensional design.
+            self._ict1_standard_normal = ict1_rng.permutation(self._fantasy_standard_normal)
+            self._base_ict1_observation_noise = ict1_rng.normal(
+                size=(config.inner_samples, ict1_posterior.query_count)
+            )
+            self._base_ict1_samples = ict1_posterior.sample(config.inner_samples, self.seed + 4)
+            direct_ict1 = ict1_posterior.sample(config.direct_prior_samples, self.seed + 5)
+            direct_categories = algorithm.evaluate(direct_samples, direct_ict1).categories
         self.direct_prior_probabilities = categorical_probabilities(
             direct_categories, algorithm.category_count
         )
@@ -128,35 +145,45 @@ class InfoBAXEstimator:
             marginal,
         )
 
+    @staticmethod
+    def _conditional_samples(posterior, index, base_samples, noise_draws, standard_values):
+        h_vector = posterior.observation_matrix[index]
+        covariance = posterior.covariance
+        state_cross = covariance @ h_vector
+        latent_variance = float(h_vector @ state_cross)
+        observation_noise = float(posterior.observation_noise_std[index])
+        observation_variance = latent_variance + observation_noise**2
+        if observation_variance <= 0.0 or not math.isfinite(observation_variance):
+            raise NumericalFailure("non-positive fantasy observation variance")
+        observation_mean = float(h_vector @ posterior.mean)
+        gain = state_cross / observation_variance
+        base_noisy_observation = (
+            base_samples @ h_vector + observation_noise * noise_draws[:, index]
+        )
+        for standard_value in standard_values:
+            fantasy = observation_mean + math.sqrt(observation_variance) * standard_value
+            yield base_samples + np.outer(fantasy - base_noisy_observation, gain)
+
     def estimate(self, query_index: int) -> EIGDiagnostic:
         index = int(query_index)
         if index < 0 or index >= self.posterior.query_count:
             raise IndexError("query index outside posterior pool")
-        h_vector = self.posterior.observation_matrix[index]
-        covariance = self.posterior.covariance
-        state_cross = covariance @ h_vector
-        latent_variance = float(h_vector @ state_cross)
-        observation_noise = float(self.posterior.observation_noise_std[index])
-        observation_variance = latent_variance + observation_noise**2
-        if observation_variance <= 0.0 or not math.isfinite(observation_variance):
-            raise NumericalFailure("non-positive fantasy observation variance")
-        observation_mean = float(h_vector @ self.posterior.mean)
-        gain = state_cross / observation_variance
-        base_noisy_observation = (
-            self._base_state_samples @ h_vector
-            + observation_noise * self._base_observation_noise[:, index]
+        beam_samples = self._conditional_samples(
+            self.posterior, index, self._base_state_samples, self._base_observation_noise,
+            self._fantasy_standard_normal,
         )
-
+        if self.ict1_posterior is None:
+            conditioned = ((beam,) for beam in beam_samples)
+        else:
+            ict1_samples = self._conditional_samples(
+                self.ict1_posterior, index // self.scans_per_candidate, self._base_ict1_samples,
+                self._base_ict1_observation_noise, self._ict1_standard_normal,
+            )
+            conditioned = zip(beam_samples, ict1_samples, strict=True)
         category_rows: list[np.ndarray] = []
         probability_rows: list[np.ndarray] = []
-        for standard_value in self._fantasy_standard_normal:
-            fantasy = observation_mean + math.sqrt(
-                observation_variance
-            ) * standard_value
-            samples = self._base_state_samples + np.outer(
-                fantasy - base_noisy_observation, gain
-            )
-            categories = self.algorithm.evaluate(samples).categories
+        for samples in conditioned:
+            categories = self.algorithm.evaluate(*samples).categories
             category_rows.append(categories)
             probability_rows.append(
                 categorical_probabilities(
