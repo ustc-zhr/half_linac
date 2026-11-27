@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src/apps/emit_meas
 from PyQt5.QtCore import QPoint, Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QApplication, QTableWidget, QTableWidgetItem
 from half_linac.src.apps.emit_measure import main
+from half_linac.src.apps.emit_measure.measurement_service import ScanChargeMonitor
 from half_linac.src.apps.emit_measure.optimization_gui import (
     OptimizationDialog, OptimizationWorker, OptimizationRunReviewDialog,
 )
@@ -347,12 +348,12 @@ class DialogTests(unittest.TestCase):
 
         dialog.tabs.setCurrentIndex(0)
         self.app.processEvents()
-        for control in (dialog.other_limit, dialog.charge_retention):
+        for control in (dialog.other_limit, dialog.charge_retention, dialog.ict2_enabled, dialog.ict2_retention):
             self.assertEqual(control.visibleRegion().boundingRect().height(), control.height())
         self.assertEqual(dialog.other_limit.text(), '3.5')
         self.assertEqual(dialog.charge_retention.value(), 93.)
 
-    def test_constrained_bo_settings_create_optional_ict01_monitor(self):
+    def test_constrained_bo_settings_prepare_selected_monitors(self):
         from half_linac.src.apps.emit_measure.optimization import OptimizationVariable
         ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')
         self.host.app_context, self.host.machine_profile, self.host.machine_type = ctx, ctx.profile, 'real'
@@ -361,59 +362,83 @@ class DialogTests(unittest.TestCase):
         self.dialog.other_limit.setText('3')
         self.assertFalse(self.dialog.charge_settings.isHidden())
         self.assertFalse(self.dialog.bo_settings.isHidden())
-        paras = Mock(scan_metadata={}, background_image=None)
-        with patch.object(self.dialog, 'error') as error, \
-             patch.object(self.dialog, 'selected_variables',
-                          return_value=(OptimizationVariable('SS01', 1, 9),)), \
-             patch.object(self.host, 'optimization_parameters', return_value=paras), \
-             patch.object(self.dialog, 'launch'):
-            self.dialog.start()
-        self.assertFalse(error.called, error.call_args)
-        config = self.dialog.session.config
-        self.assertEqual(config.algorithm, 'cbo')
-        self.assertAlmostEqual(config.charge_constraint.retention, .93)
-        self.assertEqual(paras.charge_monitor['element_id'], 'ICT01')
-        self.assertEqual(paras.charge_monitor['pv'], 'IN:BD:ICT1:C')
-        self.assertEqual(paras.charge_monitor['unit'], 'nC')
-        self.assertEqual(paras.charge_monitor['trim_fraction'], .1)
+        self.assertFalse(self.dialog.ict2_enabled.isChecked())
+        self.assertFalse(self.dialog.ict2_retention.isEnabled())
+        for enabled in (False, True):
+            with self.subTest(ict2_enabled=enabled):
+                self.dialog.ict2_enabled.setChecked(enabled)
+                self.assertEqual(self.dialog.ict2_retention.isEnabled(), enabled)
+                if enabled:
+                    self.dialog.ict2_retention.setValue(91.)
+                paras = Mock(scan_metadata={}, background_image=None)
+                with patch.object(self.dialog, 'error') as error, \
+                     patch.object(self.dialog, 'selected_variables',
+                                  return_value=(OptimizationVariable('SS01', 1, 9),)), \
+                     patch.object(self.host, 'optimization_parameters', return_value=paras), \
+                     patch.object(self.dialog, 'launch'):
+                    self.dialog.start()
+                self.assertFalse(error.called, error.call_args)
+                config = self.dialog.session.config
+                self.assertEqual(config.algorithm, 'cbo')
+                self.assertAlmostEqual(config.charge_constraint.retention, .93)
+                self.assertEqual(paras.charge_monitor['element_id'], 'ICT01')
+                self.assertEqual(paras.charge_monitor['pv'], 'IN:BD:ICT1:C')
+                self.assertEqual(paras.charge_monitor['unit'], 'nC')
+                self.assertEqual(paras.charge_monitor['trim_fraction'], .1)
+                if enabled:
+                    self.assertAlmostEqual(config.additional_charge_constraints[0].retention, .91)
+                    (monitor,) = paras.additional_charge_monitors
+                    self.assertEqual(monitor['element_id'], 'ICT02')
+                    self.assertEqual(monitor['pv'], 'IN:BD:ICT2:C')
+                    scan_paras = self.host.get_setting(show_warning=False)
+                    scan_paras.recal = False
+                    scan_paras.charge_monitor = paras.charge_monitor
+                    scan_paras.additional_charge_monitors = paras.additional_charge_monitors
+                    scan = main.scanThread(scan_paras)
+                    pvs = {
+                        pv: Mock(wait_for_connection=Mock(return_value=True),
+                                 get_with_metadata=Mock(return_value={'value': value}))
+                        for pv, value in (('IN:BD:ICT1:C', 1.), ('IN:BD:ICT2:C', 2.))
+                    }
+                    for charge_monitor in scan.charge_monitors:
+                        charge_monitor.prepare(lambda pv, **_kwargs: pvs[pv])
+                    samples = scan._read_charge_samples()
+                    self.assertEqual(samples['charge_sample']['value'], 1.)
+                    self.assertEqual(samples['additional_charge_samples']['ICT02']['value'], 2.)
+                else:
+                    self.assertFalse(config.additional_charge_constraints)
+                    self.assertNotIn('additional_charge_monitors', vars(paras))
         main.epics.caput.assert_not_called()
 
     def test_charge_summary_uses_trimmed_mean_and_rejects_low_coverage(self):
-        scan = main.scanThread.__new__(main.scanThread)
-        QThread.__init__(scan)
-        scan.charge_connection_error = None
-        scan.charge_monitor = {
+        monitor = ScanChargeMonitor({
             'element_id': 'ICT01', 'channel': 'charge', 'unit': 'nC',
             'trim_fraction': .1, 'minimum_samples': 3, 'minimum_valid_fraction': .8,
-        }
-        scan.charge_attempts = 10
-        scan.charge_samples = [
+        })
+        monitor.attempts = 10
+        monitor.samples = [
             {'status': 'valid', 'value': value}
             for value in (.1, 1, 1, 1, 1, 1, 1, 1, 1, 10)
         ]
-        summary = scan._charge_summary()
+        summary = monitor.summary()
         self.assertEqual(summary['status'], 'valid')
         self.assertEqual(summary['trimmed_each_side'], 1)
         self.assertAlmostEqual(summary['value'], 1.)
-        scan.charge_attempts = 4
-        scan.charge_samples = [{'status': 'valid', 'value': 1.}] * 3
-        self.assertEqual(scan._charge_summary()['status'], 'invalid')
+        monitor.attempts = 4
+        monitor.samples = [{'status': 'valid', 'value': 1.}] * 3
+        self.assertEqual(monitor.summary()['status'], 'invalid')
 
     def test_charge_sampler_rejects_stale_and_nonpositive_values(self):
-        scan = main.scanThread.__new__(main.scanThread)
-        QThread.__init__(scan)
-        scan.charge_samples = []
-        scan.charge_attempts = 0
-        scan.charge_monitor = {
+        monitor = ScanChargeMonitor({
             'element_id': 'ICT01', 'channel': 'charge', 'unit': 'nC',
             'scale': 1., 'stale_timeout_s': 3.,
-        }
-        scan.charge_pv = Mock()
+        })
+        monitor.pv = Mock()
         for metadata, error_text in (({'value': 1., 'timestamp': 1.}, 'stale'),
                                      ({'value': 0., 'timestamp': 10.}, 'positive')):
-            scan.charge_pv.get_with_metadata.return_value = metadata
-            with patch('half_linac.src.apps.emit_measure.main.time.time', return_value=10.):
-                sample = scan._read_charge_sample()
+            monitor.pv.get_with_metadata.return_value = metadata
+            with patch('half_linac.src.apps.emit_measure.measurement_service.time.time', return_value=10.):
+                sample = monitor.read()
             self.assertEqual(sample['status'], 'invalid')
             self.assertIn(error_text, sample['error'])
         main.epics.caput.assert_not_called()
@@ -693,6 +718,19 @@ class DialogTests(unittest.TestCase):
         self.assertEqual(len(viewer.charge_axes.lines), 2)
         self.assertEqual(list(viewer.charge_axes.lines[0].get_ydata()), [1., .9])
         viewer.canvas.draw()
+
+        records[0]['additional_charge_summaries'] = {'ICT02': {'value': 1.5}}
+        records[1]['additional_charge_summaries'] = {'ICT02': {'value': 1.2}}
+        records[1]['constraint_failures'] = ['charge_limit:ICT02']
+        payload['additional_charge_constraints'] = {'ICT02': {'minimum': 1.4}}
+        dual_viewer = OptimizationRunReviewDialog(payload, '/tmp/run', self.dialog)
+        self.addCleanup(dual_viewer.close)
+        self.assertEqual(dual_viewer.table.horizontalHeaderItem(5).text(), 'ICT2 (nC)')
+        self.assertEqual(dual_viewer.table.item(1, 6).text(), 'ICT2 charge limit exceeded')
+        lines = {line.get_label(): list(line.get_ydata()) for line in dual_viewer.charge_axes.lines}
+        self.assertEqual(lines['ICT2'], [1.5, 1.2])
+        self.assertEqual(lines['ICT2 minimum'], [1.4, 1.4])
+        dual_viewer.canvas.draw()
 
 
 if __name__ == '__main__':

@@ -190,6 +190,49 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.best['currents']['SS01'], 3.)
         self.assertTrue(session.confirmed)
 
+    def test_constrained_bo_enforces_ict2_in_search_and_verification(self):
+        self.config = single_config(
+            'SS01', 1, 9, 'x', 3, algorithm='cbo',
+            charge_constraint=ChargeConstraint(),
+            additional_charge_constraints=(ChargeConstraint(element_id='ICT02', retention=.9),),
+        )
+        ict2 = iter((2., 2., 1.7, 1.9, 1.9, 1.7))
+        optimizer_outputs = []
+
+        def measure(*_):
+            return charged_result(
+                (self.device.value - 3) ** 2 + 1,
+                additional_charge_summaries={'ICT02': {'status': 'valid', 'value': next(ict2)}},
+            )
+
+        def optimizer(fn, *_args, **kwargs):
+            self.assertEqual(kwargs['constraint_bounds'], ((None, 3), (.95, None), (1.8, None)))
+            self.assertEqual(kwargs['seed_observations'], (((5.,), .5, (2., 1., 2.)),))
+            optimizer_outputs.extend([fn(3.)[1], fn(4.)[1]])
+
+        session = self.session(measure=measure, optimizer=optimizer)
+        self.assertEqual(session.run()['status'], 'complete')
+        self.assertEqual(optimizer_outputs, [(2., 1., 1.7), (2., 1., 1.9)])
+        self.assertEqual(session.records[2]['constraint_failures'], ['charge_limit:ICT02'])
+        self.assertEqual(session.best['currents']['SS01'], 4.)
+        self.assertEqual(session.records[-1]['constraint_failures'], ['charge_limit:ICT02'])
+        self.assertFalse(session.confirmed)
+        self.assertEqual(self.device.restores, [5.])
+
+    def test_constrained_bo_retries_when_enabled_ict2_is_missing(self):
+        self.config = single_config(
+            'SS01', 1, 9, 'x', None, algorithm='cbo',
+            charge_constraint=ChargeConstraint(),
+            additional_charge_constraints=(ChargeConstraint(element_id='ICT02'),),
+        )
+        optimizer = unittest.mock.Mock()
+        session = self.session(measure=lambda *_: charged_result(2.), optimizer=optimizer)
+        self.assertEqual(session.run()['status'], 'failed')
+        self.assertEqual(len(session.records), 2)
+        self.assertIn('ICT02 charge summary is unavailable', session.summary['error'])
+        self.assertEqual(self.device.restores, [5.])
+        optimizer.assert_not_called()
+
     def test_constrained_bo_retries_missing_charge_then_restores(self):
         config = single_config(
             'SS01', 1, 9, 'x', 3, algorithm='cbo', bo_initial_samples=3,

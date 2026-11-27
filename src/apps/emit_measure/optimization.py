@@ -72,6 +72,12 @@ class OptimizationConfig:
     bo_random_seed: int = 0
     rcds_noise: float = 0.0
     charge_constraint: ChargeConstraint | None = None
+    additional_charge_constraints: tuple[ChargeConstraint, ...] = ()
+
+    @property
+    def charge_constraints(self):
+        primary = () if self.charge_constraint is None else (self.charge_constraint,)
+        return primary + self.additional_charge_constraints
 
     def validate(self):
         if not self.variables or self.plane not in ('x', 'y'):
@@ -98,8 +104,11 @@ class OptimizationConfig:
         if self.algorithm == 'cbo':
             if self.charge_constraint is None:
                 raise ValueError('Constrained BO requires a charge constraint.')
-            self.charge_constraint.validate()
-        elif self.charge_constraint is not None:
+            for constraint in self.charge_constraints:
+                constraint.validate()
+            if len({c.element_id for c in self.charge_constraints}) != len(self.charge_constraints):
+                raise ValueError('Charge monitors must be unique.')
+        elif self.charge_constraints:
             raise ValueError('Charge constraints are only available with Constrained BO.')
         if self.bo_acquisition not in ('ei', 'lcb'):
             raise ValueError('BO acquisition must be EI or LCB.')
@@ -202,17 +211,23 @@ def measurement_values(result, strategy=None, required_planes=('x', 'y')):
     return values
 
 
-def charge_measurement(result):
+def charge_measurement(result, element_id='ICT01', *, primary=True):
     """Read a validated scan-level charge summary from a terminal scan result."""
-    summary = result.get('charge_summary')
+    summary = (result.get('charge_summary') if primary else
+               (result.get('additional_charge_summaries') or {}).get(element_id))
     if not isinstance(summary, dict):
-        raise ValueError('ICT01 charge summary is unavailable.')
+        raise ValueError(f'{element_id} charge summary is unavailable.')
     if summary.get('status') != 'valid':
-        raise ValueError(str(summary.get('error') or 'ICT01 charge samples are insufficient.'))
-    value = float(summary.get('value', float('nan')))
+        raise ValueError(str(summary.get('error') or f'{element_id} charge samples are insufficient.'))
+    try:
+        value = float(summary.get('value'))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'{element_id} charge is not finite and positive.') from exc
     if not math.isfinite(value) or value <= 0:
-        raise ValueError('ICT01 charge is not finite and positive.')
-    return value, deepcopy(summary)
+        raise ValueError(f'{element_id} charge is not finite and positive.')
+    summary = deepcopy(summary)
+    summary['value'] = value
+    return value, summary
 
 
 def json_safe(value):
@@ -278,11 +293,15 @@ class OptimizationSession:
         self.baseline = None
         self.charge_baseline = None
         self.charge_minimum = None
+        self.charge_limits = {}
         self.deadline = float('inf')
         other_plane = 'y' if config.plane == 'x' else 'x'
+        saved_config = asdict(config)
+        if not config.additional_charge_constraints:
+            del saved_config['additional_charge_constraints']
         self.summary = {'schema_version': 'emit_optimization_v2',
                         'variable_order': [v.element_id for v in config.variables],
-                        'config': asdict(config), 'measurement': metadata or {},
+                        'config': saved_config, 'measurement': metadata or {},
                         'other_plane_constraint': {
                             'enabled': config.other_limit is not None,
                             'plane': other_plane,
@@ -361,9 +380,15 @@ class OptimizationSession:
                     self.summary['measurement'].get('scan_strategy'),
                     required_planes=required_planes,
                 )
-                charge = charge_summary = None
+                charges = {}
                 if self.config.algorithm == 'cbo':
-                    charge, charge_summary = charge_measurement(result)
+                    charge, summary = charge_measurement(result, self.config.charge_constraint.element_id)
+                    charges.update(charge=charge, charge_summary=summary)
+                    if self.config.additional_charge_constraints:
+                        charges['additional_charge_summaries'] = {
+                            c.element_id: charge_measurement(result, c.element_id, primary=False)[1]
+                            for c in self.config.additional_charge_constraints
+                        }
             except (ValueError, TypeError) as exc:
                 record['error'] = str(exc)
                 self.save()
@@ -372,9 +397,7 @@ class OptimizationSession:
                 if attempt:
                     raise RuntimeError(f'Measurement failed twice: {exc}') from exc
                 continue
-            record.update(values=values, valid=True)
-            if charge_summary is not None:
-                record.update(charge=charge, charge_summary=charge_summary)
+            record.update(values=values, valid=True, **charges)
             self._update_record_feasibility(record)
             self.save()
             self.emit(stage, record=record)
@@ -388,11 +411,44 @@ class OptimizationSession:
         if (self.config.other_limit is not None and
                 record['values'][other_plane] > self.config.other_limit):
             reasons.append('other_plane_limit')
-        if self.config.algorithm == 'cbo' and self.charge_minimum is not None:
-            if record.get('charge', float('-inf')) < self.charge_minimum:
-                reasons.append('charge_limit')
+        for element_id, limit in self.charge_limits.items():
+            if self._charge_summary(record, element_id)['value'] < limit['minimum']:
+                reasons.append(self._charge_failure(element_id))
         record['constraint_failures'] = reasons
         record['feasible'] = not reasons
+
+    def _charge_summary(self, record, element_id):
+        if element_id == self.config.charge_constraint.element_id:
+            return record['charge_summary']
+        return record['additional_charge_summaries'][element_id]
+
+    def _charge_failure(self, element_id):
+        if element_id == self.config.charge_constraint.element_id:
+            return 'charge_limit'
+        return f'charge_limit:{element_id}'
+
+    def _set_charge_limits(self, baseline):
+        limits = {}
+        for constraint in self.config.charge_constraints:
+            element_id = constraint.element_id
+            samples = [self._charge_summary(record, element_id) for record in baseline]
+            mean = sum(sample['value'] for sample in samples) / len(samples)
+            limits[element_id] = {
+                **asdict(constraint), 'unit': samples[0].get('unit', 'nC'),
+                'baseline': mean, 'minimum': mean * constraint.retention,
+            }
+        self.charge_limits = limits
+        primary = limits[self.config.charge_constraint.element_id]
+        self.charge_baseline, self.charge_minimum = primary['baseline'], primary['minimum']
+        self.summary['charge_constraint'] = primary
+        if self.config.additional_charge_constraints:
+            self.summary['additional_charge_constraints'] = {
+                c.element_id: limits[c.element_id]
+                for c in self.config.additional_charge_constraints
+            }
+        for record in baseline:
+            self._update_record_feasibility(record)
+        self.save()
 
     def run(self):
         from contextlib import nullcontext
@@ -421,24 +477,12 @@ class OptimizationSession:
             self.save()
             baseline = [self.acquire(self.initial, 'Baseline', reserve=2) for _ in range(2)]
             if self.config.algorithm == 'cbo':
-                self.charge_baseline = sum(r['charge'] for r in baseline) / len(baseline)
-                self.charge_minimum = self.charge_baseline * self.config.charge_constraint.retention
-                self.summary['charge_constraint'] = {
-                    'element_id': self.config.charge_constraint.element_id,
-                    'channel': self.config.charge_constraint.channel,
-                    'unit': baseline[0]['charge_summary'].get('unit', 'nC'),
-                    'retention': self.config.charge_constraint.retention,
-                    'trim_fraction': self.config.charge_constraint.trim_fraction,
-                    'baseline': self.charge_baseline,
-                    'minimum': self.charge_minimum,
-                }
-                for record in baseline:
-                    self._update_record_feasibility(record)
-                self.save()
+                self._set_charge_limits(baseline)
             if not all(r['feasible'] for r in baseline):
                 failures = {failure for record in baseline for failure in record['constraint_failures']}
-                if 'charge_limit' in failures:
-                    raise RuntimeError('Baseline ICT01 charge is unstable at the configured retention limit.')
+                unstable = [name for name in self.charge_limits if self._charge_failure(name) in failures]
+                if unstable:
+                    raise RuntimeError(f'Baseline {", ".join(unstable)} charge is unstable at the configured retention limit.')
                 raise RuntimeError('Baseline exceeds the other-plane limit.')
             self.baseline = {
                 plane: sum(record['values'][plane] for record in baseline) / len(baseline)
@@ -462,7 +506,9 @@ class OptimizationSession:
                     other_plane = 'y' if self.config.plane == 'x' else 'x'
                     constraints = (() if self.config.other_limit is None
                                    else (r['values'][other_plane],))
-                    return normalized, constraints + (r['charge'],)
+                    return normalized, constraints + tuple(
+                        self._charge_summary(r, element_id)['value'] for element_id in self.charge_limits
+                    )
                 return normalized if r['feasible'] else 2.0
 
             try:
@@ -479,9 +525,13 @@ class OptimizationSession:
                                         else (self.baseline[other_plane],))
                     self.optimizer(
                         *optimizer_args,
-                        constraint_bounds=constraint_bounds + ((self.charge_minimum, None),),
+                        constraint_bounds=constraint_bounds + tuple(
+                            (limit['minimum'], None) for limit in self.charge_limits.values()
+                        ),
                         seed_observations=((self.initial, 0.5,
-                                            seed_constraints + (self.charge_baseline,)),),
+                                            seed_constraints + tuple(
+                                                limit['baseline'] for limit in self.charge_limits.values()
+                                            )),),
                     )
                 else:
                     self.optimizer(*optimizer_args)

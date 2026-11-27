@@ -33,6 +33,8 @@ from .optimization_diagnostics import (
     plane_metric,
 )
 
+ICT2_ELEMENT_ID = 'ICT02'
+
 
 class CompactScrollContent(QWidget):
     def sizeHint(self):
@@ -118,14 +120,32 @@ def _format_number(value, precision=4):
     return f'{number:.{precision}g}' if math.isfinite(number) else '—'
 
 
-def _record_cells(record, *, include_charge=False):
+def _charge_label(element_id):
+    return 'ICT2' if element_id == ICT2_ELEMENT_ID else element_id
+
+
+def _record_charges(record):
+    charges = {}
+    if record.get('charge') is not None:
+        primary = (record.get('charge_summary') or {}).get('element_id', 'ICT01')
+        charges[primary] = record['charge']
+    charges.update((element_id, summary['value'])
+                   for element_id, summary in record.get('additional_charge_summaries', {}).items()
+                   if summary.get('value') is not None)
+    return charges
+
+
+def _record_cells(record, charge_channels=()):
     values = record.get('values', {})
     if record.get('valid'):
         failures = record.get('constraint_failures', ())
         if len(failures) > 1:
             state = 'Multiple constraints exceeded'
         elif not record.get('feasible') and 'charge_limit' in failures:
-            state = 'ICT01 charge limit exceeded'
+            primary = (record.get('charge_summary') or {}).get('element_id', 'ICT01')
+            state = f'{_charge_label(primary)} charge limit exceeded'
+        elif failures and failures[0].startswith('charge_limit:'):
+            state = f'{_charge_label(failures[0].partition(":")[2])} charge limit exceeded'
         elif record.get('feasible'):
             state = ('Valid' if record.get('other_plane_constraint_enabled', True)
                      else 'Valid · other plane not limited')
@@ -141,23 +161,22 @@ def _record_cells(record, *, include_charge=False):
         _format_number(values.get('x')),
         _format_number(values.get('y')),
     ]
-    if include_charge:
-        cells.append(_format_number(record.get('charge')))
+    charges = _record_charges(record)
+    cells.extend(_format_number(charges.get(element_id)) for element_id in charge_channels)
     cells.extend((str(state), Path(record.get('archive', '')).name or '—'))
     return cells
 
 
 def _populate_record_table(table, records):
-    include_charge = any('charge' in record for record in records)
+    charge_channels = dict.fromkeys(element_id for record in records for element_id in _record_charges(record))
     headers = ['Scan / Stage', 'Currents (A)', 'εnx', 'εny']
-    if include_charge:
-        headers.append('ICT01 (nC)')
+    headers.extend(f'{_charge_label(element_id)} (nC)' for element_id in charge_channels)
     headers.extend(['Status', 'Archive'])
     table.setColumnCount(len(headers))
     table.setHorizontalHeaderLabels(headers)
     table.setRowCount(len(records))
     for row, record in enumerate(records):
-        for column, value in enumerate(_record_cells(record, include_charge=include_charge)):
+        for column, value in enumerate(_record_cells(record, charge_channels)):
             item = QTableWidgetItem(value)
             if column == len(headers) - 1:
                 item.setToolTip(str(record.get('archive', '')))
@@ -165,10 +184,34 @@ def _populate_record_table(table, records):
                 item.setToolTip('Double-click this row to inspect the archived fit diagnostics.')
             else:
                 item.setToolTip(value)
-            numeric_columns = (1, 2, 3, 4) if include_charge else (1, 2, 3)
-            if column in numeric_columns:
+            if 1 <= column < len(headers) - 2:
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             table.setItem(row, column, item)
+
+
+def _plot_charge_history(axes, records, limits):
+    charge_series = {}
+    for record in records:
+        for element_id, value in _record_charges(record).items():
+            charge_series.setdefault(element_id, []).append((record['index'], value))
+    if not charge_series:
+        return None
+
+    charge_axes = axes.twinx()
+    for index, (element_id, series) in enumerate(charge_series.items()):
+        scans, charges = zip(*series)
+        label = _charge_label(element_id)
+        color = '#f0b45a' if index == 0 else f'C{index + 1}'
+        charge_axes.plot(scans, charges, '.-', color=color, label=label)
+        minimum = limits.get(element_id, {}).get('minimum')
+        if minimum is not None:
+            charge_axes.axhline(minimum, color=color, linestyle='--', linewidth=1,
+                               label=f'{label} minimum')
+    first_element = next(iter(charge_series))
+    unit = limits.get(first_element, {}).get('unit', 'nC')
+    label = _charge_label(first_element) if len(charge_series) == 1 else 'Charge'
+    charge_axes.set_ylabel(f'{label} ({unit})')
+    return charge_axes
 
 
 class MeasurementDiagnosticsDialog(QDialog):
@@ -320,7 +363,6 @@ class OptimizationRunReviewDialog(QDialog):
         self.figure = Figure(figsize=(8, 3), tight_layout=True)
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.axes = self.figure.add_subplot(111)
-        self.charge_axes = None
         valid = [record for record in self.records if record.get('valid')]
         if valid:
             for plane in ('x', 'y'):
@@ -340,19 +382,11 @@ class OptimizationRunReviewDialog(QDialog):
         self.axes.set_xlabel('Measurement')
         self.axes.set_ylabel('εn (mm·mrad)')
         self.axes.grid(axis='y', alpha=.25)
-        charged = [record for record in valid if record.get('charge') is not None]
-        self.charge_axes = None
-        if charged:
-            self.charge_axes = self.axes.twinx()
-            self.charge_axes.plot(
-                [record['index'] for record in charged],
-                [record['charge'] for record in charged], '.-', color='#f0b45a', label='ICT01',
-            )
-            constraint = payload.get('charge_constraint', {})
-            if constraint.get('minimum') is not None:
-                self.charge_axes.axhline(constraint['minimum'], color='#f0b45a', linestyle='--',
-                                         linewidth=1, label='ICT01 minimum')
-            self.charge_axes.set_ylabel(f"ICT01 ({constraint.get('unit', 'nC')})")
+        primary = payload.get('charge_constraint', {})
+        limits = {primary.get('element_id', 'ICT01'): primary,
+                  **payload.get('additional_charge_constraints', {})}
+        self.charge_axes = _plot_charge_history(self.axes, valid, limits)
+        if self.charge_axes is not None:
             lines = self.axes.lines + self.charge_axes.lines
             self.axes.legend(lines, [line.get_label() for line in lines], loc='upper right')
         self.canvas.setMinimumHeight(220)
@@ -570,7 +604,7 @@ class OptimizationDialog(QDialog):
         self.algorithm.addItem('Constrained BO', 'cbo')
         self.algorithm.setToolTip(
             'RCDS is the default local search. BO uses expected improvement. '
-            'Constrained BO models ICT01 charge and, when enabled, the other-plane limit.')
+            'Constrained BO models ICT01 charge, with optional ICT2 and other-plane limits.')
         self.other_limit_enabled = QCheckBox('Enabled', self.settings)
         self.other_limit_enabled.setChecked(True)
         self.other_limit_enabled.setToolTip(
@@ -733,20 +767,28 @@ class OptimizationDialog(QDialog):
         charge_monitor_label.setProperty('role', 'caption')
         self.charge_monitor = QLabel('ICT01', self.charge_settings)
         self.charge_monitor.setFixedHeight(32)
+        self.ict2_enabled = QCheckBox('ICT2', self.charge_settings)
+        self.ict2_enabled.setFixedHeight(32)
+        self.ict2_enabled.setToolTip('Also require ICT2 to retain its minimum charge.')
         self.charge_retention = QDoubleSpinBox(self.charge_settings)
-        self.charge_retention.setRange(0.1, 100.0)
-        self.charge_retention.setDecimals(1)
-        self.charge_retention.setSingleStep(1.0)
-        self.charge_retention.setValue(95.0)
-        self.charge_retention.setSuffix(' %')
-        self.charge_retention.setFixedHeight(32)
-        self.charge_retention.setToolTip('Minimum ICT01 charge retained relative to the two baseline scans.')
+        self.ict2_retention = QDoubleSpinBox(self.charge_settings)
+        for monitor, spin in (('ICT01', self.charge_retention), ('ICT2', self.ict2_retention)):
+            spin.setRange(0.1, 100.0)
+            spin.setDecimals(1)
+            spin.setSingleStep(1.0)
+            spin.setValue(95.0)
+            spin.setSuffix(' %')
+            spin.setFixedHeight(32)
+            spin.setToolTip(f'Minimum {monitor} charge retained relative to the two baseline scans.')
+        self.ict2_retention.setEnabled(False)
         retention_label = QLabel('Minimum retained charge', self.charge_settings)
         retention_label.setProperty('role', 'caption')
         charge_layout.addWidget(charge_monitor_label, 0, 0)
         charge_layout.addWidget(self.charge_monitor, 1, 0)
         charge_layout.addWidget(retention_label, 0, 1)
         charge_layout.addWidget(self.charge_retention, 1, 1)
+        charge_layout.addWidget(self.ict2_enabled, 2, 0)
+        charge_layout.addWidget(self.ict2_retention, 2, 1)
         charge_layout.setColumnStretch(0, 1)
         charge_layout.setColumnStretch(1, 1)
         algorithm_layout.addWidget(self.rcds_settings)
@@ -846,6 +888,9 @@ class OptimizationDialog(QDialog):
         self.bo_seed.valueChanged.connect(self.settings_changed)
         self.bo_acquisition.currentIndexChanged.connect(self.bo_acquisition_changed)
         self.charge_retention.valueChanged.connect(self.settings_changed)
+        self.ict2_enabled.toggled.connect(self.ict2_retention.setEnabled)
+        self.ict2_enabled.toggled.connect(self.ict2_settings_changed)
+        self.ict2_retention.valueChanged.connect(self.ict2_settings_changed)
         self.bo_kappa.valueChanged.connect(self.settings_changed)
         self.advanced_button.toggled.connect(self.advanced_changed)
         self._bo_initial_samples_custom = False
@@ -960,11 +1005,18 @@ class OptimizationDialog(QDialog):
             self.bo_initial_samples.setValue(default)
             self.bo_initial_samples.blockSignals(blocked)
         self.update_budget_note()
+        self.invalidate_conventional_result()
+        if hasattr(self, "infobax_page"):
+            self.infobax_page.settings_changed()
+        self.update_buttons()
+
+    def invalidate_conventional_result(self):
         if self.session and self.session.confirmed and not self.busy():
             self.session.confirmed = False
             self.status.setText('Settings changed. Run optimization again before applying a best point. Restore Initial remains available.')
-        if hasattr(self, "infobax_page"):
-            self.infobax_page.settings_changed()
+
+    def ict2_settings_changed(self, *_args):
+        self.invalidate_conventional_result()
         self.update_buttons()
 
     def algorithm_changed(self, *_args):
@@ -1159,6 +1211,10 @@ class OptimizationDialog(QDialog):
         self.axes.set_ylabel('εn (mm·mrad)', color=palette['plot_text'])
         self.axes.grid(axis='y', color=palette['plot_grid'], alpha=0.5)
         self.axes.set_axisbelow(True)
+        if self.charge_axes is not None:
+            color = palette['plot_text'] if self.session.config.additional_charge_constraints else '#f0b45a'
+            self.charge_axes.tick_params(colors=color, labelsize=8)
+            self.charge_axes.yaxis.label.set_color(color)
         legend = self.axes.get_legend()
         if legend:
             legend.get_frame().set_facecolor(palette['plot_bg'])
@@ -1304,6 +1360,11 @@ class OptimizationDialog(QDialog):
                     ) from None
             charge_constraint = (ChargeConstraint(retention=self.charge_retention.value() / 100.0)
                                  if self.algorithm.currentData() == 'cbo' else None)
+            additional_constraints = ()
+            if charge_constraint is not None and self.ict2_enabled.isChecked():
+                additional_constraints = (ChargeConstraint(
+                    element_id=ICT2_ELEMENT_ID, retention=self.ict2_retention.value() / 100.0,
+                ),)
             config = OptimizationConfig(
                 self.selected_variables(), self.plane.currentData(), other_limit,
                 self.count.value(), self.minutes.value(), settle_time=self.solenoid_settle.value(),
@@ -1313,7 +1374,8 @@ class OptimizationDialog(QDialog):
                 bo_acquisition=self.bo_acquisition.currentData(),
                 bo_exploration=self.bo_exploration.value(), bo_kappa=self.bo_kappa.value(),
                 bo_random_seed=self.bo_seed.value(),
-                charge_constraint=charge_constraint)
+                charge_constraint=charge_constraint,
+                additional_charge_constraints=additional_constraints)
             config.validate()
             self.paras = self.host.optimization_parameters(config.variables, defer_io=True)
             if charge_constraint is not None:
@@ -1323,18 +1385,18 @@ class OptimizationDialog(QDialog):
                     control_backend=backend,
                 )
                 workflow = resolve_ct_monitor_workflow(ct_context.profile)
-                self.paras.charge_monitor = {
-                    'element_id': charge_constraint.element_id,
-                    'channel': charge_constraint.channel,
-                    'pv': resolve_channel(self.host.app_context, charge_constraint.element_id,
-                                          charge_constraint.channel),
+                monitors = [{
+                    'element_id': constraint.element_id,
+                    'channel': constraint.channel,
+                    'pv': resolve_channel(self.host.app_context, constraint.element_id, constraint.channel),
                     'unit': workflow['measurement_unit'],
                     'scale': float(workflow['scale_to_display_unit'][backend]),
                     'stale_timeout_s': workflow['stale_timeout_s'][backend],
-                    'trim_fraction': charge_constraint.trim_fraction,
-                    'minimum_samples': 3,
-                    'minimum_valid_fraction': 0.8,
-                }
+                    'trim_fraction': constraint.trim_fraction,
+                } for constraint in config.charge_constraints]
+                self.paras.charge_monitor, *additional_monitors = monitors
+                if additional_monitors:
+                    self.paras.additional_charge_monitors = tuple(additional_monitors)
             root = resolve_app_runtime_paths(Path(__file__).parent, self.host.app_context)['runs_dir']
             run_dir = root / ('optimization_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid4().hex[:8])
             self.session = OptimizationSession(config, EpicsVariableGroup(self.host.app_context, config),
@@ -1413,11 +1475,13 @@ class OptimizationDialog(QDialog):
             progress = payload['scan_progress']
             self.status.setText(f"Scan {len(self.session.records)} · {progress.get('stage', '')} · "
                                 f"{progress.get('completed_points', 0)} scan points")
-        elif payload.get('charge_sample', {}).get('status') == 'valid':
-            sample = payload['charge_sample']
-            self.status.setText(
-                f"Scan {len(self.session.records)} · ICT01={sample['value']:.4g} nC"
-            )
+        elif 'charge_sample' in payload or 'additional_charge_samples' in payload:
+            samples = {self.session.config.charge_constraint.element_id: payload.get('charge_sample', {}),
+                       **payload.get('additional_charge_samples', {})}
+            readings = [f"{_charge_label(element_id)}={sample['value']:.4g} nC"
+                        for element_id, sample in samples.items() if sample.get('status') == 'valid']
+            if readings:
+                self.status.setText(' · '.join([f'Scan {len(self.session.records)}', *readings]))
         self.host.display(payload)
 
     def measurement_finished(self):
@@ -1455,10 +1519,12 @@ class OptimizationDialog(QDialog):
     def show_progress(self, payload):
         status = f"{payload['stage']} · {payload['count']}/{self.session.config.max_measurements}"
         record = payload.get('record')
-        if isinstance(record, dict) and record.get('charge') is not None:
-            status += f" · ICT01={record['charge']:.4g} nC"
-            if self.session.charge_minimum is not None:
-                status += f" (minimum {self.session.charge_minimum:.4g})"
+        if isinstance(record, dict):
+            for element_id, charge in _record_charges(record).items():
+                status += f' · {_charge_label(element_id)}={charge:.4g} nC'
+                limit = self.session.charge_limits.get(element_id)
+                if limit is not None:
+                    status += f" (minimum {limit['minimum']:.4g})"
         self.status.setText(status)
         self.progress_bar.setRange(0, self.session.config.max_measurements)
         self.progress_bar.setValue(payload['count'])
@@ -1478,21 +1544,7 @@ class OptimizationDialog(QDialog):
                 self.axes.plot([record['index'] for record in available],
                                [record['values'][plane] for record in available],
                                '.-', label=plane.upper())
-        charged = [record for record in valid if record.get('charge') is not None]
-        if charged:
-            self.charge_axes = self.axes.twinx()
-            self.charge_axes.plot(
-                [record['index'] for record in charged],
-                [record['charge'] for record in charged], '.-',
-                color='#f0b45a', label='ICT01',
-            )
-            if self.session.charge_minimum is not None:
-                self.charge_axes.axhline(
-                    self.session.charge_minimum, color='#f0b45a', linestyle='--',
-                    linewidth=1, label='ICT01 minimum',
-                )
-            self.charge_axes.set_ylabel('ICT01 (nC)', color='#f0b45a')
-            self.charge_axes.tick_params(colors='#f0b45a', labelsize=8)
+        self.charge_axes = _plot_charge_history(self.axes, valid, self.session.charge_limits)
         if valid:
             lines = self.axes.lines + (self.charge_axes.lines if self.charge_axes is not None else [])
             self.axes.legend(lines, [line.get_label() for line in lines], loc='upper right')
@@ -1546,16 +1598,17 @@ class OptimizationDialog(QDialog):
                 f'εn{plane}={baseline[plane]:.4g}'
                 for plane in ('x', 'y') if plane in baseline)
             text += f' · Baseline {baseline_values}'
-        if s.charge_baseline is not None:
-            text += f' · ICT01 baseline={s.charge_baseline:.4g}, minimum={s.charge_minimum:.4g} nC'
+        for element_id, limit in s.charge_limits.items():
+            text += (f" · {_charge_label(element_id)} baseline={limit['baseline']:.4g}, "
+                     f"minimum={limit['minimum']:.4g} nC")
         if best:
             best_values = ', '.join(
                 f'εn{plane}={best["values"][plane]:.4g}'
                 for plane in ('x', 'y') if plane in best['values'])
             text += (f'\nBest candidate: {self.format_currents(best["currents"])} A · '
                      f'{best_values}')
-            if best.get('charge') is not None:
-                text += f' · ICT01={best["charge"]:.4g} nC'
+            for element_id, charge in _record_charges(best).items():
+                text += f' · {_charge_label(element_id)}={charge:.4g} nC'
         if 'verification_mean' in s.summary:
             text += f' · Verified objective mean={s.summary["verification_mean"]:.4g}'
         self.results.setText(text)

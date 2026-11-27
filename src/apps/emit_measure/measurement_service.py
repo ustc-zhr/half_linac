@@ -4,6 +4,7 @@ The scan thread owns scan selection/reconstruction and delegates its physical
 point operation here. InfoBAX uses the same operation with timed sampling.
 """
 from __future__ import annotations
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, asdict
 from functools import partial
@@ -146,7 +147,95 @@ def read_flag_image_fit(
                 f"expected {pixel_shape[0] * pixel_shape[1]}."
             ) from exc
         raise RuntimeError(f"Flag image PV is not numeric array data: {image_pv}.") from exc
-def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, quality, format_status):
+class ScanChargeMonitor:
+    """Collect charge samples for one channel during a quadrupole scan."""
+
+    def __init__(self, settings):
+        self.settings = settings
+        self.pv = None
+        self.connection_error = None
+        self.samples = []
+        self.attempts = 0
+
+    @property
+    def element_id(self):
+        return self.settings["element_id"]
+
+    def prepare(self, pv_factory):
+        pv = pv_factory(self.settings["pv"], form="time", auto_monitor=False)
+        if pv.wait_for_connection(timeout=2):
+            self.pv = pv
+        else:
+            self.connection_error = f"{self.element_id} charge channel is disconnected."
+
+    def read(self):
+        if self.pv is None:
+            return None
+        self.attempts += 1
+        received_at = time.time()
+        sample = {"received_at": received_at, "status": "invalid"}
+        try:
+            metadata = self.pv.get_with_metadata(
+                use_monitor=False, timeout=2, with_ctrlvars=False,
+            )
+            if not isinstance(metadata, Mapping):
+                raise ValueError("read returned no metadata")
+            value = float(metadata.get("value")) * float(self.settings["scale"])
+            source_timestamp = float(metadata.get("timestamp", received_at))
+            stale_timeout = self.settings.get("stale_timeout_s")
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError("value is not finite and positive")
+            if stale_timeout is not None and received_at - source_timestamp > float(stale_timeout):
+                raise ValueError("sample is stale")
+            sample.update(
+                status="valid", value=value, source_timestamp=source_timestamp,
+                severity=metadata.get("severity"), status_code=metadata.get("status"),
+            )
+        except Exception as exc:
+            sample["error"] = str(exc)
+        self.samples.append(sample)
+        return sample
+
+    def summary(self):
+        valid = [sample["value"] for sample in self.samples if sample["status"] == "valid"]
+        minimum_count = int(self.settings.get("minimum_samples", 3))
+        minimum_fraction = float(self.settings.get("minimum_valid_fraction", 0.8))
+        coverage = len(valid) / self.attempts if self.attempts else 0.0
+        summary = {
+            "element_id": self.element_id,
+            "channel": self.settings["channel"],
+            "unit": self.settings["unit"],
+            "attempted_samples": self.attempts,
+            "valid_samples": len(valid),
+            "valid_fraction": coverage,
+            "trim_fraction": float(self.settings["trim_fraction"]),
+            "samples": self.samples,
+        }
+        if self.connection_error:
+            summary["connection_error"] = self.connection_error
+        if len(valid) < minimum_count or coverage < minimum_fraction:
+            summary.update(
+                status="invalid",
+                error=(self.connection_error or
+                       f"{self.element_id} charge samples are insufficient "
+                       f"({len(valid)}/{self.attempts} valid)."),
+            )
+            return summary
+        ordered = np.sort(np.asarray(valid, dtype=float))
+        trim_count = int(math.floor(len(ordered) * summary["trim_fraction"]))
+        used = ordered[trim_count:len(ordered) - trim_count] if trim_count else ordered
+        summary.update(
+            status="valid", value=float(np.mean(used)),
+            mean=float(np.mean(ordered)), median=float(np.median(ordered)),
+            minimum=float(np.min(ordered)), maximum=float(np.max(ordered)),
+            standard_deviation=(float(np.std(ordered, ddof=1)) if len(ordered) > 1 else 0.0),
+            trimmed_each_side=trim_count, used_samples=len(used),
+        )
+        return summary
+
+
+def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, quality,
+                       format_status, read_charge_samples=None):
     checkpoint = getattr(self, "measurement_check", None)
     if checkpoint is not None:
         checkpoint()
@@ -262,9 +351,8 @@ def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, 
 
         if not self.is_running:
             return None
-        charge_sample = self._read_charge_sample()
-        if charge_sample is not None:
-            point["charge_sample"] = charge_sample
+        if read_charge_samples is not None:
+            point.update(read_charge_samples())
         sigx = float(fit_result.sigx_mm)
         sigy = float(fit_result.sigy_mm)
         if self.scan_strategy == "adaptive_quality" or getattr(self, "require_point_quality", False):
@@ -384,9 +472,6 @@ class _PointOwner:
 
     def _emit_adaptive_status(self, message, **kwargs):
         self.trigger.emit({"method":None, "adaptive_status": message, **kwargs})
-
-    def _read_charge_sample(self):
-        return None
 
     @staticmethod
     def _sample_error(values):
