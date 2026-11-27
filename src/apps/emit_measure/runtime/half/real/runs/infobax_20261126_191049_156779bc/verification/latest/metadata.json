@@ -1,0 +1,189 @@
+{
+  "backend": "real",
+  "background_status": "Off",
+  "beam_size_source": "local_fit",
+  "beam_width_method": "Gaussian fit",
+  "columns": [
+    "k1",
+    "sigx",
+    "sigy"
+  ],
+  "created_at": "2026-11-26T19:20:21",
+  "energy_mev": 2219.0,
+  "fit_summary": {
+    "leastSquares": {
+      "method": "leastSquares",
+      "status": "valid",
+      "xplane": {
+        "alpha": -14.13,
+        "beta": 123.4,
+        "condition_number": 5986.494387583053,
+        "determinant": 0.0001677476906782674,
+        "emittance": 0.013,
+        "fit_selection": {
+          "actual_range": [
+            1.7,
+            2.0
+          ],
+          "points_total": 45,
+          "points_used": 45,
+          "selected_k1": [
+            1.7,
+            1.7214285714285713,
+            1.7428571428571429,
+            1.7642857142857142,
+            1.7857142857142856,
+            1.8071428571428572,
+            1.8285714285714285,
+            1.85,
+            1.8714285714285714,
+            1.8928571428571428,
+            1.9142857142857144,
+            1.9357142857142857,
+            1.957142857142857,
+            1.9785714285714286,
+            2.0
+          ],
+          "status": "all_points",
+          "unique_k1_used": 15
+        },
+        "gamma": 1.63,
+        "message": "",
+        "normalized_emittance": 56.24,
+        "rank": 3,
+        "residual_rms": 0.0007499510842244526,
+        "solver": "numpy.linalg.lstsq",
+        "status": "valid"
+      },
+      "yplane": {
+        "alpha": 5.6,
+        "beta": 13.9,
+        "condition_number": 9485.398548715566,
+        "determinant": 0.0017956577684901803,
+        "emittance": 0.0424,
+        "fit_selection": {
+          "actual_range": [
+            1.7,
+            2.0
+          ],
+          "points_total": 45,
+          "points_used": 45,
+          "selected_k1": [
+            1.7,
+            1.7214285714285713,
+            1.7428571428571429,
+            1.7642857142857142,
+            1.7857142857142856,
+            1.8071428571428572,
+            1.8285714285714285,
+            1.85,
+            1.8714285714285714,
+            1.8928571428571428,
+            1.9142857142857144,
+            1.9357142857142857,
+            1.957142857142857,
+            1.9785714285714286,
+            2.0
+          ],
+          "status": "all_points",
+          "unique_k1_used": 15
+        },
+        "gamma": 2.33,
+        "message": "",
+        "normalized_emittance": 184.01,
+        "rank": 3,
+        "residual_rms": 0.011367661839076228,
+        "solver": "numpy.linalg.lstsq",
+        "status": "valid"
+      }
+    }
+  },
+  "fit_summary_updated_at": "2026-11-26T19:20:22",
+  "fit_vmin": null,
+  "flag": "PRF07",
+  "flag_image_pv": "IN:BD:PRF07:image1:ArrayData",
+  "freshness": "timed_unverified",
+  "image_geometry": {
+    "extent_mm": [
+      -15.624,
+      15.624,
+      -11.718,
+      11.718
+    ],
+    "flip_y": true,
+    "shape": [
+      1440,
+      1080
+    ]
+  },
+  "initial_quad": {
+    "current_readback": 107.6068,
+    "current_set": 107.60679663311282,
+    "element": "QT02",
+    "k1": 1.7
+  },
+  "k1_end": 2.0,
+  "k1_from": 1.7,
+  "k1_mode": "absolute",
+  "k1_steps": 15,
+  "k1_unit": "1/m^2",
+  "k1_values": [
+    1.7,
+    1.7214285714285713,
+    1.7428571428571429,
+    1.7642857142857142,
+    1.7857142857142856,
+    1.8071428571428572,
+    1.8285714285714285,
+    1.85,
+    1.8714285714285714,
+    1.8928571428571428,
+    1.9142857142857144,
+    1.9357142857142857,
+    1.957142857142857,
+    1.9785714285714286,
+    2.0
+  ],
+  "machine_display_name": "HALF Linac",
+  "machine_id": "half",
+  "model_line": "EMIT_QT02_PRF07",
+  "model_snapshot": {
+    "control_backend": "real",
+    "created_at": "2026-11-26T19:10:49+08:00",
+    "fields": [
+      {
+        "conversion": {
+          "type": "direct"
+        },
+        "element_id": "QT02",
+        "field_name": "K1",
+        "model_unit": "1/m^2",
+        "source": "live_from_real",
+        "source_pv": "IN:MG:L002:QUAD:QT02:K1",
+        "source_unit": "1/m^2",
+        "source_value": 1.7,
+        "status": "ok",
+        "value": 1.7
+      }
+    ],
+    "machine_id": "half",
+    "schema_version": "1",
+    "source": "live_from_real"
+  },
+  "points": 45,
+  "quad": "QT02",
+  "roi": {
+    "height": 900,
+    "width": 900,
+    "x": 250,
+    "y": 100
+  },
+  "roi_enabled": true,
+  "sample_interval": 1.0,
+  "samples": 3,
+  "scan_strategy": "grid",
+  "schema_version": "emit_scan_v2",
+  "settle_time": 5.0,
+  "size_pv_sigx": "IN:BD:PRF07:H:SIZE",
+  "size_pv_sigy": "IN:BD:PRF07:V:SIZE"
+}
