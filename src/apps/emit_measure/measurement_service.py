@@ -22,6 +22,10 @@ from half_linac.src.shared.machine_profile import MachineProfileError
 from .adaptive_scan import AdaptiveObservation
 
 
+LOCAL_FIT = "local_fit"
+PUBLISHED_SIZE = "published_size"
+
+
 def fingerprint(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False,
                                     separators=(",", ":")).encode()).hexdigest()
@@ -270,6 +274,59 @@ class ScanChargeMonitor:
         return summary
 
 
+def read_scan_sample(settings, *, read_image_fit, read_sizes, on_raw=None):
+    source = getattr(settings, "beam_size_source", LOCAL_FIT)
+    archive_dir = getattr(settings, "raw_archive_dir", None)
+    archive = {"raw_archive_dir": archive_dir, "on_raw": on_raw} if archive_dir else {}
+    image_error = None
+    try:
+        image, fit = read_image_fit(
+            settings.flagImagePV,
+            settings.flag_pixel_shape,
+            settings.flag_image_extent,
+            background=settings.background_image,
+            roi=getattr(settings, "roi", None),
+            flip_y=getattr(settings, "flag_image_flip_y", False),
+            full_frame_for_roi=True,
+            method=getattr(settings, "beam_width_method", "Gaussian fit"),
+            fit_vmin=getattr(settings, "fit_vmin", None),
+            **archive,
+        )
+    except RuntimeError as exc:
+        image, fit, image_error = None, None, str(exc)
+    size_pv = (None, None)
+    if fit is not None or source == PUBLISHED_SIZE:
+        size_pv = read_sizes(settings.flagSigxPV, settings.flagSigyPV)
+    return {
+        "method": None,
+        "flag": settings.flag_name,
+        "beam_size_source": source,
+        "beam_image": image,
+        "beam_fit": fit,
+        "beam_extent": settings.flag_image_extent,
+        "image_error": image_error,
+        "show_roi_overlay": True,
+        "size_pv": size_pv,
+        "background_status": settings.background_status,
+    }
+
+
+def scan_sample_error(sample, *, check_image_quality, format_status):
+    published = sample["beam_size_source"] == PUBLISHED_SIZE
+    if published:
+        missing = [axis for axis, value in zip(("σₓ", "σᵧ"), sample["size_pv"]) if value is None]
+        if missing:
+            return f"{sample['flag']} published size unavailable or invalid ({', '.join(missing)})."
+    if not published or check_image_quality:
+        fit = sample["beam_fit"]
+        if fit is None:
+            return sample["image_error"]
+        if not fit.valid:
+            detail = f": {fit.message}" if fit.message else ""
+            return f"Flag image fit failed for {sample['flag']} ({format_status(fit.status)}){detail}."
+    return None
+
+
 def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, quality,
                        format_status, read_charge_samples=None, before_images=None):
     checkpoint = getattr(self, "measurement_check", None)
@@ -294,6 +351,8 @@ def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, 
         return None
 
     ict1_window_id = before_images(float(k1)) if before_images is not None else None
+    check_image_quality = self.scan_strategy == "adaptive_quality" or getattr(self, "require_point_quality", False)
+    published = getattr(self, "beam_size_source", LOCAL_FIT) == PUBLISHED_SIZE
     frame_results = []
     sigx_values = []
     sigy_values = []
@@ -310,78 +369,32 @@ def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, 
 
         retry = 0
         while self.is_running:
-            frame_results.append({})
-            try:
-                image, fit_result = read_image_fit(
-                    self.flagImagePV,
-                    self.flag_pixel_shape,
-                    self.flag_image_extent,
-                    background=self.background_image,
-                    roi=self.roi,
-                    flip_y=self.flag_image_flip_y,
-                    full_frame_for_roi=True,
-                    method=self.beam_width_method,
-                    fit_vmin=self.fit_vmin,
-                    **({"raw_archive_dir": self.raw_archive_dir,
-                        "on_raw": lambda metadata: frame_results[-1].update(metadata)}
-                       if getattr(self, "raw_archive_dir", None) else {}),
-                )
-            except RuntimeError as exc:
-                if not adaptive or retry >= self.adaptive_config.max_retries:
-                    if adaptive:
-                        self._emit_adaptive_status(
-                            f"Rejected K₁ = {k1:g} m⁻²: image unavailable",
-                            k1=k1,
-                        )
-                        return None
-                    raise
-                retry += 1
-                self._emit_adaptive_status(
-                    f"Retrying K₁ = {k1:g} m⁻² "
-                    f"({retry}/{self.adaptive_config.max_retries})",
-                    k1=k1,
-                    retry_reason=str(exc),
-                )
-                if self.sample_interval > 0 and not self._sleep_or_stop(
-                    self.sample_interval
-                ):
-                    return None
-                continue
-            size_pv = read_sizes(
-                self.flagSigxPV,
-                self.flagSigyPV,
+            frame = {}
+            frame_results.append(frame)
+            point = read_scan_sample(
+                self, read_image_fit=read_image_fit, read_sizes=read_sizes,
+                on_raw=frame.update,
             )
-            point = {
-                "method": None,
-                "k1": k1,
-                "flag": self.flag_name,
-                "beam_image": image,
-                "beam_fit": fit_result,
-                "beam_extent": self.flag_image_extent,
-                "show_roi_overlay": True,
-                "size_pv": size_pv,
-                "background_status": self.background_status,
-            }
-            if fit_result.valid:
+            point["k1"] = k1
+            error = scan_sample_error(
+                point, check_image_quality=check_image_quality, format_status=format_status,
+            )
+            if error is None:
                 break
             self.trigger.emit(point)
-            detail = f": {fit_result.message}" if fit_result.message else ""
-            if not adaptive or retry >= self.adaptive_config.max_retries:
-                if adaptive:
-                    self._emit_adaptive_status(
-                        f"Rejected K₁ = {k1:g} m⁻²: invalid image fit",
-                        k1=k1,
-                    )
-                    return None
-                raise RuntimeError(
-                    f"Flag image fit failed for {self.flag_name} "
-                    f"({format_status(fit_result.status)}){detail}."
+            if not adaptive:
+                raise RuntimeError(error)
+            if retry >= self.adaptive_config.max_retries:
+                self._emit_adaptive_status(
+                    f"Rejected K₁ = {k1:g} m⁻² · {error}", k1=k1,
                 )
+                return None
             retry += 1
             self._emit_adaptive_status(
                 f"Retrying K₁ = {k1:g} m⁻² "
                 f"({retry}/{self.adaptive_config.max_retries})",
                 k1=k1,
+                retry_reason=error,
             )
             if self.sample_interval > 0 and not self._sleep_or_stop(self.sample_interval):
                 return None
@@ -390,9 +403,12 @@ def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, 
             return None
         if read_charge_samples is not None:
             point.update(read_charge_samples())
-        sigx = float(fit_result.sigx_mm)
-        sigy = float(fit_result.sigy_mm)
-        if self.scan_strategy == "adaptive_quality" or getattr(self, "require_point_quality", False):
+        fit_result = point["beam_fit"]
+        if published:
+            sigx, sigy = point["size_pv"]
+        else:
+            sigx, sigy = float(fit_result.sigx_mm), float(fit_result.sigy_mm)
+        if check_image_quality:
             x_quality = quality(fit_result.x_projection)
             y_quality = quality(fit_result.y_projection)
         else:
@@ -432,7 +448,8 @@ def acquire_scan_point(self, k1, *, adaptive=False, read_image_fit, read_sizes, 
 
     if not sigx_values:
         return None
-    result = PointAcquisitionResult(float(k1), tuple(frame_results), self.beam_width_method, ict1_window_id)
+    method = "Published size" if published else self.beam_width_method
+    result = PointAcquisitionResult(float(k1), tuple(frame_results), method, ict1_window_id)
     if not hasattr(self, "point_results"):
         self.point_results = []
     self.point_results.append(result.to_dict())

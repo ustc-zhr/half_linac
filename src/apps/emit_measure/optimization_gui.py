@@ -1196,8 +1196,8 @@ class OptimizationDialog(QDialog):
         self.context_label.setText(f'Measurement: {quad} → {screen} · {strategy} · Normalized projected emittance')
         self.energy.setText(self.host.lineEdit_2.text())
         self.measurement_note.setText(
-            f'{self.host._beam_width_method()} · '
-            'Main-window scan mode, settings, energy, ROI and background frozen at start. '
+            f'Local fit · {self.host._beam_width_method()} · '
+            'Main-window scan mode, sampling, energy, ROI and background frozen at start. '
             'Select solenoids upstream of the scan quadrupole.')
 
     def style_plot(self):

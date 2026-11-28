@@ -448,6 +448,7 @@ class DialogTests(unittest.TestCase):
         host = self.host
         ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')
         host.app_context, host.machine_profile, host.machine_type = ctx, ctx.profile, 'real'
+        host.beam_size_source_combo.setCurrentIndex(host.beam_size_source_combo.findData('published_size'))
         for preset_id in ('emit_ql09_prf03', 'emit_qt02_prf07', 'emit_qt23_prf12'):
             with self.subTest(preset=preset_id):
                 preset = host._find_emit_preset(preset_id)
@@ -466,6 +467,9 @@ class DialogTests(unittest.TestCase):
                     paras = host.optimization_parameters()
                 self.assertEqual((paras.quad_name, paras.flag_name), (preset.quad, preset.flag))
                 self.assertEqual(paras.scan_strategy, 'adaptive_quality')
+                self.assertEqual(host._beam_size_source(), 'published_size')
+                self.assertEqual(paras.beam_size_source, 'local_fit')
+                self.assertEqual(paras.scan_metadata['beam_size_source'], 'local_fit')
                 self.assertEqual(paras.EnergyMeV, 123.45)
                 self.assertEqual(paras.samples, 4)
                 self.assertEqual(paras.model_line, preset.model_line)

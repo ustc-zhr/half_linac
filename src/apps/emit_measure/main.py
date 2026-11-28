@@ -113,6 +113,12 @@ from half_linac.src.apps.emit_measure.profile_runtime import effective_k1_scan_l
 from half_linac.src.apps.emit_measure.multi_screen_workspace import MultiScreenWorkspace
 from half_linac.src.apps.emit_measure.sample_selection import configure_sample_selection
 from half_linac.src.apps.emit_measure.matching_workspace import MatchingWorkspace
+from half_linac.src.apps.emit_measure.measurement_service import (
+    LOCAL_FIT,
+    PUBLISHED_SIZE,
+    read_scan_sample,
+    scan_sample_error,
+)
 
 nest_dict    = lambda: defaultdict(nest_dict)
 
@@ -121,6 +127,7 @@ SCAN_RESULTS_FILENAME = "scanResults.txt"
 TWISS_RESULTS_FILENAME = "twissResults.jsonl"
 APP_DIR = Path(__file__).resolve().parent
 SCAN_DATA_SCHEMA_VERSION = "emit_scan_v2"
+BEAM_SIZE_SOURCE_LABELS = {LOCAL_FIT: "Local fit", PUBLISHED_SIZE: "Published size"}
 SCAN_POINT_COLUMNS = ("Use", "K₁ (m⁻²)", "σₓ (mm)", "σᵧ (mm)")
 TWISS_TRANSPORT_TOOLTIP = (
     "Calculate the complete Elegant Twiss profile using the measured Twiss as an "
@@ -213,17 +220,18 @@ def _read_flag_image_fit(*args, **kwargs):
     return read_flag_image_fit(*args, get=epics.caget, **kwargs)
 
 
-def _read_optional_scalar_pv(pv_name):
+def _read_optional_scalar_pv(pv_name, *, use_monitor=True):
     if not pv_name:
         return None
     try:
-        return _finite_float_or_none(epics.caget(pv_name, timeout=0.05))
+        return _finite_float_or_none(epics.caget(pv_name, timeout=0.05, use_monitor=use_monitor))
     except Exception:
         return None
 
 
-def _read_optional_size_pvs(sigx_pv, sigy_pv):
-    values = (_read_optional_scalar_pv(sigx_pv), _read_optional_scalar_pv(sigy_pv))
+def _read_optional_size_pvs(sigx_pv, sigy_pv, *, use_monitor=True):
+    values = (_read_optional_scalar_pv(sigx_pv, use_monitor=use_monitor),
+              _read_optional_scalar_pv(sigy_pv, use_monitor=use_monitor))
     return tuple(value if value is not None and value > 0 else None for value in values)
 
 
@@ -1441,7 +1449,7 @@ class myWindow(QWidget,Ui_Form):
             "Robust Projection RMS", "Robust RMS moments"
         )
         self.beam_width_method_combo.setToolTip(
-            "Beam width used for preview and quad scans. Projection RMS uses intensity-weighted "
+            "Width method for the local fit. Projection RMS uses intensity-weighted "
             "second moments and is sensitive to background and ROI clipping. Robust Projection "
             "RMS replaces only narrow positive projection spikes before calculating the moments. "
             "Changing this does not reprocess archived beam widths."
@@ -1499,8 +1507,8 @@ class myWindow(QWidget,Ui_Form):
         self.beam_fit_sigy_label = QLabel("--", card)
         self.beam_fit_status_label = QLabel("No image", card)
         published_size_tooltip = (
-            "Optional cross-check values read from the configured σₓ/σᵧ channels. "
-            "They are not used for scan points or emittance calculations."
+            "Beam sizes from the configured σₓ/σᵧ channels in mm. "
+            "Choose Published size under Size source to use them for the quad scan."
         )
         self.beam_size_pv_source_label = QLabel("Published size", card)
         self.beam_size_pv_sigx_label = QLabel("--", card)
@@ -1778,7 +1786,7 @@ class myWindow(QWidget,Ui_Form):
         self._configure_tooltips()
 
     def _configure_tooltips(self):
-        self.pushButton.setToolTip("Start a new emittance scan after validating the PRF image and write access.")
+        self.pushButton.setToolTip("Start a new emittance scan after checking the selected size source and write access.")
         self.pushButton_2.setToolTip("Recalculate emittance from the active scan points.")
         self.pushButton_3.setToolTip(
             "Clear plots, result fields, and the current scan point table. Saved archives are not deleted."
@@ -1903,6 +1911,19 @@ class myWindow(QWidget,Ui_Form):
         self.sample_interval_edit.setText("0.5")
         form.addWidget(self.sample_interval_label, 6, 0)
         form.addWidget(self.sample_interval_edit, 6, 1)
+        source_label = QLabel("Size source", self.widget_4)
+        source_label.setProperty("role", "field")
+        self.beam_size_source_combo = QComboBox(self.widget_4)
+        for source, label in BEAM_SIZE_SOURCE_LABELS.items():
+            self.beam_size_source_combo.addItem(label, source)
+        self.beam_size_source_combo.setToolTip(
+            "Beam sizes used for the quad scan and emittance calculation. "
+            "Published size requires valid σₓ and σᵧ readings. "
+            "Adaptive Quality also checks the local image fit."
+        )
+        self.beam_size_source_combo.currentIndexChanged.connect(self._beam_size_source_changed)
+        form.addWidget(source_label, 6, 2)
+        form.addWidget(self.beam_size_source_combo, 6, 3)
         self.k1_range_mode_label = QLabel("", self.widget_4)
         self.k1_range_mode_label.setToolTip(
             "Adaptive bounds inherit the same K₁ unit and range mode. "
@@ -2547,14 +2568,25 @@ class myWindow(QWidget,Ui_Form):
             self.beam_image_title_label.setText(f"Current PRF Image{suffix}")
         self._draw_placeholder(self.beam_image_widget, "x (mm)", "y (mm)", note)
         if hasattr(self, "beam_fit_flag_label"):
-            self.beam_fit_flag_label.setText("Local fit")
+            self._set_beam_size_source_labels(self._beam_size_source())
             self.beam_fit_summary_label.setText(f"Width: {self._beam_width_method()} · No image")
             self.beam_fit_sigx_label.setText("--")
             self.beam_fit_sigy_label.setText("--")
             self.beam_fit_status_label.setText("No image")
-            self.beam_size_pv_sigx_label.setText("--")
-            self.beam_size_pv_sigy_label.setText("--")
-            self.beam_size_pv_status_label.setText("Unavailable")
+            self._display_published_size((None, None))
+
+    def _display_beam_sample(self, sample):
+        if sample["beam_fit"] is None:
+            self._draw_beam_image_placeholder("PRF image unavailable")
+            self._display_published_size(sample["size_pv"])
+        else:
+            self._display_beam_image_fit(
+                sample["flag"], sample["beam_image"], sample["beam_fit"],
+                k1=sample.get("k1"), extent=sample["beam_extent"],
+                show_roi_overlay=sample["show_roi_overlay"],
+                size_pv=sample["size_pv"], background_status=sample["background_status"],
+            )
+        self._set_beam_size_source_labels(sample["beam_size_source"])
 
     def _redraw_latest_beam_image(self, *args):
         del args
@@ -2656,23 +2688,13 @@ class myWindow(QWidget,Ui_Form):
         self.beam_fit_summary_label.setText(
             f"Width: {fit_result.method} · {display_fit_status}"
         )
-        self.beam_fit_flag_label.setText("Local fit")
         self.beam_fit_sigx_label.setText(f"{fit_result.sigx_mm:.3f}" if fit_result.sigx_mm is not None else "--")
         self.beam_fit_sigy_label.setText(f"{fit_result.sigy_mm:.3f}" if fit_result.sigy_mm is not None else "--")
         if fit_result.valid:
             self.beam_fit_status_label.setText("Valid")
         else:
             self.beam_fit_status_label.setText(display_fit_status)
-        size_sigx, size_sigy = size_pv
-        self.beam_size_pv_sigx_label.setText(
-            f"{size_sigx:.3f}" if size_sigx is not None else "--"
-        )
-        self.beam_size_pv_sigy_label.setText(
-            f"{size_sigy:.3f}" if size_sigy is not None else "--"
-        )
-        self.beam_size_pv_status_label.setText(
-            "Cross-check" if size_sigx is not None or size_sigy is not None else "Unavailable"
-        )
+        self._display_published_size(size_pv)
         self.beam_background_status_label.setText(background_status)
         if show_roi_overlay and self.roi_control is not None:
             self.roi_control.attach_axes(
@@ -2681,6 +2703,12 @@ class myWindow(QWidget,Ui_Form):
             )
             self.beam_image_widget.canvas.draw_idle()
         self._refresh_status()
+
+    def _display_published_size(self, size_pv):
+        for label, value in zip((self.beam_size_pv_sigx_label, self.beam_size_pv_sigy_label), size_pv):
+            label.setText(f"{value:.3f}" if value is not None else "--")
+        valid_count = sum(value is not None for value in size_pv)
+        self.beam_size_pv_status_label.setText(("Unavailable", "Incomplete", "Available")[valid_count])
 
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
@@ -2873,6 +2901,9 @@ class myWindow(QWidget,Ui_Form):
             f"{active}/{total} active samples · {len(k1_values)} unique K₁ · "
             f"range {k1_values[0]:.6g} to {k1_values[-1]:.6g} m⁻²"
         ]
+        source = self._current_quad_scan_metadata().get("beam_size_source", LOCAL_FIT)
+        if isinstance(source, str) and source in BEAM_SIZE_SOURCE_LABELS:
+            lines.append(f"Size source · {BEAM_SIZE_SOURCE_LABELS[source]}")
         summary = self.latest_emit_fit_summary or {}
         for label, plane_key, value_index in (
             ("X", "xplane", 0),
@@ -3078,7 +3109,7 @@ class myWindow(QWidget,Ui_Form):
     def _refresh_model_controls(self):
         if self._model_backend_available:
             self.pushButton.setEnabled(True)
-            self.pushButton.setToolTip("Start a new emittance scan after validating the PRF image and write access.")
+            self.pushButton.setToolTip("Start a new emittance scan after checking the selected size source and write access.")
             self.pushButton_2.setEnabled(True)
             self.pushButton_2.setToolTip("Recalculate emittance from the active scan points.")
             self.pushButton_4.setEnabled(True)
@@ -3267,7 +3298,7 @@ class myWindow(QWidget,Ui_Form):
             "quad": paras.quad_name,
             "flag": paras.flag_name,
             "model_line": paras.model_line,
-            "beam_size_source": "local_fit",
+            "beam_size_source": getattr(paras, "beam_size_source", LOCAL_FIT),
             "beam_width_method": getattr(paras, "beam_width_method", "Gaussian fit"),
             "fit_vmin": getattr(paras, "fit_vmin", None),
             "flag_image_pv": paras.flagImagePV,
@@ -3349,18 +3380,28 @@ class myWindow(QWidget,Ui_Form):
             )
 
         mismatches = []
-        file_method = metadata.get("beam_width_method", "Gaussian fit")
-        current_method = expected.get("beam_width_method", "Gaussian fit")
-        if file_method != current_method:
+        file_source = metadata.get("beam_size_source", LOCAL_FIT)
+        current_source = expected.get("beam_size_source", LOCAL_FIT)
+        if not isinstance(file_source, str) or file_source not in BEAM_SIZE_SOURCE_LABELS:
+            raise RuntimeError(f"{source_label} has unsupported size source {file_source!r}.")
+        if file_source != current_source:
             mismatches.append(
-                f"beam width method: file={file_method!r}, current={current_method!r}; "
-                "saved widths cannot be converted without the original images"
+                f"size source file={BEAM_SIZE_SOURCE_LABELS[file_source]!r}, "
+                f"current={BEAM_SIZE_SOURCE_LABELS.get(current_source, current_source)!r}"
             )
-        if metadata.get("fit_vmin") != expected.get("fit_vmin"):
-            mismatches.append(
-                f"fit vmin: file={metadata.get('fit_vmin')!r}, "
-                f"current={expected.get('fit_vmin')!r}; saved widths cannot be converted"
-            )
+        if file_source == LOCAL_FIT or metadata.get("scan_strategy") == "adaptive_quality":
+            file_method = metadata.get("beam_width_method", "Gaussian fit")
+            current_method = expected.get("beam_width_method", "Gaussian fit")
+            if file_method != current_method:
+                mismatches.append(
+                    f"beam width method: file={file_method!r}, current={current_method!r}; "
+                    "saved widths cannot be converted without the original images"
+                )
+            if metadata.get("fit_vmin") != expected.get("fit_vmin"):
+                mismatches.append(
+                    f"fit vmin: file={metadata.get('fit_vmin')!r}, "
+                    f"current={expected.get('fit_vmin')!r}; saved widths cannot be converted"
+                )
         for key in ("machine_id", "backend", "quad", "flag"):
             if metadata.get(key) != expected.get(key):
                 mismatches.append(f"{key}: file={metadata.get(key)!r}, current={expected.get(key)!r}")
@@ -3383,6 +3424,10 @@ class myWindow(QWidget,Ui_Form):
     def _apply_scan_metadata_to_controls(self, metadata, source_label):
         if metadata is None:
             raise RuntimeError(f"{source_label} has no scan metadata.")
+        size_source = metadata.get("beam_size_source", LOCAL_FIT)
+        source_index = self.beam_size_source_combo.findData(size_source)
+        if source_index < 0:
+            raise RuntimeError(f"{source_label} has unsupported size source {size_source!r}.")
         width_method = metadata.get("beam_width_method", "Gaussian fit")
         fit_vmin = metadata.get("fit_vmin")
         if fit_vmin is not None and (not isinstance(fit_vmin, (int, float)) or not math.isfinite(fit_vmin)):
@@ -3488,6 +3533,7 @@ class myWindow(QWidget,Ui_Form):
 
         self._applying_emit_preset = True
         try:
+            self.beam_size_source_combo.setCurrentIndex(source_index)
             blocked = self.beam_width_method_combo.blockSignals(True)
             self.beam_width_method_combo.setCurrentIndex(self.beam_width_method_combo.findData(width_method))
             self.beam_width_method_combo.blockSignals(blocked)
@@ -3781,6 +3827,9 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_5.setEnabled(running and not stopping)
         self.pushButton_5.setText("Stopping..." if stopping else "Stop")
         self.pushButton_3.setEnabled(not running)
+        can_select_source = not running and not getattr(self, "_optimization_locked", False)
+        self.load_points_button.setEnabled(can_select_source)
+        self.beam_size_source_combo.setEnabled(can_select_source)
         self.beam_width_method_combo.setEnabled(not running)
         self.fit_intensity_checkbox.setEnabled(not running)
         self.beam_image_background_checkbox.setEnabled(not running)
@@ -4782,6 +4831,20 @@ class myWindow(QWidget,Ui_Form):
             self._schedule_beam_image_refresh()
 
 
+    def _beam_size_source(self):
+        return self.beam_size_source_combo.currentData() or LOCAL_FIT
+
+    def _beam_size_source_changed(self, _index):
+        self._set_beam_size_source_labels(self._beam_size_source())
+
+    def _set_beam_size_source_labels(self, source):
+        for key, label in (
+            (LOCAL_FIT, self.beam_fit_flag_label),
+            (PUBLISHED_SIZE, self.beam_size_pv_source_label),
+        ):
+            suffix = " · Scan input" if source == key else ""
+            label.setText(BEAM_SIZE_SOURCE_LABELS[key] + suffix)
+
     def _beam_width_method(self):
         return self.beam_width_method_combo.currentData() or "Gaussian fit"
 
@@ -4810,6 +4873,7 @@ class myWindow(QWidget,Ui_Form):
         para = self.get_setting(show_warning=False)
         if para is None:
             raise ValueError("Invalid main-window measurement settings; check the scan range, sampling and model path.")
+        para.beam_size_source = LOCAL_FIT
         if not math.isfinite(para.EnergyMeV) or para.EnergyMeV <= 0:
             raise ValueError("Measurement energy must be finite and positive.")
         for variable in variables:
@@ -4836,6 +4900,7 @@ class myWindow(QWidget,Ui_Form):
     def get_setting(self, *, show_warning=True):
         try:
             para = structData()
+            para.beam_size_source = self._beam_size_source()
             para.beam_width_method = self._beam_width_method()
             para.fit_vmin = self.beam_image_vmin if self.fit_intensity_checkbox.isChecked() else None
             # get scan parameters
@@ -4975,41 +5040,19 @@ class myWindow(QWidget,Ui_Form):
             paras = self.get_setting(show_warning=show_warning)
             if paras is None:
                 return False
-        try:
-            image, fit_result = _read_flag_image_fit(
-                paras.flagImagePV,
-                paras.flag_pixel_shape,
-                paras.flag_image_extent,
-                background=paras.background_image,
-                roi=getattr(paras, "roi", None),
-                flip_y=getattr(paras, "flag_image_flip_y", False),
-                full_frame_for_roi=True,
-                method=getattr(paras, "beam_width_method", "Gaussian fit"),
-                fit_vmin=getattr(paras, "fit_vmin", None),
-            )
-        except RuntimeError as exc:
-            self._draw_beam_image_placeholder("PRF image unavailable")
-            if show_warning:
-                self._warn(str(exc))
-            return False
-
-        self._display_beam_image_fit(
-            paras.flag_name,
-            image,
-            fit_result,
-            extent=paras.flag_image_extent,
-            size_pv=_read_optional_size_pvs(paras.flagSigxPV, paras.flagSigyPV),
-            background_status=paras.background_status,
+        read_sizes = partial(
+            _read_optional_size_pvs,
+            use_monitor=getattr(paras, "beam_size_source", LOCAL_FIT) != PUBLISHED_SIZE,
         )
-        if not fit_result.valid:
-            if show_warning:
-                detail = f": {fit_result.message}" if fit_result.message else ""
-                self._warn(
-                    "Current PRF image fit is not valid "
-                    f"({_display_fit_status(fit_result.status)}){detail}."
-                )
-            return False
-        return True
+        sample = read_scan_sample(paras, read_image_fit=_read_flag_image_fit, read_sizes=read_sizes)
+        self._display_beam_sample(sample)
+        error = scan_sample_error(
+            sample, check_image_quality=paras.scan_strategy == "adaptive_quality",
+            format_status=_display_fit_status,
+        )
+        if error is not None and show_warning:
+            self._warn(error)
+        return error is None
 
     def _auto_refresh_beam_image_fit(self):
         if self.tabWidget.currentWidget() is not self.X_Plane:
@@ -5790,17 +5833,8 @@ class myWindow(QWidget,Ui_Form):
             )
             self.scan_strategy_status_label.setToolTip(adaptive_status)
 
-        if "beam_image" in dict and "beam_fit" in dict:
-            self._display_beam_image_fit(
-                dict.get("flag", self.comboBox_4.currentText()),
-                dict["beam_image"],
-                dict["beam_fit"],
-                k1=dict.get("k1"),
-                extent=dict.get("beam_extent"),
-                show_roi_overlay=dict.get("show_roi_overlay", True),
-                size_pv=dict.get("size_pv", (None, None)),
-                background_status=dict.get("background_status", "Off"),
-            )
+        if "beam_fit" in dict:
+            self._display_beam_sample(dict)
 
         if dict["method"] == None:
             if "sigx" not in dict or "sigy" not in dict:
@@ -6149,6 +6183,7 @@ class scanThread(QThread):
         self.flagImagePV = paras.flagImagePV
         self.flagSigxPV = getattr(paras, "flagSigxPV", None)
         self.flagSigyPV = getattr(paras, "flagSigyPV", None)
+        self.beam_size_source = getattr(paras, "beam_size_source", LOCAL_FIT)
         self.flag_pixel_shape = paras.flag_pixel_shape
         self.flag_image_extent = paras.flag_image_extent
         self.flag_image_flip_y = getattr(paras, "flag_image_flip_y", False)
@@ -6286,9 +6321,12 @@ class scanThread(QThread):
 
     def _acquire_k1(self, k1, *, adaptive=False):
         from half_linac.src.apps.emit_measure.measurement_service import acquire_scan_point
+        read_sizes = partial(
+            _read_optional_size_pvs, use_monitor=self.beam_size_source != PUBLISHED_SIZE,
+        )
         return acquire_scan_point(
             self, k1, adaptive=adaptive, read_image_fit=_read_flag_image_fit,
-            read_sizes=_read_optional_size_pvs, quality=_projection_measurement_quality,
+            read_sizes=read_sizes, quality=_projection_measurement_quality,
             format_status=_display_fit_status,
             read_charge_samples=self._read_charge_samples if self.charge_monitors else None,
             before_images=self.before_point_images)

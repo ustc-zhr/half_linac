@@ -3,6 +3,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -102,6 +103,87 @@ class WidthMethodTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'cannot be converted'):
             w._validate_scan_metadata(metadata, expected, 'legacy archive')
 
+    def test_published_sizes_feed_scan_even_when_the_image_is_unavailable(self):
+        w = self.window
+        self.assertEqual(w._beam_size_source(), 'local_fit')
+        w.beam_size_source_combo.setCurrentIndex(w.beam_size_source_combo.findData('published_size'))
+        paras = w.get_setting()
+        paras.recal = False
+        paras.samples = 1
+        paras.settle_time = paras.sample_interval = 0
+        paras.scan_strategy = 'grid'
+        paras.flagSigxPV, paras.flagSigyPV = 'TEST:SIGX', 'TEST:SIGY'
+        values = {paras.flagSigxPV: 1.25, paras.flagSigyPV: 2.5,
+                  paras.flagImagePV: self.image(paras).ravel()}
+        self.pv.side_effect = lambda pv, **kwargs: values.get(pv)
+        self.assertTrue(w.refresh_current_beam_image_fit(paras))
+        self.assertNotAlmostEqual(w.latest_beam_fit_result.sigx_mm, 1.25)
+        self.assertIn('Scan input', w.beam_size_pv_source_label.text())
+
+        del values[paras.flagImagePV]
+        self.assertTrue(w.refresh_current_beam_image_fit(paras))
+        self.assertEqual(w.beam_size_pv_sigx_label.text(), '1.250')
+        worker = main.scanThread(paras)
+        worker.k1l, worker.sigxl, worker.sigyl = [], [], []
+        observation = worker._acquire_k1(0)
+        self.assertEqual((observation.sigx, observation.sigy), (1.25, 2.5))
+        self.assertEqual((worker.sigxl, worker.sigyl), ([1.25], [2.5]))
+        self.pv.assert_any_call(paras.flagSigxPV, timeout=0.05, use_monitor=False)
+
+    def test_invalid_published_size_does_not_fall_back_to_local_fit(self):
+        w = self.window
+        w.beam_size_source_combo.setCurrentIndex(w.beam_size_source_combo.findData('published_size'))
+        paras = w.get_setting()
+        paras.recal = False
+        paras.samples = 1
+        paras.settle_time = paras.sample_interval = 0
+        paras.scan_strategy = 'grid'
+        paras.flagSigxPV, paras.flagSigyPV = 'TEST:SIGX', 'TEST:SIGY'
+        values = {paras.flagSigxPV: 1.25, paras.flagSigyPV: np.nan,
+                  paras.flagImagePV: self.image(paras).ravel()}
+        self.pv.side_effect = lambda pv, **kwargs: values.get(pv)
+        self.assertFalse(w.refresh_current_beam_image_fit(paras, show_warning=False))
+        self.assertTrue(w.latest_beam_fit_result.valid)
+        self.assertEqual(w.beam_size_pv_status_label.text(), 'Incomplete')
+        worker = main.scanThread(paras)
+        worker.k1l, worker.sigxl, worker.sigyl = [], [], []
+        with self.assertRaisesRegex(RuntimeError, 'published size unavailable or invalid'):
+            worker._acquire_k1(0)
+        self.assertEqual(worker.k1l, [])
+
+    def test_adaptive_scan_retries_an_invalid_published_size(self):
+        paras = self.window.get_setting()
+        paras.beam_size_source = 'published_size'
+        paras.recal = False
+        paras.samples = 1
+        paras.settle_time = paras.sample_interval = 0
+        paras.scan_strategy = 'adaptive'
+        paras.adaptive_config = SimpleNamespace(max_retries=1)
+        worker = main.scanThread(paras)
+        worker.k1l, worker.sigxl, worker.sigyl = [], [], []
+        with patch.object(main, '_read_optional_size_pvs', side_effect=[(None, 2.5), (1.25, 2.5)]) as read:
+            observation = worker._acquire_k1(0, adaptive=True)
+        self.assertEqual(read.call_count, 2)
+        self.assertEqual((observation.sigx, observation.sigy), (1.25, 2.5))
+        self.assertEqual(worker.k1l, [0])
+
+    def test_archive_restores_size_source_and_legacy_archives_use_local_fit(self):
+        w = self.window
+        paras = w.get_setting()
+        paras.scan_strategy = 'grid'
+        paras.beam_size_source = 'published_size'
+        paras.model_snapshot_metadata = {'fields': []}
+        metadata = w._scan_metadata_from_paras(paras)
+        self.assertEqual(metadata['beam_size_source'], 'published_size')
+        w._apply_scan_metadata_to_controls(metadata, 'test archive')
+        self.assertEqual(w.get_setting().beam_size_source, 'published_size')
+        w._validate_scan_metadata(metadata, dict(metadata, beam_width_method='RMS moments'), 'test archive')
+        legacy = {key: value for key, value in metadata.items() if key != 'beam_size_source'}
+        with self.assertRaisesRegex(RuntimeError, 'size source'):
+            w._validate_scan_metadata(legacy, metadata, 'legacy archive')
+        w._apply_scan_metadata_to_controls(legacy, 'legacy archive')
+        self.assertEqual(w.get_setting().beam_size_source, 'local_fit')
+
     def test_robust_rms_is_available_for_quad_scan(self):
         w = self.window
         index = w.beam_width_method_combo.findData('Robust RMS moments')
@@ -190,10 +272,12 @@ class WidthMethodTests(unittest.TestCase):
         w.scan_mode = 'scan'
         w._update_scan_run_controls()
         self.assertFalse(w.beam_width_method_combo.isEnabled())
+        self.assertFalse(w.beam_size_source_combo.isEnabled())
         w.scan = None
         w.scan_mode = None
         w._update_scan_run_controls()
         self.assertTrue(w.beam_width_method_combo.isEnabled())
+        self.assertTrue(w.beam_size_source_combo.isEnabled())
 
     def test_quad_scan_diagnostics_buttons_show_key_existing_information(self):
         w = self.window
