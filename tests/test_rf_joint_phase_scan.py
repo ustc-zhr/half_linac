@@ -13,6 +13,7 @@ from half_linac.src.apps.rf_phase_scan.joint_phase_scan import (
     resolve_joint_phase_scan,
 )
 from half_linac.src.apps.rf_phase_scan.transmission_recovery import (
+    TransmissionRecoveryCallbacks,
     TransmissionRecoveryRunner,
     discover_recovery_stages,
     settings_from_config,
@@ -263,6 +264,74 @@ def test_joint_scan_restores_initial_phase_without_a_candidate(joint_setup, tmp_
         assert record["initial_phase_acceleration"] == "decelerating"
 
 
+@pytest.mark.parametrize(
+    "scenario, continuation_phase",
+    [("keep_initial", 170.0), ("use_sum_peak", 20.0), ("stop", None),
+     ("peak_lost", None), ("decelerating_peak", None)],
+)
+def test_operator_decides_whether_serial_scan_continues(joint_setup, tmp_path, scenario, continuation_phase):
+    first, upstream = make_runner(joint_setup, tmp_path)
+    second, downstream = make_runner(joint_setup, tmp_path, station_index=1)
+    upstream.slope = lambda _phase: 2800.0
+    if scenario == "decelerating_peak":
+        original_slope = downstream.slope
+        upstream.slope = original_slope
+        upstream.phase = 20.0
+        upstream.signal = lambda phase: 50000 if abs(phase - 20) <= 60 else 1000
+    initial_phase = upstream.phase
+    readers = {
+        pv: beam.read_scan for beam in (upstream, downstream)
+        for pv in (beam.stage.phase_pv, beam.stage.phase_readback_pv, beam.stage.signal_pv)
+    }
+    writers = {beam.stage.phase_pv: beam.write_scan for beam in (upstream, downstream)}
+
+    def decide(request):
+        assert upstream.phase == initial_phase and upstream.current == 0.14
+        assert not downstream.phase_commands
+        assert json.loads((tmp_path / "run.json").read_text())["status"] == "awaiting_decision"
+        assert request["initial_phase_deg"] == initial_phase
+        assert request["peak_phase_deg"] == 20.0
+        assert request["can_keep"]
+        assert request["can_apply_peak"] == (scenario != "decelerating_peak")
+        if scenario == "decelerating_peak":
+            assert request["peak_acceleration"] == "decelerating"
+        if scenario == "peak_lost":
+            upstream.signal = lambda phase: 35000 if phase == 20.0 else 50000
+        return "use_sum_peak" if scenario in {"peak_lost", "decelerating_peak"} else scenario
+
+    clients = iter((upstream, downstream))
+    runner = TransmissionRecoveryRunner(
+        context=first.context, candidates=first.candidates, stages=first.stages + second.stages,
+        settings=first.settings, directory=tmp_path,
+        callbacks=TransmissionRecoveryCallbacks(decide=decide),
+        read=lambda pv: readers[pv](pv), write=lambda pv, value, **options: writers[pv](pv, value, **options),
+        response_routes={**first.response_routes, **second.response_routes},
+        response_client_factory=lambda: next(clients), lock_factory=lambda *_: Lock(),
+        sleeper=lambda _: None,
+    )
+    result = runner.run()
+    first_record, second_record = result["items"]
+    assert first_record["acceleration_analysis"]["status"] == "undetermined"
+    decision = first_record["operator_decision"]
+    if continuation_phase is not None:
+        assert result["status"] == "completed", result["error"]
+        assert first_record["applied_phase_deg"] == upstream.phase == continuation_phase
+        assert second_record["status"] == "applied"
+        assert decision["action"] == scenario
+        assert decision["sum_recheck"]["median_sum"] == upstream.signal(continuation_phase)
+    else:
+        assert result["status"] == "undetermined", result["error"]
+        assert first_record["status"] == "undetermined"
+        assert upstream.phase == initial_phase
+        assert second_record["status"] == "not_run"
+        assert not downstream.phase_commands
+        if scenario == "peak_lost":
+            assert "rechecked SUM did not reproduce" in result["error"]
+            assert decision["sum_recheck"]["median_sum"] == 35000
+        else:
+            assert decision == {"action": "stop"}
+
+
 @pytest.mark.parametrize("interrupt", ["stop", "power", "external_phase"])
 def test_joint_scan_restores_corrector_on_interruption(joint_setup, tmp_path, interrupt):
     runner, beam = make_runner(joint_setup, tmp_path)
@@ -335,6 +404,7 @@ def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeyp
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     from PyQt5.QtCore import QTimer
     from PyQt5.QtWidgets import QApplication, QDoubleSpinBox, QScrollArea
+    from half_linac.src.apps.rf_phase_scan.main import PALETTES, build_style
     from half_linac.src.apps.rf_phase_scan.transmission_recovery_ui import TransmissionRecoveryPage
 
     app = QApplication.instance() or QApplication([])
@@ -361,12 +431,27 @@ def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeyp
     def cancel_confirmation():
         dialog = app.activeModalWidget()
         scroll = dialog.findChild(QScrollArea)
-        dialog_details.append(len(scroll.findChildren(QDoubleSpinBox)) if scroll else 0)
+        if scroll is not None:
+            settle = next(spin for spin in dialog.findChildren(QDoubleSpinBox) if spin.suffix() == " s")
+            scrollbar = scroll.verticalScrollBar().grab().toImage()
+            dialog_details.append((
+                len(scroll.findChildren(QDoubleSpinBox)),
+                scroll.viewport().grab().toImage().pixelColor(3, 2).name(),
+                scroll.widget().grab().toImage().pixelColor(3, 2).name(),
+                scrollbar.pixelColor(scrollbar.width() // 2, 7 * scrollbar.height() // 8).name(),
+                scroll.geometry().bottom() < settle.geometry().top(),
+                scroll.horizontalScrollBar().isVisible(),
+            ))
         dialog.reject()
 
-    QTimer.singleShot(0, cancel_confirmation)
-    assert page._confirm_joint_scan(stages, routes) is None
-    assert dialog_details == [19]
+    for palette in PALETTES.values():
+        page.setStyleSheet(build_style(palette))
+        QTimer.singleShot(0, cancel_confirmation)
+        assert page._confirm_joint_scan(stages, routes) is None
+    assert dialog_details == [
+        (19, palette["window"], palette["window"], palette["input"], True, False)
+        for palette in PALETTES.values()
+    ]
     page.use_acceleration.setChecked(False)
     assert page._selected_rows() == list(range(len(stages)))
 
@@ -382,6 +467,65 @@ def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeyp
     assert labels == ["Accelerating", "Decelerating", "Undetermined", "Applied phase"]
     page.close()
     app.processEvents()
+
+
+@pytest.mark.parametrize("interaction", ["use_sum_peak", "escape", "stop_worker"])
+def test_gui_sends_operator_decision_to_waiting_worker(joint_setup, tmp_path, monkeypatch, interaction):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtTest import QTest
+    from PyQt5.QtWidgets import QApplication
+    from half_linac.src.apps.rf_phase_scan.transmission_recovery_ui import (
+        TransmissionRecoveryPage, TransmissionRecoveryThread,
+    )
+
+    app = QApplication.instance() or QApplication([])
+    context, workflow, _, _, _ = joint_setup
+    page = TransmissionRecoveryPage(
+        window=SimpleNamespace(), context=context, workflow=workflow,
+        write_enabled=True, runtime_paths={"runs_dir": tmp_path},
+    )
+    request = dict(
+        rf_element="LLRF02", target_bpm="BPM08", reason="Response intervals overlap.",
+        initial_phase_deg=170.0, initial_sum=50000, initial_acceleration="undetermined",
+        peak_phase_deg=20.0, peak_sum=70000, peak_acceleration="undetermined",
+        minimum_sum=10000, can_keep=True, can_apply_peak=interaction == "use_sum_peak",
+    )
+    worker = TransmissionRecoveryThread(lambda callbacks: SimpleNamespace(
+        run=lambda: {"choice": callbacks.decide(request)}, stop=lambda: None,
+    ))
+    page.worker = worker
+    worker.decision_requested.connect(page._prompt_manual_decision)
+    result = []
+    worker.done.connect(result.append)
+    worker.start()
+    try:
+        for _ in range(100):
+            if page.decision_dialog is not None:
+                break
+            QTest.qWait(5)
+        dialog = page.decision_dialog
+        assert dialog is not None
+        assert dialog.defaultButton().text() == "End Sequence"
+        assert "70000" in dialog.informativeText()
+        peak = next(button for button in dialog.buttons() if button.text().startswith("Apply SUM Peak"))
+        assert peak.isEnabled() == (interaction == "use_sum_peak")
+        if interaction == "use_sum_peak":
+            peak.click()
+        elif interaction == "escape":
+            QTest.keyClick(dialog, Qt.Key_Escape)
+        else:
+            assert page.stop_and_wait(2000)
+        assert worker.wait(2000)
+        app.processEvents()
+        assert result == [{"choice": "use_sum_peak" if interaction == "use_sum_peak" else "stop"}]
+        assert page.decision_dialog is None
+    finally:
+        if worker.isRunning():
+            page.stop_and_wait(2000)
+        page.worker = None
+        page.close()
+        app.processEvents()
 
 
 def test_gui_displays_corrector_response_for_joint_scan_results(joint_setup, tmp_path, monkeypatch):
@@ -403,7 +547,7 @@ def test_gui_displays_corrector_response_for_joint_scan_results(joint_setup, tmp
     monkeypatch.setattr(
         ui, "TransmissionRecoveryThread",
         lambda _factory: SimpleNamespace(
-            item=signal, point=signal, state=signal, done=signal,
+            item=signal, point=signal, state=signal, decision_requested=signal, done=signal,
             start=lambda: None, deleteLater=lambda: None,
         ),
     )
@@ -482,7 +626,8 @@ def test_gui_corrector_step_reaches_runner_and_capture(
 
     def worker_factory(factory):
         launched.append(factory(None))
-        return SimpleNamespace(item=signal, point=signal, state=signal, done=signal, start=lambda: None)
+        return SimpleNamespace(item=signal, point=signal, state=signal, decision_requested=signal,
+                               done=signal, start=lambda: None)
 
     monkeypatch.setattr(ui, "TransmissionRecoveryThread", worker_factory)
 

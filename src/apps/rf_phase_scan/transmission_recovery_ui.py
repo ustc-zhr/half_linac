@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from threading import Event
 from typing import Any
 from uuid import uuid4
 
@@ -18,6 +19,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QScrollBar,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -57,6 +59,7 @@ class TransmissionRecoveryThread(QThread):
     item = pyqtSignal(int, dict)
     point = pyqtSignal(int, dict)
     state = pyqtSignal(str)
+    decision_requested = pyqtSignal(dict)
     done = pyqtSignal(dict)
 
     def __init__(self, runner_factory):
@@ -64,22 +67,38 @@ class TransmissionRecoveryThread(QThread):
         self.runner_factory = runner_factory
         self.runner = None
         self.stop_requested = False
+        self.decision_ready = Event()
+        self.decision = "stop"
 
     def run(self):
         callbacks = TransmissionRecoveryCallbacks(
             item=self.item.emit,
             point=self.point.emit,
             state=self.state.emit,
+            decide=self._request_decision,
         )
         self.runner = self.runner_factory(callbacks)
         if self.stop_requested:
             self.runner.stop()
         self.done.emit(self.runner.run())
 
+    def _request_decision(self, request):
+        self.decision = "stop"
+        self.decision_ready.clear()
+        if not self.stop_requested:
+            self.decision_requested.emit(dict(request))
+            self.decision_ready.wait()
+        return self.decision
+
+    def resolve_decision(self, choice):
+        self.decision = choice
+        self.decision_ready.set()
+
     def stop(self):
         self.stop_requested = True
         if self.runner is not None:
             self.runner.stop()
+        self.decision_ready.set()
 
 
 class TransmissionRecoveryRestoreThread(QThread):
@@ -204,6 +223,7 @@ class TransmissionRecoveryPage(QWidget):
                     self.response_specs[stage.rf_element] = spec
                     self.response_default_steps[stage.rf_element] = route.response.corrector.step
         self.worker = None
+        self.decision_dialog = None
         self.restore_worker = None
         self.check_worker = None
         self.phase_monitors = {}
@@ -496,6 +516,7 @@ class TransmissionRecoveryPage(QWidget):
         description.setWordWrap(True)
         layout.addRow(description)
         station_list = QWidget(dialog)
+        station_list.setObjectName("recoveryScanStations")
         station_layout = QFormLayout(station_list)
         station_layout.setContentsMargins(0, 0, 0, 0)
         controls = {}
@@ -515,12 +536,22 @@ class TransmissionRecoveryPage(QWidget):
                 step,
             )
             controls[stage.rf_element] = step
-        if station_list.sizeHint().height() > 320:
+        station_list.ensurePolished()
+        station_size = station_list.sizeHint()
+        if station_size.height() > 320:
             scroll = QScrollArea(dialog)
+            scroll.setObjectName("recoveryScanScroll")
             scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             scroll.setWidget(station_list)
-            scroll.setMinimumWidth(station_list.sizeHint().width() + scroll.verticalScrollBar().sizeHint().width() + 4)
-            scroll.setFixedHeight(320)
+            scrollbar = QScrollBar(Qt.Vertical)
+            scrollbar.setObjectName("recoveryScanScrollBar")
+            scroll.setVerticalScrollBar(scrollbar)
+            scroll.ensurePolished()
+            scroll.setMinimumWidth(
+                station_size.width() + scrollbar.sizeHint().width() + 2 * scroll.frameWidth()
+            )
+            scroll.setMaximumHeight(320)
             layout.addRow(scroll)
         else:
             layout.addRow(station_list)
@@ -636,10 +667,53 @@ class TransmissionRecoveryPage(QWidget):
         self.worker.item.connect(self._item)
         self.worker.point.connect(self._point)
         self.worker.state.connect(self._state)
+        self.worker.decision_requested.connect(self._prompt_manual_decision)
         self.worker.done.connect(self._done)
         self._set_running(True)
         self.summary.setText("Preparing Transmission Recovery...")
         self.worker.start()
+
+    def _prompt_manual_decision(self, request):
+        worker = self.worker
+        if worker is None or worker.stop_requested:
+            return
+        if self.closing:
+            worker.resolve_decision("stop")
+            return
+        rf, bpm = request["rf_element"], request["target_bpm"]
+        self.summary.setText(f"{rf} · Awaiting operator decision")
+        dialog = QMessageBox(
+            QMessageBox.Warning, f"{rf} · Acceleration Undetermined", request["reason"], parent=self,
+        )
+        dialog.setTextFormat(Qt.PlainText)
+        lines = []
+        for key, label in (("initial", "Initial phase"), ("peak", "SUM peak")):
+            phase = self._number(request[f"{key}_phase_deg"], "°")
+            transmission = self._number(request[f"{key}_sum"], precision=0)
+            acceleration = self.ACCELERATION_LABELS[request[f"{key}_acceleration"]]
+            lines.append(f"{label}  {phase} · {bpm} SUM {transmission} · {acceleration}")
+        lines.append(f"Required SUM  {self._number(request['minimum_sum'], precision=0)}")
+        lines.append("The initial phase has been restored. SUM is rechecked before continuing.")
+        dialog.setInformativeText("\n".join(lines))
+
+        keep = dialog.addButton("Keep Initial and Continue", QMessageBox.ActionRole)
+        keep.setEnabled(request["can_keep"])
+        peak = dialog.addButton("Apply SUM Peak and Continue", QMessageBox.ActionRole)
+        peak.setEnabled(request["can_apply_peak"])
+        end = dialog.addButton("End Sequence", QMessageBox.RejectRole)
+        dialog.setDefaultButton(end)
+        dialog.setEscapeButton(end)
+
+        def finish(_result):
+            self.decision_dialog = None
+            if self.worker is worker and not worker.stop_requested:
+                choice = {keep: "keep_initial", peak: "use_sum_peak"}.get(dialog.clickedButton(), "stop")
+                worker.resolve_decision(choice)
+            dialog.deleteLater()
+
+        dialog.finished.connect(finish)
+        self.decision_dialog = dialog
+        dialog.open()
 
     def stop(self):
         if self.check_worker is not None:
@@ -648,6 +722,8 @@ class TransmissionRecoveryPage(QWidget):
             self.summary.setText("Stopping · restoring LLRF AMP and corrector current…")
         elif self.worker is not None:
             self.worker.stop()
+            if self.decision_dialog is not None:
+                self.decision_dialog.reject()
             self.stop_button.setEnabled(False)
             self.summary.setText(
                 "Stopping · restoring the current LLRF phase..."
@@ -659,6 +735,8 @@ class TransmissionRecoveryPage(QWidget):
             return self.check_worker.wait(timeout_ms)
         if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
+            if self.decision_dialog is not None:
+                self.decision_dialog.reject()
             return self.worker.wait(timeout_ms)
         if self.restore_worker is not None and self.restore_worker.isRunning():
             return self.restore_worker.wait(timeout_ms)
@@ -939,12 +1017,19 @@ class TransmissionRecoveryPage(QWidget):
         if task_index >= len(self.selected_rows):
             return
         row = self.selected_rows[task_index]
+        worker_status = record.get("status", "—")
+        status_label = str(worker_status).replace("_", " ").title()
+        decision = record.get("operator_decision")
+        if worker_status == "awaiting_decision":
+            status_label = "Awaiting Input"
+        elif worker_status == "applied" and decision:
+            status_label = "Initial Kept" if decision["action"] == "keep_initial" else "SUM Applied"
         values = {
             3: self._number(record.get("initial_phase_deg"), "°"),
             4: self._number(record.get("peak_phase_deg"), "°"),
             5: self._number(record.get("peak_sum"), precision=3),
             6: self._number(record.get("applied_phase_deg"), "°"),
-            7: str(record.get("status", "—")).replace("_", " ").title(),
+            7: status_label,
         }
         for column, value in values.items():
             self.table.item(row, column).setText(value)
@@ -953,15 +1038,21 @@ class TransmissionRecoveryPage(QWidget):
         analysis = record.get("acceleration_analysis")
         if analysis:
             acceleration = self.table.item(row, self.ACCELERATION_COLUMN)
-            applied = record.get("status") == "applied"
-            retained = record.get("status") == "undetermined"
+            applied = worker_status == "applied"
+            retained = worker_status == "undetermined"
             status = "undetermined"
             if applied:
                 status = analysis["status"]
             elif retained:
                 status = record.get("initial_phase_acceleration", "undetermined")
             acceleration.setText(self.ACCELERATION_LABELS[status])
-            if applied:
+            if applied and decision:
+                measured = decision["sum_recheck"]["median_sum"]
+                acceleration.setToolTip(
+                    f"Operator decision · {status_label}\n"
+                    f"Rechecked BPM SUM {measured:.3f}\n{analysis['reason']}"
+                )
+            elif applied:
                 acceleration.setToolTip(
                     f"Applied BPM SUM {record['selected_sum']:.3f}\n"
                     f"Corrector response {record['selected_response']:.4g} BPM units/A"
@@ -978,7 +1069,7 @@ class TransmissionRecoveryPage(QWidget):
                 self._draw_plot()
         elif message and "response_snapshot" in record:
             self.table.item(row, self.ACCELERATION_COLUMN).setToolTip(str(message))
-        if record.get("status") == "scanning":
+        if worker_status == "scanning":
             self.current_task_index = task_index
             self.current_points = []
             self.current_applied_index = None
@@ -988,7 +1079,7 @@ class TransmissionRecoveryPage(QWidget):
             self._draw_plot()
         completed = sum(
             self.table.item(selected_row, 7).text()
-            not in {"—", "Pending", "Scanning", "Applying"}
+            not in {"—", "Pending", "Scanning", "Awaiting Input", "Applying"}
             for selected_row in self.selected_rows
         )
         self.progress.setValue(completed)
@@ -1007,6 +1098,8 @@ class TransmissionRecoveryPage(QWidget):
     def _done(self, result):
         worker = self.worker
         self.worker = None
+        if self.decision_dialog is not None:
+            self.decision_dialog.reject()
         self.last_result = dict(result)
         self._set_running(False)
         status = str(result.get("status", "failed")).replace("_", " ").title()
@@ -1136,7 +1229,7 @@ class TransmissionRecoveryPage(QWidget):
                 if selected is not None:
                     axes.scatter(
                         [selected["offset_deg"]], [selected["median_sum"]],
-                        marker="*", color=self.ACCELERATION_COLORS["accelerating"],
+                        marker="*", color=self.ACCELERATION_COLORS[selected.get("acceleration", "undetermined")],
                         s=130, label="Applied phase", zorder=4,
                     )
                 axes.legend(

@@ -165,8 +165,16 @@ candidate at least 10° inside the accelerating half-cycle after accounting
 for phase readback tolerance. Among confirmed accelerating points at or
 above 95% of that region's peak transmission SUM, the initial phase takes
 priority, followed by the point with the highest transmission. If no point
-qualifies, the scan restores the initial phase. Per-point responses,
-classifications, and the response SUM threshold are saved in `run.json`.
+qualifies, the scan restores the initial phase. A scan with multiple selected
+stations then pauses for an operator decision. The initial phase can be kept
+if its transmission meets the configured minimum. The SUM peak is also
+available when it meets the minimum and its classification is accelerating
+or undetermined. **End Sequence** is the default. Before continuing, the scan
+checks RF readbacks and resamples the selected phase's transmission SUM. The
+median must still meet the minimum and agree with the scan within
+`maximum_relative_sum_change`. A failed SUM recheck restores the initial phase
+and ends the sequence. `run.json` records the decision and verification samples
+alongside the original acceleration analysis.
 
 Each `LLRF03`–`LLRF20` stage selects a zero-based `phase_response.candidate`
 in `transmission_recovery.phase_response_candidates` under its `target_bpm`.

@@ -12,6 +12,7 @@ from typing import Any, Callable, Mapping
 
 from epics import caget, caput
 
+from half_linac.src.apps.rf_phase_scan.acceleration_check import BeamResponseUnavailable
 from half_linac.src.apps.rf_phase_scan.amp_scan import EpicsAmpClient
 from half_linac.src.apps.rf_phase_scan.joint_phase_scan import (
     JointPhaseScanConfig,
@@ -105,6 +106,7 @@ class TransmissionRecoveryCallbacks:
         default=lambda _index, _point: None
     )
     state: Callable[[str], None] = field(default=lambda _state: None)
+    decide: Callable[[Mapping[str, Any]], str] | None = None
 
 
 def settings_from_config(
@@ -426,18 +428,7 @@ class TransmissionRecoveryRunner:
         self.callbacks.item(index, dict(self.records[index]))
         self._save()
 
-    def _acquire_point(
-        self,
-        index: int,
-        stage: TransmissionRecoveryStage,
-        initial_phase: float,
-        offset_deg: float,
-        acquisition_index: int,
-        response: PhaseResponseMeasurement | None,
-    ) -> dict[str, Any]:
-        self._check_cancelled()
-        command = self._set_phase(stage, initial_phase + offset_deg)
-        self._wait(self.settings.settle_time_s)
+    def _measure_transmission(self, stage):
         samples: list[float | None] = []
         for sample_index in range(self.settings.samples_per_point):
             self._check_cancelled()
@@ -450,20 +441,37 @@ class TransmissionRecoveryRunner:
             if len(valid) >= self.settings.min_valid_samples
             else None
         )
-        point = {
-            "acquisition_index": acquisition_index,
-            "offset_deg": float(offset_deg),
-            "requested_phase_unwrapped_deg": float(initial_phase + offset_deg),
-            "command_phase_deg": command,
+        return {
             "samples": samples,
             "valid_samples": len(valid),
             "median_sum": median_sum,
             "status": "valid" if median_sum is not None else "invalid",
         }
+
+    def _acquire_point(
+        self,
+        index: int,
+        stage: TransmissionRecoveryStage,
+        initial_phase: float,
+        offset_deg: float,
+        acquisition_index: int,
+        response: PhaseResponseMeasurement | None,
+    ) -> dict[str, Any]:
+        self._check_cancelled()
+        command = self._set_phase(stage, initial_phase + offset_deg)
+        self._wait(self.settings.settle_time_s)
+        point = {
+            "acquisition_index": acquisition_index,
+            "offset_deg": float(offset_deg),
+            "requested_phase_unwrapped_deg": float(initial_phase + offset_deg),
+            "command_phase_deg": command,
+            **self._measure_transmission(stage),
+        }
         self.records[index]["points"].append(point)
         if response is not None:
             self._save()
             point["response"] = {}
+            median_sum = point["median_sum"]
             if median_sum is None or median_sum < response.route.minimum_transmission_sum:
                 point["response"].update(
                     status="skipped", reason=f"{stage.target_bpm}: insufficient transmission SUM.",
@@ -581,6 +589,7 @@ class TransmissionRecoveryRunner:
             peak_phase_deg=peak["command_phase_deg"],
             peak_offset_deg=peak["offset_deg"],
             peak_sum=peak["median_sum"],
+            peak_acquisition_index=peak["acquisition_index"],
         )
         if response is None:
             return peak
@@ -589,14 +598,58 @@ class TransmissionRecoveryRunner:
         best, analysis = select_joint_phase(points, reference, repeat, response.route)
         record["acceleration_analysis"] = analysis
         record["initial_phase_acceleration"] = points[0]["acceleration"]
-        if best is not None:
-            record.update(
-                selected_phase_deg=best["command_phase_deg"],
-                selected_acquisition_index=best["acquisition_index"],
-                selected_sum=best["median_sum"],
-                selected_response=best["response"]["slope"],
-            )
         return best
+
+    def _manual_selection(self, index, stage, points, route):
+        if self.callbacks.decide is None or len(self.stages) < 2:
+            return None
+        record = self.records[index]
+        initial = points[0]
+        peak_index = record.get("peak_acquisition_index")
+        peak = points[peak_index] if peak_index is not None else None
+        minimum = route.minimum_transmission_sum
+        can_keep = initial["median_sum"] is not None and initial["median_sum"] >= minimum
+        can_apply_peak = (
+            peak is not None and peak["median_sum"] >= minimum
+            and peak["acceleration"] != "decelerating"
+        )
+        reason = record["acceleration_analysis"]["reason"]
+        self.status = "awaiting_decision"
+        self._update(index, status="awaiting_decision", error=reason)
+        choice = self.callbacks.decide({
+            "rf_element": stage.rf_element,
+            "target_bpm": stage.target_bpm,
+            "reason": reason,
+            "initial_phase_deg": record["initial_phase_deg"],
+            "initial_sum": initial["median_sum"],
+            "initial_acceleration": initial["acceleration"],
+            "peak_phase_deg": record.get("peak_phase_deg"),
+            "peak_sum": record.get("peak_sum"),
+            "peak_acceleration": peak["acceleration"] if peak is not None else "undetermined",
+            "minimum_sum": minimum,
+            "can_keep": can_keep,
+            "can_apply_peak": can_apply_peak,
+        })
+        self._check_cancelled()
+        self.status = "running"
+        if choice == "keep_initial" and can_keep:
+            best = initial
+        elif choice == "use_sum_peak" and can_apply_peak:
+            best = peak
+        else:
+            choice, best = "stop", None
+        record["operator_decision"] = {"action": choice}
+        return best
+
+    def _verify_manual_sum(self, stage, point, route, decision):
+        self.callbacks.state(f"{stage.rf_element}: rechecking {stage.target_bpm} SUM")
+        repeat = self._measure_transmission(stage)
+        decision["sum_recheck"] = repeat
+        measured = repeat["median_sum"]
+        if measured is None or measured < route.minimum_transmission_sum:
+            raise BeamResponseUnavailable(f"{stage.target_bpm}: rechecked SUM is below the required level.")
+        if abs(measured / point["median_sum"] - 1) > route.response.maximum_relative_sum_change:
+            raise BeamResponseUnavailable(f"{stage.target_bpm}: rechecked SUM did not reproduce.")
 
     def _run_stage(self, index, stage, initial_phase, response):
         self._check_cancelled()
@@ -607,11 +660,20 @@ class TransmissionRecoveryRunner:
             points = self._scan_stage(index, stage, initial_phase, response)
             best = self._choose_phase(index, stage, points, response)
             self._check_cancelled()
+            if best is None and response is not None:
+                best = self._manual_selection(index, stage, points, response.route)
             if best is None:
                 reason = record["acceleration_analysis"]["reason"]
                 self._update(index, status="undetermined", error=reason)
                 return False
-            self._update(index, status="applying")
+            if response is not None:
+                record.update(
+                    selected_phase_deg=best["command_phase_deg"],
+                    selected_acquisition_index=best["acquisition_index"],
+                    selected_sum=best["median_sum"],
+                    selected_response=best["response"].get("slope"),
+                )
+            self._update(index, status="applying", error="")
             if response is not None:
                 self._check_expected_state()
                 verification = record["response_application_verification"] = {"before": {}}
@@ -622,6 +684,9 @@ class TransmissionRecoveryRunner:
                     applied = self._set_phase(stage, applied)
                 if response is not None:
                     self._wait(self.settings.settle_time_s)
+                    decision = record.get("operator_decision")
+                    if decision is not None:
+                        self._verify_manual_sum(stage, best, response.route, decision)
                     verification["after"] = {}
                     response.verify_phase(applied, verification["after"])
                 self._check_cancelled()
@@ -630,6 +695,9 @@ class TransmissionRecoveryRunner:
                     self._set_phase(stage, initial_phase)
                 except Exception as restore_exc:
                     raise RuntimeError(f"{exc}; phase restore failed: {restore_exc}") from restore_exc
+                if isinstance(exc, BeamResponseUnavailable):
+                    self._update(index, status="undetermined", error=str(exc))
+                    return False
                 raise
             self.expected_phases[stage.rf_element] = applied
             self._update(index, status="applied", applied_phase_deg=applied)
@@ -681,6 +749,7 @@ class TransmissionRecoveryRunner:
             if self.records and self.records[active_index]["status"] in {
                 "pending",
                 "scanning",
+                "awaiting_decision",
                 "applying",
             }:
                 self.records[active_index].update(
@@ -695,6 +764,7 @@ class TransmissionRecoveryRunner:
             if self.records and self.records[active_index]["status"] in {
                 "pending",
                 "scanning",
+                "awaiting_decision",
                 "applying",
             }:
                 self.records[active_index].update(

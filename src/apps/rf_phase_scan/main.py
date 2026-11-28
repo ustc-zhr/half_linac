@@ -141,6 +141,17 @@ QFrame#backgroundCard, QGroupBox#dialogCard {{ background: {p['panel']}; border:
 QDialog#energySpectrumDialog QToolBar {{ background-color: {p['plot']}; border: none; spacing: 2px; }}
 QDialog#energySpectrumDialog QToolBar QToolButton {{ background: transparent; border: none; border-radius: 4px; padding: 3px; }}
 QDialog#energySpectrumDialog QToolBar QToolButton:hover {{ background-color: {p['button_hover']}; }}
+QScrollArea#recoveryScanScroll,
+QScrollArea#recoveryScanScroll > QWidget#qt_scrollarea_viewport,
+QWidget#recoveryScanStations {{ background: {p['window']}; }}
+QScrollArea#recoveryScanScroll {{ border: 1px solid {p['border']}; }}
+QScrollBar#recoveryScanScrollBar:vertical {{ background: {p['input']}; border: none; width: 12px; margin: 0; }}
+QScrollBar#recoveryScanScrollBar::handle:vertical {{ background: {p['muted']}; border-radius: 5px; min-height: 24px; }}
+QScrollBar#recoveryScanScrollBar::handle:vertical:hover {{ background: {p['accent']}; }}
+QScrollBar#recoveryScanScrollBar::add-line:vertical,
+QScrollBar#recoveryScanScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar#recoveryScanScrollBar::add-page:vertical,
+QScrollBar#recoveryScanScrollBar::sub-page:vertical {{ background: transparent; }}
 QLabel {{ color: {p['text']}; font-size: 12px; font-weight: 600; background: transparent; }}
 QLabel#summaryTitle {{ font-size: 22px; font-weight: 700; }}
 QLabel#summarySubtitle, QLabel[role="muted"] {{ color: {p['muted']}; font-size: 11px; }}
