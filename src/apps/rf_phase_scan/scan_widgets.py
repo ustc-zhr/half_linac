@@ -124,8 +124,8 @@ def scan_actions(page, buttons, total):
     return actions, progress
 
 
-def prepare_scan_axes(plot, palette, *, has_data):
-    axes = plot.axes
+def prepare_scan_axes(plot, palette, *, has_data, axes=None):
+    axes = plot.axes if axes is None else axes
     axes.clear()
     plot.fig.patch.set_facecolor(palette["plot"])
     axes.set_facecolor(palette["plot"])

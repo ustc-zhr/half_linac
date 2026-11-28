@@ -280,6 +280,73 @@ def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeyp
     app.processEvents()
 
 
+def test_gui_displays_corrector_response_for_joint_scan_results(joint_setup, tmp_path, monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PyQt5.QtWidgets import QApplication
+    from half_linac.src.apps.rf_phase_scan import transmission_recovery_ui as ui
+
+    app = QApplication.instance() or QApplication([])
+    context, workflow, _, _, _ = joint_setup
+    window = SimpleNamespace(
+        _amp_busy=lambda: False, _set_recovery_running=lambda _running: None,
+        thread=None, batch_dialog=None,
+    )
+    page = ui.TransmissionRecoveryPage(
+        window=window, context=context, workflow=workflow,
+        write_enabled=True, runtime_paths={"runs_dir": tmp_path},
+    )
+    signal = SimpleNamespace(connect=lambda _callback: None)
+    monkeypatch.setattr(
+        ui, "TransmissionRecoveryThread",
+        lambda _factory: SimpleNamespace(
+            item=signal, point=signal, state=signal, done=signal,
+            start=lambda: None, deleteLater=lambda: None,
+        ),
+    )
+    monkeypatch.setattr(page, "_confirm_joint_scan", lambda *_: ({"LLRF02": 0.2}, 1.0))
+    monkeypatch.setattr(ui.QMessageBox, "question", lambda *_: ui.QMessageBox.Yes)
+
+    page.use_acceleration.setChecked(True)
+    assert len(page.plot.fig.axes) == 1
+    page.start_button.click()
+    sum_axes, response_axes = page.plot.fig.axes
+    assert sum_axes.get_shared_x_axes().joined(sum_axes, response_axes)
+
+    record = {"rf_element": "LLRF02", "target_bpm": "BPM08", "status": "scanning"}
+    page._item(0, record)
+    valid = {
+        "acquisition_index": 0, "offset_deg": 0, "median_sum": 50_000,
+        "response": {"status": "valid", "magnitude": 7_500, "magnitude_interval": [7_200, 7_800]},
+    }
+    invalid = {
+        "acquisition_index": 1, "offset_deg": 30, "median_sum": 45_000,
+        "response": {"status": "invalid", "reason": "BPM10 SUM below minimum"},
+    }
+    page._point(0, valid)
+    page._point(0, invalid)
+    intervals, dots = response_axes.collections
+    assert response_axes.get_title(loc="left") == "XC10 → BPM10"
+    assert response_axes.get_xlabel() == "Phase offset (deg)"
+    assert list(sum_axes.lines[0].get_xdata()) == [0, 30]
+    assert dots.get_offsets().tolist() == [[0, 7_500]]
+    assert intervals.get_segments()[0].tolist() == [[0, 7_200], [0, 7_800]]
+
+    final_response = dict(valid["response"], comparison_interval=[6_900, 8_100])
+    final = dict(
+        record, status="undetermined", points=[dict(valid, response=final_response), invalid],
+        acceleration_analysis={"status": "undetermined", "reason": "Overlapping response intervals"},
+    )
+    page._item(0, final)
+    page._done({"status": "undetermined", "items": [final]})
+    assert response_axes.collections[0].get_segments()[0].tolist() == [[0, 6_900], [0, 8_100]]
+    page.use_acceleration.setChecked(False)
+    assert page.plot.fig.axes == [sum_axes, response_axes]
+    page.start_button.click()
+    assert page.plot.fig.axes == [page.plot.axes]
+    page.close()
+    app.processEvents()
+
+
 @pytest.mark.parametrize(
     ("current_step", "expected_tolerance", "settle_time_s"),
     [(0.08, 0.005, 1.0), (0.016, 0.004, 2.5)],

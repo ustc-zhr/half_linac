@@ -210,6 +210,8 @@ class TransmissionRecoveryPage(QWidget):
         self.current_task_index = None
         self.current_points: list[dict[str, Any]] = []
         self.current_applied_index = None
+        self.plot_response_routes = {}
+        self.response_axes = None
         self.last_result: dict[str, Any] | None = None
         self.last_stages = ()
         self.last_settings = None
@@ -588,6 +590,8 @@ class TransmissionRecoveryPage(QWidget):
         self.current_task_index = None
         self.current_points = []
         self.current_applied_index = None
+        self.plot_response_routes = routes or {}
+        self.plot_title.setText("Current phase scan")
         for row in range(len(self.candidates)):
             for column in range(3, self.ACCELERATION_COLUMN):
                 self.table.item(row, column).setText("—")
@@ -1071,6 +1075,15 @@ class TransmissionRecoveryPage(QWidget):
         self._draw_plot()
 
     def _draw_plot(self):
+        show_response = bool(self.plot_response_routes)
+        if show_response != (self.response_axes is not None):
+            self.plot.fig.clear()
+            if show_response:
+                self.plot.axes, self.response_axes = self.plot.fig.subplots(2, 1, sharex=True)
+            else:
+                self.plot.axes = self.plot.fig.add_subplot(111)
+                self.response_axes = None
+
         valid = [
             point
             for point in self.current_points
@@ -1078,7 +1091,10 @@ class TransmissionRecoveryPage(QWidget):
         ]
         axes = prepare_scan_axes(self.plot, self.palette, has_data=bool(valid))
         if valid:
-            axes.set_xlabel("Phase offset (deg)", color=self.palette["muted"])
+            if show_response:
+                axes.tick_params(labelbottom=False)
+            else:
+                axes.set_xlabel("Phase offset (deg)", color=self.palette["muted"])
             axes.set_ylabel("BPM SUM median", color=self.palette["muted"])
             ordered = sorted(valid, key=lambda point: float(point["offset_deg"]))
             x_values = [float(point["offset_deg"]) for point in ordered]
@@ -1123,6 +1139,47 @@ class TransmissionRecoveryPage(QWidget):
                     s=55,
                     zorder=3,
                 )
+        if show_response:
+            self._draw_response_plot()
         self.plot.fig.tight_layout()
         self.plot.canvas.draw_idle()
+
+    def _draw_response_plot(self):
+        axes = prepare_scan_axes(self.plot, self.palette, has_data=True, axes=self.response_axes)
+        muted = self.palette["muted"]
+        title = "Corrector response"
+        if self.current_task_index is not None:
+            stage = self.last_stages[self.current_task_index]
+            response = self.plot_response_routes[stage.rf_element].response
+            title = f"{response.corrector.element} → {response.bpm}"
+        axes.set_title(title, loc="left", color=muted)
+        axes.set_xlabel("Phase offset (deg)", color=muted)
+        axes.set_ylabel("|ΔX/ΔI| (BPM units/A)", color=muted)
+
+        valid = [
+            point for point in self.current_points
+            if point.get("response", {}).get("status") == "valid"
+        ]
+        if not valid:
+            axes.set_yticks([])
+            message = "No valid corrector response" if self.current_points else "Waiting for response data"
+            axes.text(
+                0.5, 0.5, message, ha="center", va="center",
+                transform=axes.transAxes, color=muted,
+            )
+            return
+
+        offsets = [point["offset_deg"] for point in valid]
+        responses = [point["response"] for point in valid]
+        intervals = [
+            response.get("comparison_interval", response["magnitude_interval"])
+            for response in responses
+        ]
+        lower, upper = zip(*intervals)
+        color = self.palette["trace"]
+        axes.vlines(offsets, lower, upper, color=color, alpha=0.65)
+        axes.scatter(
+            offsets, [response["magnitude"] for response in responses],
+            color=color, s=28, zorder=3,
+        )
 
