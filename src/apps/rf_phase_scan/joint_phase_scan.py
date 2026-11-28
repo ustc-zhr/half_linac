@@ -19,6 +19,9 @@ from half_linac.src.apps.rf_phase_scan.phase_energy_scan import phase_difference
 from half_linac.src.shared.machine_profile import resolve_channel
 
 
+DEFAULT_CORRECTOR_SETTLE_TIME_S = 1.0
+
+
 @dataclass(frozen=True)
 class JointPhaseScanConfig:
     response: AccelerationCheckConfig
@@ -29,14 +32,20 @@ class JointPhaseScanConfig:
     forward_power_pv: str
     maximum_relative_power_change: float
 
-    def with_corrector_step(self, step):
+    def with_corrector_step(self, step, *, settle_time_s=None):
         step = _number(step, "Corrector step", minimum=SETPOINT_TOLERANCE)
+        if settle_time_s is None:
+            settle_time_s = self.response.settle_time_s
+        settle_time_s = _number(settle_time_s, "Corrector settle time")
+        if settle_time_s < 0:
+            raise ValueError("Corrector settle time must be nonnegative.")
         corrector = self.response.corrector
         low, high = corrector.limits
         if 2 * step > high - low:
             raise ValueError(f"{corrector.element}: the two perturbations exceed the current limits.")
         corrector = replace(corrector, step=step, tolerance=min(corrector.tolerance, step / 4))
-        return replace(self, response=replace(self.response, corrector=corrector))
+        response = replace(self.response, corrector=corrector, settle_time_s=settle_time_s)
+        return replace(self, response=response)
 
 
 def resolve_joint_phase_scan(context, stage, settings, spec):
@@ -60,13 +69,13 @@ def resolve_joint_phase_scan(context, stage, settings, spec):
             **spec,
             **route,
             "samples_per_state": max(2, settings.samples_per_point),
-            "settle_time_s": settings.settle_time_s,
+            "settle_time_s": DEFAULT_CORRECTOR_SETTLE_TIME_S,
             "sample_timeout_s": 5.0 + settings.samples_per_point * settings.sample_interval_s,
         },
         fixed_amplitude=True,
     )
     return JointPhaseScanConfig(
-        response=response,
+        response=replace(response, corrector_readback_timeout_s=5.0),
         minimum_transmission_sum=_number(
             route["minimum_transmission_sum"], "minimum_transmission_sum", minimum=0,
         ),

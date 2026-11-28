@@ -70,6 +70,7 @@ class AccelerationCheckConfig:
     readback_timeout_s: float
     capture_only: bool = False
     kly_forward_power_pv: str | None = None
+    corrector_readback_timeout_s: float | None = None
 
 
 def _number(value, name, *, minimum=None):
@@ -301,7 +302,13 @@ class AccelerationCheck:
         return actual
 
     def _readback(self, actuator, target, *, restoring=False):
-        deadline = self.monotonic() + self.config.readback_timeout_s
+        timeout = self.config.readback_timeout_s
+        if (
+            actuator is self.config.corrector
+            and self.config.corrector_readback_timeout_s is not None
+        ):
+            timeout = self.config.corrector_readback_timeout_s
+        deadline = self.monotonic() + timeout
         while True:
             if not restoring:
                 self._check_stop()

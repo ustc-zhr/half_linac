@@ -7,7 +7,10 @@ from types import SimpleNamespace
 import pytest
 
 from half_linac.src.apps.rf_phase_scan.amp_scan import AmpReading
-from half_linac.src.apps.rf_phase_scan.joint_phase_scan import resolve_joint_phase_scan
+from half_linac.src.apps.rf_phase_scan.joint_phase_scan import (
+    PhaseResponseMeasurement,
+    resolve_joint_phase_scan,
+)
 from half_linac.src.apps.rf_phase_scan.transmission_recovery import (
     TransmissionRecoveryRunner,
     discover_recovery_stages,
@@ -95,6 +98,7 @@ class PhaseScanBeam:
 
 def make_runner(joint_setup, tmp_path, *, enabled=True):
     context, _, stages, settings, route = joint_setup
+    route = route.with_corrector_step(route.response.corrector.step, settle_time_s=0)
     beam = PhaseScanBeam(stages[0], route)
     runner = TransmissionRecoveryRunner(
         context=context, candidates=stages, stages=stages[:1], settings=settings,
@@ -104,6 +108,54 @@ def make_runner(joint_setup, tmp_path, *, enabled=True):
         sleeper=lambda _: None,
     )
     return runner, beam
+
+
+@pytest.mark.parametrize("readback_delay", [3.0, 6.0])
+def test_corrector_readback_timeout_and_settle_before_sampling(joint_setup, readback_delay):
+    context, _, stages, _, route = joint_setup
+    route = route.with_corrector_step(route.response.corrector.step, settle_time_s=1.5)
+    beam = PhaseScanBeam(stages[0], route)
+    initial_current = beam.current
+    read = beam.read
+    now = 0.0
+    write_times = []
+    sample_delays = []
+
+    def sleep(delay):
+        nonlocal now
+        now += delay
+
+    def on_write():
+        write_times.append(now)
+
+    def read_delayed(pv, timeout=0.5):
+        if beam.current != initial_current:
+            elapsed = now - write_times[-1]
+            if pv == route.response.corrector.readback and elapsed < readback_delay:
+                return AmpReading(beam.current + 0.02, None)
+            if pv == route.response.x_pv:
+                sample_delays.append(elapsed)
+        return read(pv, timeout)
+
+    beam.read = read_delayed
+    beam.on_current_write = on_write
+    measurement = PhaseResponseMeasurement(
+        context=context, route=route, on_state=lambda _: None, check_cancelled=lambda: None,
+        client_factory=lambda: beam, monotonic=lambda: now, sleep=sleep,
+    )
+    record = {}
+    with measurement.open():
+        if readback_delay > 5.0:
+            with pytest.raises(RuntimeError, match="XC10: readback did not reach"):
+                measurement.measure(beam.phase, record)
+            assert write_times[1] - write_times[0] == pytest.approx(5.0)
+            assert not sample_delays
+        else:
+            measurement.measure(beam.phase, record)
+            assert record["status"] == "valid"
+            assert min(sample_delays) == pytest.approx(4.5, abs=0.06)
+    assert beam.current == initial_current
+    assert record["restore_status"] == "verified"
 
 
 @pytest.mark.parametrize("enabled, applied", [(True, -160.0), (False, 20.0)])
@@ -228,9 +280,12 @@ def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeyp
     app.processEvents()
 
 
-@pytest.mark.parametrize(("current_step", "expected_tolerance"), [(0.08, 0.005), (0.016, 0.004)])
+@pytest.mark.parametrize(
+    ("current_step", "expected_tolerance", "settle_time_s"),
+    [(0.08, 0.005, 1.0), (0.016, 0.004, 2.5)],
+)
 def test_gui_corrector_step_reaches_runner_and_capture(
-    joint_setup, tmp_path, monkeypatch, current_step, expected_tolerance,
+    joint_setup, tmp_path, monkeypatch, current_step, expected_tolerance, settle_time_s,
 ):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     from PyQt5.QtCore import QTimer
@@ -248,6 +303,7 @@ def test_gui_corrector_step_reaches_runner_and_capture(
         write_enabled=True, runtime_paths={"runs_dir": tmp_path},
     )
     page.use_acceleration.setChecked(True)
+    page.settle.setValue(0.25)
     signal = SimpleNamespace(connect=lambda _callback: None)
     launched = []
 
@@ -259,9 +315,11 @@ def test_gui_corrector_step_reaches_runner_and_capture(
 
     def choose_step():
         dialog = app.activeModalWidget()
-        step = dialog.findChild(QDoubleSpinBox)
+        step, settle = dialog.findChildren(QDoubleSpinBox)
         assert step.value() == pytest.approx(0.2)
+        assert settle.value() == pytest.approx(1.0)
         step.setValue(current_step)
+        settle.setValue(settle_time_s)
         dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Ok).click()
 
     QTimer.singleShot(0, choose_step)
@@ -270,9 +328,13 @@ def test_gui_corrector_step_reaches_runner_and_capture(
     assert route.response.corrector.step == pytest.approx(current_step)
     assert route.response.corrector.tolerance == pytest.approx(expected_tolerance)
     assert route.response.amplitude.step == 0
-    assert launched[0]._payload()["configuration"]["phase_response_routes"]["LLRF02"][
-        "response"
-    ]["corrector"]["step"] == pytest.approx(current_step)
+    config = launched[0]._payload()["configuration"]
+    response = config["phase_response_routes"]["LLRF02"]["response"]
+    assert response["corrector"]["step"] == pytest.approx(current_step)
+    assert response["settle_time_s"] == pytest.approx(settle_time_s)
+    assert response["corrector_readback_timeout_s"] == pytest.approx(5.0)
+    assert config["settings"]["settle_time_s"] == pytest.approx(0.25)
+    assert config["settings"]["readback_timeout_s"] == pytest.approx(2.0)
 
     def choose_capture_steps():
         dialog = app.activeModalWidget()

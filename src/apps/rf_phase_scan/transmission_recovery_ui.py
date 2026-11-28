@@ -28,7 +28,10 @@ from half_linac.src.apps.rf_phase_scan.acceleration_check import (
     discover_acceleration_checks,
     resolve_acceleration_capture,
 )
-from half_linac.src.apps.rf_phase_scan.joint_phase_scan import resolve_joint_phase_scan
+from half_linac.src.apps.rf_phase_scan.joint_phase_scan import (
+    DEFAULT_CORRECTOR_SETTLE_TIME_S,
+    resolve_joint_phase_scan,
+)
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import phase_difference_deg
 from half_linac.src.apps.rf_phase_scan.scan_widgets import (
     parameter_card, prepare_scan_axes, scan_actions, scan_page_layout,
@@ -185,6 +188,7 @@ class TransmissionRecoveryPage(QWidget):
         self.response_default_steps = {}
         self.response_unavailable = {}
         self.corrector_steps = {}
+        self.corrector_settle_time_s = DEFAULT_CORRECTOR_SETTLE_TIME_S
         if self.write_enabled:
             for stage, item in zip(self.candidates, self.config["stages"]):
                 spec = item.get("acceleration_check")
@@ -259,7 +263,7 @@ class TransmissionRecoveryPage(QWidget):
         parameter_widgets = (
             ("Phase range", self._range_widget()),
             ("Points", self.points),
-            ("Settle time", self.settle),
+            ("Phase settle time", self.settle),
             ("Samples / point", self.samples),
             ("Sample interval", self.sample_interval),
             ("Phase selection", self.use_acceleration),
@@ -505,16 +509,23 @@ class TransmissionRecoveryPage(QWidget):
                 step,
             )
             controls[stage.rf_element] = step
+        settle = self._double_spin(self.corrector_settle_time_s, 0, 60)
+        settle.setSuffix(" s")
+        settle.setToolTip(
+            "Wait after the corrector reaches its readback tolerance before taking BPM samples."
+        )
+        layout.addRow("Corrector settle time", settle)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
         buttons.button(QDialogButtonBox.Ok).setText("Start Scan")
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addRow(buttons)
-        steps = None
+        options = None
         if dialog.exec_() == QDialog.Accepted:
             steps = {rf: control.value() for rf, control in controls.items()}
+            options = steps, settle.value()
         dialog.deleteLater()
-        return steps
+        return options
 
     def _start(self):
         if (
@@ -546,16 +557,19 @@ class TransmissionRecoveryPage(QWidget):
                     )
                     for stage in stages
                 }
-                steps = self._confirm_joint_scan(stages, routes)
-                if steps is None:
+                options = self._confirm_joint_scan(stages, routes)
+                if options is None:
                     return
+                steps, settle_time_s = options
                 routes = {
-                    rf: route.with_corrector_step(steps[rf]) for rf, route in routes.items()
+                    rf: route.with_corrector_step(steps[rf], settle_time_s=settle_time_s)
+                    for rf, route in routes.items()
                 }
             except (KeyError, ValueError, TypeError, OverflowError) as exc:
                 QMessageBox.warning(self, "Transmission Recovery", str(exc))
                 return
             self.corrector_steps.update(steps)
+            self.corrector_settle_time_s = settle_time_s
         else:
             mapping = "\n".join(f"{stage.rf_element} → {stage.target_bpm}" for stage in stages)
             if QMessageBox.question(
