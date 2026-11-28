@@ -41,16 +41,38 @@ class OptimizationVariable:
 class ChargeConstraint:
     element_id: str = 'ICT01'
     channel: str = 'charge'
-    retention: float = 0.95
+    retention: float | None = None
     trim_fraction: float = 0.10
+    minimum_nc: float | None = None
+
+    def __post_init__(self):
+        if self.retention is None and self.minimum_nc is None:
+            object.__setattr__(self, 'retention', 0.95)
 
     def validate(self):
         if not self.element_id or not self.channel:
             raise ValueError('Charge monitor element and channel are required.')
-        if not math.isfinite(self.retention) or not 0 < self.retention <= 1:
+        if self.minimum_nc is not None:
+            if self.retention is not None:
+                raise ValueError('Choose either a minimum charge in nC or a baseline retention percentage.')
+            if not math.isfinite(self.minimum_nc) or self.minimum_nc <= 0:
+                raise ValueError(f'Enter a finite positive minimum charge (nC) for {self.element_id}.')
+        elif not math.isfinite(self.retention) or not 0 < self.retention <= 1:
             raise ValueError('Minimum retained charge must be greater than 0% and at most 100%.')
         if not math.isfinite(self.trim_fraction) or not 0 <= self.trim_fraction < 0.5:
             raise ValueError('Charge trim fraction must be at least 0 and less than 0.5.')
+
+    def minimum_at(self, baseline_nc):
+        return self.minimum_nc if self.minimum_nc is not None else baseline_nc * self.retention
+
+    def to_dict(self):
+        return {key: value for key, value in asdict(self).items() if value is not None}
+
+    @classmethod
+    def from_settings(cls, settings):
+        constraint = cls(**{key: settings[key] for key in cls.__dataclass_fields__ if key in settings})
+        constraint.validate()
+        return constraint
 
 
 @dataclass(frozen=True)
@@ -297,8 +319,14 @@ class OptimizationSession:
         self.deadline = float('inf')
         other_plane = 'y' if config.plane == 'x' else 'x'
         saved_config = asdict(config)
+        if config.charge_constraint is not None:
+            saved_config['charge_constraint'] = config.charge_constraint.to_dict()
         if not config.additional_charge_constraints:
             del saved_config['additional_charge_constraints']
+        else:
+            saved_config['additional_charge_constraints'] = [
+                constraint.to_dict() for constraint in config.additional_charge_constraints
+            ]
         self.summary = {'schema_version': 'emit_optimization_v2',
                         'variable_order': [v.element_id for v in config.variables],
                         'config': saved_config, 'measurement': metadata or {},
@@ -434,8 +462,8 @@ class OptimizationSession:
             samples = [self._charge_summary(record, element_id) for record in baseline]
             mean = sum(sample['value'] for sample in samples) / len(samples)
             limits[element_id] = {
-                **asdict(constraint), 'unit': samples[0].get('unit', 'nC'),
-                'baseline': mean, 'minimum': mean * constraint.retention,
+                **constraint.to_dict(), 'unit': samples[0].get('unit', 'nC'),
+                'baseline': mean, 'minimum': constraint.minimum_at(mean),
             }
         self.charge_limits = limits
         primary = limits[self.config.charge_constraint.element_id]
@@ -480,9 +508,19 @@ class OptimizationSession:
                 self._set_charge_limits(baseline)
             if not all(r['feasible'] for r in baseline):
                 failures = {failure for record in baseline for failure in record['constraint_failures']}
-                unstable = [name for name in self.charge_limits if self._charge_failure(name) in failures]
+                below = [name for name in self.charge_limits if self._charge_failure(name) in failures]
+                details, unstable = [], []
+                for name in below:
+                    limit = self.charge_limits[name]
+                    if 'minimum_nc' in limit:
+                        lowest = min(self._charge_summary(record, name)['value'] for record in baseline)
+                        details.append(f"Baseline {name} charge {lowest:.4g} nC is below the minimum {limit['minimum']:.4g} nC.")
+                    else:
+                        unstable.append(name)
                 if unstable:
-                    raise RuntimeError(f'Baseline {", ".join(unstable)} charge is unstable at the configured retention limit.')
+                    details.append(f'Baseline {", ".join(unstable)} charge is unstable at the configured retention limit.')
+                if details:
+                    raise RuntimeError(' '.join(details))
                 raise RuntimeError('Baseline exceeds the other-plane limit.')
             self.baseline = {
                 plane: sum(record['values'][plane] for record in baseline) / len(baseline)

@@ -81,3 +81,17 @@ class ICT1CoreTests(unittest.TestCase):
                 self.assertEqual(restored.to_checkpoint(), saved)
                 self.assertEqual(restored.recommend(), core.recommend())
                 self.assertEqual(restored.propose(), core.propose())
+
+    def test_absolute_minimum_changes_feasible_margin_and_survives_checkpoint(self):
+        observation = ICT1Observation("a", 0, .419, .0001)
+        relative = ICT1Config(.44, .95, .003)
+        absolute = ICT1Config(.44, None, .003, absolute_minimum_nc=.42)
+        self.assertNotIn("absolute_minimum_nc", relative.to_dict())
+        self.assertGreater(fit_ict1_posterior(self.pool, relative, (observation,)).mean[0], 0)
+        self.assertLess(fit_ict1_posterior(self.pool, absolute, (observation,)).mean[0], 0)
+        core = InfoBAXCore(self.pool, self.config, ict1=absolute)
+        core.observe_ict1(observation)
+        saved = json.loads(json.dumps(core.to_checkpoint()))
+        restored = InfoBAXCore.from_checkpoint(self.pool, saved)
+        self.assertEqual(restored.ict1.minimum_nc, .42)
+        self.assertEqual(restored.to_checkpoint(), saved)

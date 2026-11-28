@@ -16,7 +16,7 @@ from .infobax_workflow import (
     DEFAULT_CURRENT_CANDIDATES, DEFAULT_INITIAL_POINTS_PER_END, FRAMEWORK_WORKFLOW_SCHEMAS,
     InfoBAXWorkflow, WorkflowConfig, current_vector,
 )
-from .optimization import OptimizationVariable
+from .optimization import ChargeConstraint, OptimizationVariable
 
 
 def grid_for_parameters(paras, initial_k1):
@@ -168,7 +168,7 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
                              current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
                              initial_points_per_end=DEFAULT_INITIAL_POINTS_PER_END,
                              approve=None,automatic_measurements=False,progress=None,full_scan=None,
-                             resume=False,lease=None,ict1_retention=None):
+                             resume=False,lease=None,ict1_retention=None,ict1_constraint=None):
     if paras.samples < 3:
         raise ValueError("InfoBAX requires at least 3 main-window Samples per point")
     variables = (variable,) if isinstance(variable, OptimizationVariable) else tuple(variable)
@@ -177,7 +177,11 @@ def build_framework_workflow(paras, variable, run_dir, *, plane, model="transpor
     if paras.defer_measurement_prepare:
         prepare_measurement(paras)
     contract=measurement_contract(paras)
-    ict1_settings = None if ict1_retention is None else monitor_settings(paras, ict1_retention)
+    if ict1_retention is not None:
+        if ict1_constraint is not None:
+            raise ValueError("Specify one ICT1 constraint.")
+        ict1_constraint = ChargeConstraint(retention=float(ict1_retention))
+    ict1_settings = None if ict1_constraint is None else monitor_settings(paras, ict1_constraint)
     if resume:
         saved=json.loads((Path(run_dir)/InfoBAXWorkflow.filename).read_text())
         if saved.get("schema") not in FRAMEWORK_WORKFLOW_SCHEMAS:

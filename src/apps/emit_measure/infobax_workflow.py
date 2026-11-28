@@ -26,6 +26,7 @@ from half_linac.src.shared.beam_matrix import (
 from .control import emittance_lock
 from .infobax_ict1 import numerical_ict1_config, read_ict1_window, scan_charge_summary
 from .measurement_service import fingerprint, PointAcquisitionResult, fit_grid_results
+from .optimization import ChargeConstraint
 
 
 DEFAULT_CURRENT_CANDIDATES = 5
@@ -546,9 +547,13 @@ class InfoBAXWorkflow:
                     baseline = self._full_scan_charge(self.baseline)
                     if baseline["status"] != "valid":
                         raise ValueError(baseline["error"])
+                    baseline["minimum_nc"] = ChargeConstraint.from_settings(self.ict1_settings).minimum_at(baseline["value"])
                     self.ict1_baseline = baseline
-                    baseline["minimum_nc"] = baseline["value"] * self.ict1_settings["retention"]
                     self.save()
+                if self.ict1_baseline is not None and self.ict1_baseline["value"] < self.ict1_baseline["minimum_nc"]:
+                    value = self.ict1_baseline["value"]
+                    limit = self.ict1_baseline["minimum_nc"]
+                    raise ValueError(f"Baseline ICT1 charge {value:.6g} nC is below the minimum {limit:.6g} nC.")
                 if self.core is None:
                     self.core = self._create_core()
                     self.save()

@@ -10,12 +10,13 @@ from uuid import uuid4
 
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QCheckBox, QDoubleSpinBox, QSpinBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
+    QCheckBox, QSpinBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFileDialog, QAbstractItemView)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from half_linac.src.shared.machine_profile import resolve_app_runtime_paths
+from .charge_limit_control import ChargeLimitControl, format_charge_limit
 from .control import emittance_lock
 from .infobax_gui import WorkflowWorker
 from .infobax_framework import archived_variables, build_framework_workflow, load_framework_recovery
@@ -35,13 +36,13 @@ class IntegratedInfoBAXWorker(WorkflowWorker):
                  max_minutes, solenoid_settle, current_candidate_count=DEFAULT_CURRENT_CANDIDATES,
                  initial_points_per_end=DEFAULT_INITIAL_POINTS_PER_END,
                  resume=False, workflow=None, action="run", parent=None,recovery_context=None,
-                 ict1_retention=None):
+                 ict1_constraint=None):
         super().__init__(run_dir=run_dir,workflow=workflow,resume=resume,action=action,parent=parent)
         self.paras,self.variables=paras,variables
         self.recovery_context=recovery_context
         self.arguments=dict(plane=plane,model=model,active_queries=active_queries,
                             current_candidate_count=current_candidate_count,initial_points_per_end=initial_points_per_end,
-                            max_minutes=max_minutes,solenoid_settle=solenoid_settle,ict1_retention=ict1_retention)
+                            max_minutes=max_minutes,solenoid_settle=solenoid_settle,ict1_constraint=ict1_constraint)
 
     def full_scan(self,phase,completed,on_point,*,before_images=None):
         points=Queue()
@@ -148,16 +149,10 @@ class InfoBAXPage(QWidget):
         box.addLayout(design_row)
         charge_row = QHBoxLayout()
         self.ict1_enabled = QCheckBox("ICT1 constraint")
-        self.ict1_retention = QDoubleSpinBox()
-        self.ict1_retention.setDecimals(1)
-        self.ict1_retention.setRange(0.1, 100.0)
-        self.ict1_retention.setSuffix(" %")
-        self.ict1_retention.setValue(95.0)
-        self.ict1_retention.setAccessibleName("Minimum ICT1 charge retained")
-        self.ict1_retention.setToolTip("Minimum ICT1 charge retained relative to the baseline scan")
-        self.ict1_retention.setEnabled(False)
+        self.ict1_limit = ChargeLimitControl(parent=self)
+        self.ict1_limit.setEnabled(False)
         charge_row.addWidget(self.ict1_enabled)
-        charge_row.addWidget(self.ict1_retention)
+        charge_row.addWidget(self.ict1_limit)
         charge_row.addStretch()
         box.addLayout(charge_row)
         self.note=QLabel();self.note.setWordWrap(True);box.addWidget(self.note)
@@ -176,7 +171,7 @@ class InfoBAXPage(QWidget):
         self.model.currentIndexChanged.connect(self.update_initial_points_minimum)
         for signal in (self.model.currentIndexChanged,self.active.valueChanged,
                        self.current_candidate_count.valueChanged,self.initial_points_per_end.valueChanged,
-                       self.ict1_enabled.toggled,self.ict1_retention.valueChanged):
+                       self.ict1_enabled.toggled,self.ict1_limit.changed):
             signal.connect(self.settings_changed)
         self.style_plot()
         self.refresh_note()
@@ -222,6 +217,7 @@ class InfoBAXPage(QWidget):
             if self.read_only: raise ValueError("Prototype v1 archives are read-only; start a new run after clearing the archive")
             if not d.selected_names():
                 raise ValueError("Select at least one solenoid for InfoBAX")
+            ict1_constraint = self.ict1_limit.constraint() if self.ict1_enabled.isChecked() else None
             variables=d.selected_variables()
             paras=d.host.optimization_parameters(variables,defer_io=True)
             if paras.samples<3: raise ValueError("Set main-window Samples per point to at least 3 for InfoBAX")
@@ -240,7 +236,7 @@ class InfoBAXPage(QWidget):
                 model=self.model.currentData(),active_queries=self.active.value(),max_minutes=d.minutes.value(),
                 current_candidate_count=self.current_candidate_count.value(),initial_points_per_end=self.initial_points_per_end.value(),
                 solenoid_settle=d.solenoid_settle.value(),resume=resume,parent=self,
-                ict1_retention=self.ict1_retention.value()/100 if self.ict1_enabled.isChecked() else None))
+                ict1_constraint=ict1_constraint))
         except Exception as exc: d.error(str(exc))
 
     def launch(self,worker):
@@ -347,7 +343,8 @@ class InfoBAXPage(QWidget):
         status = (f"InfoBAX · {state['status']} · baseline εn={baseline.get('normalized_emittance_mm_mrad','—')} · "
                   f"verified εn={verify.get('normalized_emittance_mm_mrad','—')} · restore={state['restoration_status']}")
         if charge and charge.get("baseline"):
-            status += f" · ICT1 minimum {charge['baseline']['minimum_nc']:.4g} nC"
+            baseline_charge = charge["baseline"]
+            status += f" · {format_charge_limit('ICT1', baseline_charge['value'], baseline_charge['minimum_nc'])}"
             verification = charge.get("verification") or {}
             if verification.get("status") == "valid":
                 status += f" · verified ICT1 {verification['value']:.4g} nC"
@@ -420,7 +417,7 @@ class InfoBAXPage(QWidget):
                     charge = settings.get("ict1")
                     self.ict1_enabled.setChecked(charge is not None)
                     if charge is not None:
-                        self.ict1_retention.setValue(100 * charge["retention"])
+                        self.ict1_limit.load_settings(charge)
             self.render()
             if self.read_only:self.proposal.setText("Read-only prototype archive. Clear it to start a new framework run.")
             elif self.saved["status"]=="recovery_required":self.proposal.setText("Restore Initial before resuming; recovery does not require a working camera.")

@@ -24,9 +24,10 @@ from half_linac.src.shared.machine_profile import (
     resolve_ct_monitor_workflow,
 )
 from .optimization import (
-    ChargeConstraint, OptimizationConfig, OptimizationVariable, OptimizationSession,
+    OptimizationConfig, OptimizationVariable, OptimizationSession,
     EpicsVariableGroup,
 )
+from .charge_limit_control import ChargeLimitControl, format_charge_limit
 from .optimization_diagnostics import (
     load_measurement_diagnostics,
     load_optimization_run,
@@ -769,27 +770,18 @@ class OptimizationDialog(QDialog):
         self.charge_monitor.setFixedHeight(32)
         self.ict2_enabled = QCheckBox('ICT2', self.charge_settings)
         self.ict2_enabled.setFixedHeight(32)
-        self.ict2_enabled.setToolTip('Also require ICT2 to retain its minimum charge.')
-        self.charge_retention = QDoubleSpinBox(self.charge_settings)
-        self.ict2_retention = QDoubleSpinBox(self.charge_settings)
-        for monitor, spin in (('ICT01', self.charge_retention), ('ICT2', self.ict2_retention)):
-            spin.setRange(0.1, 100.0)
-            spin.setDecimals(1)
-            spin.setSingleStep(1.0)
-            spin.setValue(95.0)
-            spin.setSuffix(' %')
-            spin.setFixedHeight(32)
-            spin.setToolTip(f'Minimum {monitor} charge retained relative to the two baseline scans.')
-        self.ict2_retention.setEnabled(False)
-        retention_label = QLabel('Minimum retained charge', self.charge_settings)
-        retention_label.setProperty('role', 'caption')
+        self.ict2_enabled.setToolTip('Also require ICT2 to meet its charge limit.')
+        self.ict1_limit = ChargeLimitControl(parent=self.charge_settings)
+        self.ict2_limit = ChargeLimitControl(ICT2_ELEMENT_ID, self.charge_settings)
+        self.ict2_limit.setEnabled(False)
+        limit_label = QLabel('Charge limit', self.charge_settings)
+        limit_label.setProperty('role', 'caption')
         charge_layout.addWidget(charge_monitor_label, 0, 0)
         charge_layout.addWidget(self.charge_monitor, 1, 0)
-        charge_layout.addWidget(retention_label, 0, 1)
-        charge_layout.addWidget(self.charge_retention, 1, 1)
+        charge_layout.addWidget(limit_label, 0, 1)
+        charge_layout.addWidget(self.ict1_limit, 1, 1)
         charge_layout.addWidget(self.ict2_enabled, 2, 0)
-        charge_layout.addWidget(self.ict2_retention, 2, 1)
-        charge_layout.setColumnStretch(0, 1)
+        charge_layout.addWidget(self.ict2_limit, 2, 1)
         charge_layout.setColumnStretch(1, 1)
         algorithm_layout.addWidget(self.rcds_settings)
         algorithm_layout.addWidget(self.bo_settings)
@@ -887,10 +879,10 @@ class OptimizationDialog(QDialog):
         self.bo_exploration.valueChanged.connect(self.settings_changed)
         self.bo_seed.valueChanged.connect(self.settings_changed)
         self.bo_acquisition.currentIndexChanged.connect(self.bo_acquisition_changed)
-        self.charge_retention.valueChanged.connect(self.settings_changed)
-        self.ict2_enabled.toggled.connect(self.ict2_retention.setEnabled)
+        self.ict1_limit.changed.connect(self.settings_changed)
+        self.ict2_enabled.toggled.connect(self.ict2_limit.setEnabled)
         self.ict2_enabled.toggled.connect(self.ict2_settings_changed)
-        self.ict2_retention.valueChanged.connect(self.ict2_settings_changed)
+        self.ict2_limit.changed.connect(self.ict2_settings_changed)
         self.bo_kappa.valueChanged.connect(self.settings_changed)
         self.advanced_button.toggled.connect(self.advanced_changed)
         self._bo_initial_samples_custom = False
@@ -1243,7 +1235,7 @@ class OptimizationDialog(QDialog):
             page.current_candidate_count.setEnabled(not busy and not self.fault)
             page.initial_points_per_end.setEnabled(not busy and not self.fault)
             page.ict1_enabled.setEnabled(not busy and not self.fault and not page.read_only)
-            page.ict1_retention.setEnabled(page.ict1_enabled.isEnabled() and page.ict1_enabled.isChecked())
+            page.ict1_limit.setEnabled(page.ict1_enabled.isEnabled() and page.ict1_enabled.isChecked())
             recovery_needed=bool(state and state.get("restoration_status") in {"failed","pending"})
             runnable = not busy and not self.fault and self.host.machine_type == "real" and not page.read_only and not recovery_needed
             page.clear_button.setEnabled(not busy and not self.fault)
@@ -1360,13 +1352,11 @@ class OptimizationDialog(QDialog):
                         f'Enter a positive Other-plane limit (mm·mrad) for the {other_plane} plane '
                         'or disable the other-plane constraint before starting optimization.'
                     ) from None
-            charge_constraint = (ChargeConstraint(retention=self.charge_retention.value() / 100.0)
+            charge_constraint = (self.ict1_limit.constraint()
                                  if self.algorithm.currentData() == 'cbo' else None)
             additional_constraints = ()
             if charge_constraint is not None and self.ict2_enabled.isChecked():
-                additional_constraints = (ChargeConstraint(
-                    element_id=ICT2_ELEMENT_ID, retention=self.ict2_retention.value() / 100.0,
-                ),)
+                additional_constraints = (self.ict2_limit.constraint(),)
             config = OptimizationConfig(
                 self.selected_variables(), self.plane.currentData(), other_limit,
                 self.count.value(), self.minutes.value(), settle_time=self.solenoid_settle.value(),
@@ -1601,8 +1591,7 @@ class OptimizationDialog(QDialog):
                 for plane in ('x', 'y') if plane in baseline)
             text += f' · Baseline {baseline_values}'
         for element_id, limit in s.charge_limits.items():
-            text += (f" · {_charge_label(element_id)} baseline={limit['baseline']:.4g}, "
-                     f"minimum={limit['minimum']:.4g} nC")
+            text += f" · {format_charge_limit(_charge_label(element_id), limit['baseline'], limit['minimum'])}"
         if best:
             best_values = ', '.join(
                 f'εn{plane}={best["values"][plane]:.4g}'

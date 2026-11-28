@@ -18,6 +18,7 @@ from half_linac.src.apps.emit_measure.infobax_ict1 import (
 from half_linac.src.apps.emit_measure.infobax_workflow import (
     ICT1_WORKFLOW_SCHEMA, InfoBAXWorkflow, WorkflowConfig, workflow_pool,
 )
+from half_linac.src.apps.emit_measure.optimization import ChargeConstraint
 from half_linac.src.optimization.infobax import ICT1Observation, InfoBAXConfig, InfoBAXCore, PointObservation
 
 
@@ -54,7 +55,8 @@ def replay(run_dir):
 
     if baseline is not None:
         charge = scan_charge_summary(settings, [windows[r["ict1_window_id"]] for r in data["baseline"]])
-        _check_equal("baseline ICT1", dict(charge, minimum_nc=charge["value"] * settings["retention"]), baseline)
+        minimum_nc = ChargeConstraint.from_settings(settings).minimum_at(charge["value"])
+        _check_equal("baseline ICT1", dict(charge, minimum_nc=minimum_nc), baseline)
     verification = archived_charge["verification"]
     if verification is not None:
         charge = scan_charge_summary(settings, [windows[r["ict1_window_id"]] for r in data["verification"]])

@@ -153,24 +153,28 @@ class FrameworkTests(unittest.TestCase):
         self.assertFalse(self.host._optimization_locked)
         self.assertTrue(self.dialog.tabs.tabBar().isEnabled())
 
-    def mock_ict1(self, charge):
+    def mock_ict1(self, charge, minimum_nc=None):
         from half_linac.src.apps.emit_measure import infobax_framework
 
         configured_settings = infobax_framework.monitor_settings
-        patch.object(infobax_framework, "monitor_settings", side_effect=lambda paras, retention: dict(
-            configured_settings(paras, retention), sample_interval_s=.001,
+        patch.object(infobax_framework, "monitor_settings", side_effect=lambda paras, constraint: dict(
+            configured_settings(paras, constraint), sample_interval_s=.001,
         )).start()
         pv = SimpleNamespace(wait_for_connection=lambda timeout: True,
                              get_with_metadata=lambda **kwargs: {"value": charge(), "timestamp": time.time()})
         patch.object(main.epics, "PV", return_value=pv).start()
         self.page.ict1_enabled.setChecked(True)
+        if minimum_nc is None:
+            self.page.ict1_limit.mode.setCurrentIndex(self.page.ict1_limit.mode.findData("retention"))
+        else:
+            self.page.ict1_limit.minimum.setText(str(minimum_nc))
         return pv
 
     def test_ict1_search_records_low_charge_and_replays_active_ranking(self):
         from scripts.replay_emit_infobax import replay
 
         pv = self.mock_ict1(lambda: .85 if self.page.workflow.status == "initialization" and
-                            self.values[self.pvs["sol"]] == 0 else 1.)
+                            self.values[self.pvs["sol"]] == 0 else 1., minimum_nc=.95)
         self.page.active.setValue(5)
         self.dialog.start()
         self.complete()
@@ -180,6 +184,7 @@ class FrameworkTests(unittest.TestCase):
         self.assertEqual(len(workflow.baseline), 3)
         self.assertEqual(len(workflow.verification), 3)
         self.assertEqual(workflow.ict1_baseline["minimum_nc"], .95)
+        self.assertEqual(workflow.core.ict1.absolute_minimum_nc, .95)
         self.assertTrue(workflow.ict1_verification["feasible"])
         self.assertTrue(any(observation.charge_nc < .95 for observation in workflow.core.ict1_observations))
         self.assertFalse(any(observation.window_id in {r["ict1_window_id"] for r in workflow.verification}
@@ -200,6 +205,30 @@ class FrameworkTests(unittest.TestCase):
         self.assertFalse(workflow.actions[-1]["ict1"]["feasible"])
         self.assertEqual(workflow.restoration_status, "succeeded")
         self.assertEqual(self.values[self.pvs["sol"]], 1.)
+        with patch("half_linac.src.apps.emit_measure.infobax_page.QFileDialog.getOpenFileName",
+                   return_value=(str(workflow.path), "")):
+            self.page.load_run()
+        self.assertEqual(self.page.ict1_limit.mode.currentData(), "minimum_nc")
+        self.assertEqual(self.page.ict1_limit.minimum.text(), "0.95")
+
+    def test_ict1_absolute_minimum_requires_input_and_stops_at_a_low_baseline(self):
+        self.page.ict1_enabled.setChecked(True)
+        self.assertEqual(self.page.ict1_limit.mode.currentData(), "minimum_nc")
+        with patch.object(self.dialog, "error") as error:
+            self.dialog.start()
+        self.assertIn("finite positive minimum charge", error.call_args.args[0])
+        self.assertEqual(self.pv_writes, [])
+
+        self.mock_ict1(lambda: .40, minimum_nc=.42)
+        self.dialog.start()
+        self.complete()
+        workflow = self.page.workflow
+        self.assertEqual(workflow.status, "failed")
+        self.assertIsNone(workflow.core)
+        self.assertEqual({record["phase"] for record in workflow.records}, {"baseline"})
+        self.assertIn("0.4 nC is below the minimum 0.42 nC", workflow.error)
+        self.assertEqual(workflow.ict1_baseline["minimum_nc"], .42)
+        self.assertEqual(workflow.restoration_status, "succeeded")
 
     def test_ict1_verification_failure_prevents_apply(self):
         self.mock_ict1(lambda: .85 if self.page.workflow.status == "verification" else 1.)
@@ -262,7 +291,8 @@ class FrameworkTests(unittest.TestCase):
                    return_value=(str(workflow.path), "")):
             self.page.load_run()
         self.assertTrue(self.page.ict1_enabled.isChecked())
-        self.assertEqual(self.page.ict1_retention.value(), 95.)
+        self.assertEqual(self.page.ict1_limit.mode.currentData(), "retention")
+        self.assertEqual(self.page.ict1_limit.retention.value(), 95.)
         original = pv.get_with_metadata
         pv.get_with_metadata = lambda **kw: self.fail("ICT1 unavailable during restore")
         self.page.manual("initial")

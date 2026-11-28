@@ -190,13 +190,13 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.best['currents']['SS01'], 3.)
         self.assertTrue(session.confirmed)
 
-    def test_constrained_bo_enforces_ict2_in_search_and_verification(self):
+    def test_constrained_bo_enforces_mixed_charge_limits_in_search_and_verification(self):
         self.config = single_config(
             'SS01', 1, 9, 'x', 3, algorithm='cbo',
             charge_constraint=ChargeConstraint(),
-            additional_charge_constraints=(ChargeConstraint(element_id='ICT02', retention=.9),),
+            additional_charge_constraints=(ChargeConstraint(element_id='ICT02', minimum_nc=1.8),),
         )
-        ict2 = iter((2., 2., 1.7, 1.9, 1.9, 1.7))
+        ict2 = iter((2.1, 2.3, 1.7, 1.9, 1.9, 1.7))
         optimizer_outputs = []
 
         def measure(*_):
@@ -207,7 +207,7 @@ class SessionTests(unittest.TestCase):
 
         def optimizer(fn, *_args, **kwargs):
             self.assertEqual(kwargs['constraint_bounds'], ((None, 3), (.95, None), (1.8, None)))
-            self.assertEqual(kwargs['seed_observations'], (((5.,), .5, (2., 1., 2.)),))
+            self.assertEqual(kwargs['seed_observations'], (((5.,), .5, (2., 1., (2.1 + 2.3) / 2)),))
             optimizer_outputs.extend([fn(3.)[1], fn(4.)[1]])
 
         session = self.session(measure=measure, optimizer=optimizer)
@@ -218,6 +218,19 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.records[-1]['constraint_failures'], ['charge_limit:ICT02'])
         self.assertFalse(session.confirmed)
         self.assertEqual(self.device.restores, [5.])
+        self.assertEqual(session.summary['additional_charge_constraints']['ICT02']['minimum_nc'], 1.8)
+
+    def test_constrained_bo_stops_if_either_baseline_scan_misses_absolute_minimum(self):
+        self.config = single_config('SS01', 1, 9, 'x', None, algorithm='cbo',
+                                    charge_constraint=ChargeConstraint(minimum_nc=.42))
+        charges = iter((.40, .44))
+        optimizer = unittest.mock.Mock()
+        session = self.session(measure=lambda *_: charged_result(2, charge=next(charges)), optimizer=optimizer)
+        self.assertEqual(session.run()['status'], 'failed')
+        self.assertIn('0.4 nC is below the minimum 0.42 nC', session.summary['error'])
+        self.assertEqual(session.charge_minimum, .42)
+        self.assertEqual(self.device.restores, [5.])
+        optimizer.assert_not_called()
 
     def test_constrained_bo_retries_when_enabled_ict2_is_missing(self):
         self.config = single_config(

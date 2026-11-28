@@ -1,6 +1,6 @@
 """ICT1 observations and their independent workpoint posterior."""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import math
 
 import numpy as np
@@ -13,24 +13,47 @@ from .types import InsufficientDataError, NumericalFailure
 @dataclass(frozen=True)
 class ICT1Config:
     baseline_nc: float
-    retention: float
+    retention: float | None
     query_noise_std: float
     prior_std: float = 0.10
     length_scale: float = 0.25
     noise_floor: float = 0.001
+    absolute_minimum_nc: float | None = None
 
     def __post_init__(self):
-        for name in ("baseline_nc", "retention", "query_noise_std", "prior_std", "length_scale", "noise_floor"):
+        for name in ("baseline_nc", "query_noise_std", "prior_std", "length_scale", "noise_floor"):
             value = float(getattr(self, name))
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"ICT1 {name} must be finite and positive")
             object.__setattr__(self, name, value)
-        if self.retention > 1 or self.query_noise_std < self.noise_floor:
-            raise ValueError("Invalid ICT1 retention or query noise")
+        if self.query_noise_std < self.noise_floor:
+            raise ValueError("Invalid ICT1 query noise")
+        if (self.retention is None) == (self.absolute_minimum_nc is None):
+            raise ValueError("ICT1 requires one charge limit")
+        if self.absolute_minimum_nc is None:
+            value = float(self.retention)
+            if not math.isfinite(value) or not 0 < value <= 1:
+                raise ValueError("Invalid ICT1 retention")
+            object.__setattr__(self, "retention", value)
+        else:
+            value = float(self.absolute_minimum_nc)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError("Invalid ICT1 minimum charge")
+            object.__setattr__(self, "absolute_minimum_nc", value)
 
     @property
     def minimum_nc(self):
-        return self.baseline_nc * self.retention
+        return self.baseline_nc * self.retention if self.absolute_minimum_nc is None else self.absolute_minimum_nc
+
+    @property
+    def threshold_fraction(self):
+        return self.retention if self.absolute_minimum_nc is None else self.absolute_minimum_nc / self.baseline_nc
+
+    def to_dict(self):
+        data = asdict(self)
+        if self.absolute_minimum_nc is None:
+            del data["absolute_minimum_nc"]
+        return data
 
 
 @dataclass(frozen=True)
@@ -67,7 +90,7 @@ def fit_ict1_posterior(pool, config, observations):
     likelihood = covariance[np.ix_(indices, indices)] + np.diag(noise**2)
     try:
         factor = cho_factor(likelihood, lower=True)
-        mean = (1.0 - config.retention) + cross @ cho_solve(factor, charges - 1.0)
+        mean = (1.0 - config.threshold_fraction) + cross @ cho_solve(factor, charges - 1.0)
         conditional = covariance - cross @ cho_solve(factor, cross.T)
     except (ValueError, np.linalg.LinAlgError) as error:
         raise NumericalFailure("ICT1 posterior factorization failed") from error

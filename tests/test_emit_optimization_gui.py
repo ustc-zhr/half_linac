@@ -336,40 +336,44 @@ class DialogTests(unittest.TestCase):
         dialog.resize(800, 720)
         dialog.algorithm.setCurrentIndex(dialog.algorithm.findData('cbo'))
         dialog.other_limit.setText('3.5')
-        dialog.charge_retention.setValue(93.)
+        dialog.ict1_limit.mode.setCurrentIndex(dialog.ict1_limit.mode.findData('retention'))
+        dialog.ict1_limit.retention.setValue(93.)
         self.app.processEvents()
 
         dialog.tabs.setCurrentIndex(1)
         self.app.processEvents()
         self.assertFalse(dialog.other_limit.isVisible())
-        self.assertFalse(dialog.charge_retention.isVisible())
+        self.assertFalse(dialog.ict1_limit.isVisible())
         scroll = dialog.scroll_area.verticalScrollBar()
         scroll.setValue(scroll.maximum())
 
         dialog.tabs.setCurrentIndex(0)
         self.app.processEvents()
-        for control in (dialog.other_limit, dialog.charge_retention, dialog.ict2_enabled, dialog.ict2_retention):
+        for control in (dialog.other_limit, dialog.ict1_limit, dialog.ict2_enabled, dialog.ict2_limit):
             self.assertEqual(control.visibleRegion().boundingRect().height(), control.height())
         self.assertEqual(dialog.other_limit.text(), '3.5')
-        self.assertEqual(dialog.charge_retention.value(), 93.)
+        self.assertEqual(dialog.ict1_limit.retention.value(), 93.)
 
     def test_constrained_bo_settings_prepare_selected_monitors(self):
         from half_linac.src.apps.emit_measure.optimization import OptimizationVariable
         ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')
         self.host.app_context, self.host.machine_profile, self.host.machine_type = ctx, ctx.profile, 'real'
         self.dialog.algorithm.setCurrentIndex(self.dialog.algorithm.findData('cbo'))
-        self.dialog.charge_retention.setValue(93.)
+        self.assertEqual(self.dialog.ict1_limit.mode.currentData(), 'minimum_nc')
+        self.assertFalse(self.dialog.ict1_limit.minimum.text())
+        self.dialog.ict1_limit.minimum.setText('0.42')
         self.dialog.other_limit.setText('3')
         self.assertFalse(self.dialog.charge_settings.isHidden())
         self.assertFalse(self.dialog.bo_settings.isHidden())
         self.assertFalse(self.dialog.ict2_enabled.isChecked())
-        self.assertFalse(self.dialog.ict2_retention.isEnabled())
+        self.assertFalse(self.dialog.ict2_limit.isEnabled())
         for enabled in (False, True):
             with self.subTest(ict2_enabled=enabled):
                 self.dialog.ict2_enabled.setChecked(enabled)
-                self.assertEqual(self.dialog.ict2_retention.isEnabled(), enabled)
+                self.assertEqual(self.dialog.ict2_limit.isEnabled(), enabled)
                 if enabled:
-                    self.dialog.ict2_retention.setValue(91.)
+                    self.dialog.ict2_limit.mode.setCurrentIndex(self.dialog.ict2_limit.mode.findData('retention'))
+                    self.dialog.ict2_limit.retention.setValue(91.)
                 paras = Mock(scan_metadata={}, background_image=None)
                 with patch.object(self.dialog, 'error') as error, \
                      patch.object(self.dialog, 'selected_variables',
@@ -380,7 +384,7 @@ class DialogTests(unittest.TestCase):
                 self.assertFalse(error.called, error.call_args)
                 config = self.dialog.session.config
                 self.assertEqual(config.algorithm, 'cbo')
-                self.assertAlmostEqual(config.charge_constraint.retention, .93)
+                self.assertEqual(config.charge_constraint.minimum_nc, .42)
                 self.assertEqual(paras.charge_monitor['element_id'], 'ICT01')
                 self.assertEqual(paras.charge_monitor['pv'], 'IN:BD:ICT1:C')
                 self.assertEqual(paras.charge_monitor['unit'], 'nC')

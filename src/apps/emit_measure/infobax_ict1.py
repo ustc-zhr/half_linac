@@ -13,26 +13,24 @@ from .measurement_service import ScanChargeMonitor, trim_charge_values
 from .optimization import ChargeConstraint
 
 
-def monitor_settings(paras, retention):
+def monitor_settings(paras, constraint):
     from half_linac.src.shared.machine_profile import (
         load_app_context, resolve_channel, resolve_ct_monitor_workflow,
     )
 
-    constraint = ChargeConstraint(retention=float(retention))
     constraint.validate()
+    if (constraint.element_id, constraint.channel) != ("ICT01", "charge"):
+        raise ValueError("InfoBAX supports the ICT1 charge channel.")
     context = paras.app_context
     backend = context.control_backend.name
     ct_context = load_app_context("ct_monitor", machine_id=context.profile.machine.id, control_backend=backend)
     workflow = resolve_ct_monitor_workflow(ct_context.profile)
     return {
-        "element_id": constraint.element_id,
-        "channel": constraint.channel,
+        **constraint.to_dict(),
         "pv": resolve_channel(context, constraint.element_id, constraint.channel),
         "unit": workflow["measurement_unit"],
         "scale": float(workflow["scale_to_display_unit"][backend]),
         "stale_timeout_s": workflow["stale_timeout_s"][backend],
-        "retention": constraint.retention,
-        "trim_fraction": constraint.trim_fraction,
         "sample_count": paras.samples,
         "sample_interval_s": max(paras.sample_interval, workflow["refresh_interval_ms"] / 1000),
         "minimum_samples": 3,
@@ -72,7 +70,9 @@ def numerical_ict1_config(settings, baseline):
     count = settings["sample_count"]
     used = count - 2 * math.floor(count * settings["trim_fraction"])
     noise = baseline["trimmed_standard_deviation_nc"] / (baseline["value"] * math.sqrt(used))
-    return ICT1Config(baseline["value"], settings["retention"], max(0.001, noise))
+    constraint = ChargeConstraint.from_settings(settings)
+    return ICT1Config(baseline["value"], constraint.retention, max(0.001, noise),
+                      absolute_minimum_nc=constraint.minimum_nc)
 
 
 class ICT1WindowSampler:

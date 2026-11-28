@@ -325,7 +325,7 @@ class InfoBAXCore:
         if self.ict1 is not None:
             payload.update(schema=ICT1_CHECKPOINT_SCHEMA, implementation=ICT1_IMPLEMENTATION_VERSION,
                            model=self.model, initial_queries=list(self.initial_design),
-                           ict1=asdict(self.ict1), ict1_observations=[asdict(item) for item in self.ict1_observations])
+                           ict1=self.ict1.to_dict(), ict1_observations=[asdict(item) for item in self.ict1_observations])
         elif self.model != "M0" or self._explicit_initial:
             payload.update(schema="half_infobax_checkpoint_v2",
                            implementation=MODEL_IMPLEMENTATION_VERSION,
