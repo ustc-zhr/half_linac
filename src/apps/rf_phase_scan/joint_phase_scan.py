@@ -20,6 +20,9 @@ from half_linac.src.shared.machine_profile import resolve_channel
 
 
 DEFAULT_CORRECTOR_SETTLE_TIME_S = 1.0
+ACCELERATION_EDGE_MARGIN_DEG = 10.0
+# Three robust standard deviations, using the median absolute deviation.
+RESPONSE_SUM_MAD_MULTIPLIER = 3.0 * 1.4826
 
 
 @dataclass(frozen=True)
@@ -226,21 +229,50 @@ def _inside_arc(intervals, center, half_width):
     )
 
 
-def select_joint_phase(points, reference, repeat, route):
-    """Infer RF sign from phase orderings and choose within the high-SUM points."""
+def usable_phase_responses(points):
+    """Exclude low BPM signals using the nominal SUM and pulse variation from this scan."""
     valid = [point for point in points if point["response"]["status"] == "valid"]
+    quality = {"valid_response_points": len(valid), "usable_response_points": 0}
+    if not valid:
+        return valid, quality
+
+    nominal_sums = [point["response"]["nominal_sum"] for point in valid]
+    typical_sum = statistics.median(nominal_sums)
+    phase_mad = statistics.median(abs(value - typical_sum) for value in nominal_sums)
+    pulse_deviations = [
+        abs(sample["sum"]["value"] - point["response"]["nominal_sum"])
+        for point in valid for sample in point["response"]["nominal_samples"]
+    ]
+    pulse_mad = statistics.median(pulse_deviations)
+    minimum_sum = max(0.0, typical_sum - RESPONSE_SUM_MAD_MULTIPLIER * max(phase_mad, pulse_mad))
+    usable = [point for point in valid if point["response"]["nominal_sum"] >= minimum_sum]
+    quality.update(
+        usable_response_points=len(usable),
+        response_sum_median=typical_sum,
+        response_sum_minimum=minimum_sum,
+    )
+    return usable, quality
+
+
+def select_joint_phase(points, reference, repeat, route):
+    """Choose a high-transmission point with a resolved accelerating sign."""
+    usable, quality = usable_phase_responses(points)
     for point in points:
         point["acceleration"] = "undetermined"
-    analysis = {"status": "undetermined", "valid_response_points": len(valid)}
-    if len(valid) < 3:
+        point["response"].pop("comparison_interval", None)
+    analysis = {"status": "undetermined", **quality}
+    if len(usable) < 3:
         analysis["reason"] = "Fewer than three phase points have usable BPM responses."
         return None, analysis
-    if repeat["status"] != "valid":
+    if repeat.get("status") != "valid":
         analysis["reason"] = f"Reference response could not be repeated. {repeat.get('reason', '')}"
+        return None, analysis
+    if reference not in usable or repeat["nominal_sum"] < analysis["response_sum_minimum"]:
+        analysis["reason"] = "Reference BPM response SUM fell below the scan quality limit."
         return None, analysis
 
     reference_slope = reference["response"]["slope"]
-    if any(point["response"]["slope"] * reference_slope <= 0 for point in valid) or (
+    if any(point["response"]["slope"] * reference_slope <= 0 for point in usable) or (
         repeat["slope"] * reference_slope <= 0
     ):
         analysis["reason"] = "Corrector response changed polarity during the scan."
@@ -251,7 +283,7 @@ def select_joint_phase(points, reference, repeat, route):
     intervals = [(0.0, 360.0)]
     ordered_pairs = 0
     measured = []
-    for point in valid:
+    for point in usable:
         phase = point["command_phase_deg"]
         low, high = point["response"]["magnitude_interval"]
         # Include the observed change at the repeated reference in every comparison.
@@ -275,18 +307,23 @@ def select_joint_phase(points, reference, repeat, route):
             if not intervals:
                 analysis["reason"] = "BPM response ordering is inconsistent with one RF crest."
                 return None, analysis
-    analysis.update(crest_intervals_deg=intervals, ordered_pairs=ordered_pairs)
+    analysis.update(
+        crest_intervals_deg=intervals,
+        ordered_pairs=ordered_pairs,
+        acceleration_edge_margin_deg=ACCELERATION_EDGE_MARGIN_DEG,
+    )
     if not ordered_pairs:
         analysis["reason"] = "Phase-to-phase response differences are within measurement uncertainty."
         return None, analysis
 
     accelerating = []
-    for point in valid:
+    half_width = 90 - phase_error - ACCELERATION_EDGE_MARGIN_DEG
+    for point in usable:
         phase = point["command_phase_deg"]
-        if _inside_arc(intervals, phase, 90 - phase_error):
+        if _inside_arc(intervals, phase, half_width):
             point["acceleration"] = "accelerating"
             accelerating.append(point)
-        elif _inside_arc(intervals, phase + 180, 90 - phase_error):
+        elif _inside_arc(intervals, phase + 180, half_width):
             point["acceleration"] = "decelerating"
     if not accelerating:
         analysis["reason"] = "No confirmed accelerating point has a usable BPM response."
@@ -295,11 +332,15 @@ def select_joint_phase(points, reference, repeat, route):
     minimum_sum = max(route.minimum_transmission_sum, accelerating_peak * route.high_sum_fraction)
     analysis.update(accelerating_peak_sum=accelerating_peak, selection_minimum_sum=minimum_sum)
     candidates = [point for point in accelerating if point["median_sum"] >= minimum_sum]
-    smallest = min(candidates, key=lambda point: point["response"]["magnitude"])
-    upper = smallest["response"]["comparison_interval"][1]
+    if not candidates:
+        analysis["reason"] = "No confirmed accelerating point meets the transmission SUM limit."
+        return None, analysis
     selected = min(
-        (point for point in candidates if point["response"]["comparison_interval"][0] <= upper),
-        key=lambda point: (-point["median_sum"], abs(point["offset_deg"]), point["offset_deg"]),
+        candidates,
+        key=lambda point: (
+            point["offset_deg"] != 0.0, -point["median_sum"],
+            abs(point["offset_deg"]), point["offset_deg"],
+        ),
     )
     analysis["status"] = "accelerating"
     return selected, analysis

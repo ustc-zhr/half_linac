@@ -158,7 +158,7 @@ def test_corrector_readback_timeout_and_settle_before_sampling(joint_setup, read
     assert record["restore_status"] == "verified"
 
 
-@pytest.mark.parametrize("enabled, applied", [(True, -160.0), (False, 20.0)])
+@pytest.mark.parametrize("enabled, applied", [(True, 170.0), (False, 20.0)])
 def test_scan_with_and_without_acceleration(joint_setup, tmp_path, enabled, applied):
     runner, beam = make_runner(joint_setup, tmp_path, enabled=enabled)
     result = runner.run()
@@ -174,6 +174,7 @@ def test_scan_with_and_without_acceleration(joint_setup, tmp_path, enabled, appl
         assert by_phase[-70.0]["acceleration"] == "undetermined"
         assert record["selected_sum"] == 50000
         assert record["response_reference_repeat"]["status"] == "valid"
+        assert len(beam.phase_commands) == len(record["points"]) + 3
         assert beam.current_commands == pytest.approx([-0.06, 0.34, 0.14] * 14)
         assert beam.closed
         logged = json.loads((tmp_path / "run.json").read_text())
@@ -185,13 +186,41 @@ def test_scan_with_and_without_acceleration(joint_setup, tmp_path, enabled, appl
         assert "acceleration_analysis" not in record
 
 
-def test_joint_scan_uses_high_sum_within_the_accelerating_region(joint_setup, tmp_path):
+@pytest.mark.parametrize("initial_sum, applied", [(49000, 170.0), (45000, -130.0)])
+def test_joint_scan_uses_high_sum_within_the_accelerating_region(
+    joint_setup, tmp_path, initial_sum, applied,
+):
     runner, beam = make_runner(joint_setup, tmp_path)
-    beam.signal = lambda phase: {-160.0: 45000, 170.0: 50000, -130.0: 49000}.get(phase, 40000)
+    beam.signal = lambda phase: {-160.0: 49000, 170.0: initial_sum, -130.0: 50000}.get(phase, 40000)
     record = runner.run()["items"][0]
     assert record["acceleration_analysis"]["selection_minimum_sum"] == 47500
-    assert record["applied_phase_deg"] == 170.0
-    assert record["selected_sum"] == 50000
+    assert record["applied_phase_deg"] == applied
+    assert record["selected_sum"] == beam.signal(applied)
+
+
+@pytest.mark.parametrize("low_bpm_sum", [True, False])
+def test_joint_scan_checks_bpm_sum_before_using_response_order(joint_setup, tmp_path, low_bpm_sum):
+    runner, beam = make_runner(joint_setup, tmp_path)
+    initial = beam.phase
+    model_slope = beam.slope
+    beam.slope = lambda phase: 7000.0 if phase == initial else model_slope(phase)
+    if low_bpm_sum:
+        beam.orbit_sum = lambda phase, _current: 25000 if phase == initial else 33000
+
+    result = runner.run()
+    record = result["items"][0]
+    analysis = record["acceleration_analysis"]
+    assert record["points"][0]["response"]["status"] == "valid"
+    assert record["initial_phase_acceleration"] == "undetermined"
+    if low_bpm_sum:
+        assert result["status"] == "completed", result["error"]
+        assert record["applied_phase_deg"] != initial
+        assert record["response_reference_repeat"]["acquisition_index"] == 1
+        assert analysis["usable_response_points"] == analysis["valid_response_points"] - 1
+    else:
+        assert result["status"] == "undetermined"
+        assert "inconsistent" in result["error"]
+        assert beam.phase == initial
 
 
 @pytest.mark.parametrize("unusable", ["beam_loss", "flat_response", "low_accelerating_sum"])
@@ -273,7 +302,7 @@ def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeyp
     page._item(0, record)
     assert page.table.item(0, page.ACCELERATION_COLUMN).text() == "Accelerating"
     assert page.table.item(0, 4).text() == "20.00°"
-    assert page.table.item(0, 6).text() == "-160.00°"
+    assert page.table.item(0, 6).text() == "170.00°"
     labels = [label.get_text() for label in page.plot.axes.get_legend().get_texts()]
     assert labels == ["Accelerating", "Decelerating", "Undetermined", "Applied phase"]
     page.close()

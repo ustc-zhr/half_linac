@@ -66,7 +66,7 @@ class TransmissionRecoveryProfileTests(unittest.TestCase):
         profile = load_profile("half")
         workflow = get_workflow(profile, "rf_phase_scan")
         recovery = workflow["transmission_recovery"]
-        self.assertEqual(recovery["phase_scan"]["half_range_deg"], 90)
+        self.assertEqual(recovery["phase_scan"]["half_range_deg"], 180)
         self.assertEqual(recovery["phase_scan"]["points"], 13)
         mapping = [
             (stage["rf_element"], stage["target_bpm"])

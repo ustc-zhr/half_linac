@@ -158,12 +158,16 @@ transmission and measures `BPM10` X/SUM at nominal current and at
 `XC10 ± 0.2 A` by default, with LLRF AMP held fixed. **Start Selected** lets
 operators edit the corrector step for each selected station. The path assumes
 that higher momentum produces a smaller horizontal response with `QL16` defocusing.
-The scan checks quadrupole current and forward power and repeats one response
-to account for drift. Among confirmed accelerating points at or above 95% of the
-accelerating region's peak SUM, it applies the phase with the smallest
-resolved response. Comparable responses favor higher SUM. If the scan
-cannot confirm an accelerating point, it restores the initial phase. Per-point
-responses and classifications are saved in `run.json`.
+The default scan covers ±180° in 30° steps. The scan checks quadrupole current
+and forward power and repeats one usable response to account for drift.
+The response BPM's nominal SUM is screened for low outliers using the median
+and measured variation in the scan. The remaining responses must place a
+candidate at least 10° inside the accelerating half-cycle after accounting
+for phase readback tolerance. Among confirmed accelerating points at or
+above 95% of that region's peak transmission SUM, the initial phase takes
+priority, followed by the point with the highest transmission. If no point
+qualifies, the scan restores the initial phase. Per-point responses,
+classifications, and the response SUM threshold are saved in `run.json`.
 
 HALF lists candidate paths for `LLRF03`–`LLRF20` in
 `transmission_recovery.phase_response_candidates`, keyed by each stage's

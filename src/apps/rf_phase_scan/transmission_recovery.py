@@ -17,6 +17,7 @@ from half_linac.src.apps.rf_phase_scan.joint_phase_scan import (
     JointPhaseScanConfig,
     PhaseResponseMeasurement,
     select_joint_phase,
+    usable_phase_responses,
 )
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import (
     phase_difference_deg,
@@ -528,11 +529,11 @@ class TransmissionRecoveryRunner:
         return points
 
     def _repeat_reference(self, index, stage, points, response):
-        valid = [point for point in points if point["response"]["status"] == "valid"]
-        if len(valid) < 3:
+        usable, _ = usable_phase_responses(points)
+        if len(usable) < 3:
             return
         self._check_cancelled()
-        reference = valid[0]
+        reference = usable[0]
         self.callbacks.state(f"{stage.rf_element}: repeating reference response")
         phase = self._set_phase(stage, reference["command_phase_deg"])
         self._wait(self.settings.settle_time_s)
@@ -616,7 +617,9 @@ class TransmissionRecoveryRunner:
                 verification = record["response_application_verification"] = {"before": {}}
                 response.verify_phase(initial_phase, verification["before"])
             try:
-                applied = self._set_phase(stage, best["command_phase_deg"])
+                applied = best["command_phase_deg"]
+                if response is None or best["offset_deg"] != 0.0:
+                    applied = self._set_phase(stage, applied)
                 if response is not None:
                     self._wait(self.settings.settle_time_s)
                     verification["after"] = {}
