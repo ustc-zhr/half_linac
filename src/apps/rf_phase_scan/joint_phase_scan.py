@@ -34,6 +34,7 @@ class JointPhaseScanConfig:
     optics_current_tolerance_a: float
     forward_power_pv: str
     maximum_relative_power_change: float
+    other_rf_readbacks: tuple[tuple[str, str, str], ...] = ()
 
     def with_corrector_step(self, step, *, settle_time_s=None):
         step = _number(step, "Corrector step", minimum=SETPOINT_TOLERANCE)
@@ -51,6 +52,49 @@ class JointPhaseScanConfig:
         return replace(self, response=response)
 
 
+def joint_phase_spec(recovery, index):
+    """Expand a station's selected response path and optional parameter overrides."""
+    item = recovery["stages"][index]
+    selection = item.get("phase_response")
+    if selection is None:
+        spec = item.get("acceleration_check")
+        if not isinstance(spec, dict) or "phase_response" not in spec:
+            return None
+        overrides = spec["phase_response"]
+    else:
+        candidate_index = selection["candidate"]
+        if type(candidate_index) is not int or candidate_index < 0:
+            raise ValueError("Phase-response candidate must be a nonnegative integer.")
+        paths = recovery["phase_response_candidates"][item["target_bpm"]]
+        if candidate_index >= len(paths):
+            raise ValueError("Selected phase-response candidate is unavailable.")
+        path = paths[candidate_index]
+        windows = path.get("quadrupole_windows", {})
+        conditions = []
+        for quad in path["quadrupoles"]:
+            condition = {"element": quad, "channel": "K1_total"}
+            if quad in windows:
+                condition["window"] = windows[quad]
+            conditions.append(condition)
+        other_rf = [
+            stage["rf_element"] for stage in recovery["stages"][index + 1:]
+            if stage["target_bpm"] == item["target_bpm"]
+        ]
+        other_rf.extend(path["intervening_rf"])
+        spec = {
+            "corrector": path["corrector"], "bpm": path["bpm"], "conditions": conditions,
+            "other_rf": tuple(dict.fromkeys(other_rf)),
+        }
+        overrides = {key: value for key, value in selection.items() if key != "candidate"}
+
+    defaults = recovery.get("phase_response_defaults", {})
+    route = {**defaults, **overrides}
+    for field in ("amplitude", "current"):
+        if field in overrides:
+            route[field] = {**defaults.get(field, {}), **overrides[field]}
+    return {**spec, "phase_response": route}
+
+
 def resolve_joint_phase_scan(context, stage, settings, spec):
     route = spec["phase_response"]
     conditions = spec["conditions"]
@@ -59,7 +103,7 @@ def resolve_joint_phase_scan(context, stage, settings, spec):
         or context.profile.get_element(item["element"]).kind != "quad"
         for item in conditions
     ):
-        raise ValueError("A phase-response path requires horizontally defocusing quadrupoles.")
+        raise ValueError("A phase-response path requires quadrupole K1_total readbacks.")
     fraction = _number(route["high_sum_fraction"], "high_sum_fraction", minimum=0)
     power_change = _number(
         route["maximum_relative_power_change"], "maximum_relative_power_change", minimum=0,
@@ -77,6 +121,9 @@ def resolve_joint_phase_scan(context, stage, settings, spec):
         },
         fixed_amplitude=True,
     )
+    for condition in response.conditions:
+        if condition.limits and condition.limits[0] < 0 < condition.limits[1]:
+            raise ValueError(f"{condition.element}: K1_total window must keep one polarity.")
     return JointPhaseScanConfig(
         response=replace(response, corrector_readback_timeout_s=5.0),
         minimum_transmission_sum=_number(
@@ -92,6 +139,10 @@ def resolve_joint_phase_scan(context, stage, settings, spec):
         ),
         forward_power_pv=resolve_channel(context, stage.rf_element, "kly_forward_power"),
         maximum_relative_power_change=power_change,
+        other_rf_readbacks=tuple(
+            (rf, resolve_channel(context, rf, "phase_readback"), resolve_channel(context, rf, "amplitude_readback"))
+            for rf in spec.get("other_rf", ())
+        ),
     )
 
 
@@ -110,6 +161,12 @@ class PhaseResponseMeasurement(AccelerationCheck):
     def _read_optics(self):
         return {pv: self._read(pv).value for pv in self.route.optics_current_pvs}
 
+    def _read_other_rf(self):
+        return {
+            rf: (self._read(phase_pv).value, self._read(amp_pv).value)
+            for rf, phase_pv, amp_pv in self.route.other_rf_readbacks
+        }
+
     @contextmanager
     def open(self):
         self.client = self.client_factory()
@@ -122,6 +179,7 @@ class PhaseResponseMeasurement(AccelerationCheck):
             if not low <= self.current - step < self.current + step <= high:
                 raise RuntimeError(f"{self.config.corrector.element}: perturbation exceeds current limits.")
             self.optics = self._read_optics()
+            self.other_rf = self._read_other_rf()
             self.forward_power = self._read(self.route.forward_power_pv).value
             if self.amplitude <= 0 or self.forward_power <= 0:
                 raise RuntimeError(f"{self.config.rf_element}: RF amplitude or forward power is zero.")
@@ -130,6 +188,7 @@ class PhaseResponseMeasurement(AccelerationCheck):
                 "initial_current_a": self.current,
                 "initial_optics_currents_a": self.optics,
                 "initial_forward_power_readback": self.forward_power,
+                "other_rf_phase_and_amplitude": self.other_rf,
             }
         finally:
             self.client.close()
@@ -139,8 +198,8 @@ class PhaseResponseMeasurement(AccelerationCheck):
         readbacks = self.result["condition_readbacks"]
         conditions = self.config.conditions
         for condition, reading in zip(conditions, readbacks[-len(conditions):]):
-            if reading["value"] > 0:
-                raise RuntimeError(f"{condition.element}: the horizontal optics are focusing.")
+            if condition.limits is None and reading["value"] > 0:
+                raise RuntimeError(f"{condition.element}: focusing optics require a K1_total window.")
         optics = self._read_optics()
         self.result["optics_currents_a"].append(optics)
         for pv, current in optics.items():
@@ -150,6 +209,12 @@ class PhaseResponseMeasurement(AccelerationCheck):
         self.result["forward_power_readbacks"].append(power)
         if abs(power / self.forward_power - 1) > self.route.maximum_relative_power_change:
             raise RuntimeError(f"{self.config.rf_element}: forward power changed during the phase scan.")
+        for rf, (rf_phase, amp) in self._read_other_rf().items():
+            initial_phase, initial_amp = self.other_rf[rf]
+            if abs(phase_difference_deg(rf_phase, initial_phase)) > self.config.phase_tolerance_deg:
+                raise RuntimeError(f"{rf}: neighboring RF phase changed during the phase scan.")
+            if abs(amp - initial_amp) > self.config.amplitude.tolerance:
+                raise RuntimeError(f"{rf}: neighboring RF amplitude changed during the phase scan.")
         return phase
 
     def _verify_phase(self, phase):

@@ -9,6 +9,7 @@ import pytest
 from half_linac.src.apps.rf_phase_scan.amp_scan import AmpReading
 from half_linac.src.apps.rf_phase_scan.joint_phase_scan import (
     PhaseResponseMeasurement,
+    joint_phase_spec,
     resolve_joint_phase_scan,
 )
 from half_linac.src.apps.rf_phase_scan.transmission_recovery import (
@@ -33,7 +34,7 @@ def joint_setup():
         sample_interval_s=0,
     )
     route = resolve_joint_phase_scan(
-        context, stages[0], settings, recovery["stages"][0]["acceleration_check"],
+        context, stages[0], settings, joint_phase_spec(recovery, 0),
     )
     return context, workflow, stages, settings, route
 
@@ -51,6 +52,14 @@ class PhaseScanBeam:
         self.orbit_sum = lambda _phase, _current: 33000
         self.slope = lambda phase: 2800 / (1 + 0.35 * math.cos(math.radians(phase + 160)))
         self.forward_power = 65.5
+        self.other_readbacks = {
+            pv: value for _, phase_pv, amp_pv in route.other_rf_readbacks
+            for pv, value in ((phase_pv, -45.0), (amp_pv, 90.0))
+        }
+        self.optics = {
+            condition.pv: sum(condition.limits) / 2 if condition.limits else -2.7391
+            for condition in route.response.conditions
+        }
         self.closed = False
 
     def read_scan(self, pv):
@@ -80,9 +89,10 @@ class PhaseScanBeam:
             config.amplitude.readback: 87.497,
             config.corrector.setpoint: self.current,
             config.corrector.readback: self.current,
-            config.conditions[0].pv: -2.7391,
-            self.route.optics_current_pvs[0]: -30.0,
             self.route.forward_power_pv: self.forward_power,
+            **dict.fromkeys(self.route.optics_current_pvs, -30.0),
+            **self.optics,
+            **self.other_readbacks,
         }
         return AmpReading(values[pv], None)
 
@@ -96,14 +106,18 @@ class PhaseScanBeam:
         self.closed = True
 
 
-def make_runner(joint_setup, tmp_path, *, enabled=True):
-    context, _, stages, settings, route = joint_setup
+def make_runner(joint_setup, tmp_path, *, enabled=True, station_index=0):
+    context, workflow, stages, settings, route = joint_setup
+    stage = stages[station_index]
+    if station_index:
+        spec = joint_phase_spec(workflow["transmission_recovery"], station_index)
+        route = resolve_joint_phase_scan(context, stage, settings, spec)
     route = route.with_corrector_step(route.response.corrector.step, settle_time_s=0)
-    beam = PhaseScanBeam(stages[0], route)
+    beam = PhaseScanBeam(stage, route)
     runner = TransmissionRecoveryRunner(
-        context=context, candidates=stages, stages=stages[:1], settings=settings,
+        context=context, candidates=stages, stages=(stage,), settings=settings,
         directory=tmp_path, read=beam.read_scan, write=beam.write_scan,
-        response_routes={"LLRF02": route} if enabled else None,
+        response_routes={stage.rf_element: route} if enabled else None,
         response_client_factory=lambda: beam, lock_factory=lambda *_: Lock(),
         sleeper=lambda _: None,
     )
@@ -274,9 +288,53 @@ def test_joint_scan_restores_corrector_on_interruption(joint_setup, tmp_path, in
         assert beam.phase == 170.0
 
 
+@pytest.mark.parametrize(
+    "station_index, rf, corrector, bpm, other_rf",
+    [
+        (1, "LLRF03", "XC13", "BPM13", ["LLRF04", "LLRF05", "LLRF06"]),
+        (3, "LLRF05", "XC14", "BPM14", ["LLRF06", "LLRF07", "LLRF08"]),
+        (17, "LLRF19", "XC21", "BPM21", ["LLRF20"]),
+        (18, "LLRF20", "XC21", "BPM21", []),
+    ],
+)
+def test_joint_scan_runs_candidate_paths(joint_setup, tmp_path, station_index, rf, corrector, bpm, other_rf):
+    runner, beam = make_runner(joint_setup, tmp_path, station_index=station_index)
+    result = runner.run()
+    assert result["status"] == "completed", result["error"]
+    route = runner.response_routes[rf]
+    assert route.response.corrector.element == corrector
+    assert route.response.bpm == bpm
+    assert [station for station, _, _ in route.other_rf_readbacks] == other_rf
+    assert result["items"][0]["applied_phase_deg"] == 170.0
+    assert beam.current == 0.14
+
+
+@pytest.mark.parametrize("change", ["neighbor_phase", "neighbor_amp", "optics"])
+def test_joint_scan_restores_after_candidate_conditions_change(joint_setup, tmp_path, change):
+    runner, beam = make_runner(joint_setup, tmp_path, station_index=3)
+    rf, phase_pv, amp_pv = beam.route.other_rf_readbacks[0]
+
+    def on_current_write():
+        if change == "neighbor_phase":
+            beam.other_readbacks[phase_pv] = 0.0
+        elif change == "neighbor_amp":
+            beam.other_readbacks[amp_pv] = 85.0
+        else:
+            beam.optics[beam.route.response.conditions[0].pv] = 1.0
+
+    beam.on_current_write = on_current_write
+    result = runner.run()
+    assert result["status"] == "failed"
+    assert result["error"].startswith("QL22 K1_total" if change == "optics" else f"{rf}: neighboring RF")
+    assert beam.phase == 170.0
+    assert beam.current == 0.14
+    assert beam.closed
+
+
 def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
-    from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtCore import QTimer
+    from PyQt5.QtWidgets import QApplication, QDoubleSpinBox, QScrollArea
     from half_linac.src.apps.rf_phase_scan.transmission_recovery_ui import TransmissionRecoveryPage
 
     app = QApplication.instance() or QApplication([])
@@ -289,9 +347,26 @@ def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeyp
     assert not page.use_acceleration.isChecked()
     assert page._selected_rows() == list(range(len(stages)))
     page.use_acceleration.setChecked(True)
-    assert page._selected_rows() == [0]
-    assert page.stage_checkboxes[0].isEnabled()
-    assert all(not selector.isEnabled() for selector in page.stage_checkboxes[1:])
+    assert not page.response_unavailable
+    assert page._selected_rows() == list(range(19))
+    assert all(selector.isEnabled() for selector in page.stage_checkboxes)
+    routes = {
+        stage.rf_element: resolve_joint_phase_scan(
+            context, stage, page.default_settings, page.response_specs[stage.rf_element],
+        )
+        for stage in stages
+    }
+    dialog_details = []
+
+    def cancel_confirmation():
+        dialog = app.activeModalWidget()
+        scroll = dialog.findChild(QScrollArea)
+        dialog_details.append(len(scroll.findChildren(QDoubleSpinBox)) if scroll else 0)
+        dialog.reject()
+
+    QTimer.singleShot(0, cancel_confirmation)
+    assert page._confirm_joint_scan(stages, routes) is None
+    assert dialog_details == [19]
     page.use_acceleration.setChecked(False)
     assert page._selected_rows() == list(range(len(stages)))
 
@@ -336,6 +411,7 @@ def test_gui_displays_corrector_response_for_joint_scan_results(joint_setup, tmp
     monkeypatch.setattr(ui.QMessageBox, "question", lambda *_: ui.QMessageBox.Yes)
 
     page.use_acceleration.setChecked(True)
+    page.select_stations(["LLRF02"])
     assert len(page.plot.fig.axes) == 1
     page.start_button.click()
     sum_axes, response_axes = page.plot.fig.axes
@@ -399,6 +475,7 @@ def test_gui_corrector_step_reaches_runner_and_capture(
         write_enabled=True, runtime_paths={"runs_dir": tmp_path},
     )
     page.use_acceleration.setChecked(True)
+    page.select_stations(["LLRF02"])
     page.settle.setValue(0.25)
     signal = SimpleNamespace(connect=lambda _callback: None)
     launched = []

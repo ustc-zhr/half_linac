@@ -138,6 +138,17 @@
       "sample_interval_s": 1,
       "min_valid_samples": 2
     },
+    "phase_response_defaults": {
+      "amplitude": {"tolerance": 0.1},
+      "current": {"step": 0.2, "tolerance": 0.005},
+      "minimum_sum": 10000,
+      "minimum_transmission_sum": 10000,
+      "maximum_relative_sum_change": 0.2,
+      "high_sum_fraction": 0.95,
+      "pair_tolerance_s": 0.001,
+      "optics_current_tolerance_a": 0.1,
+      "maximum_relative_power_change": 0.05
+    },
     "stages": [
       {
         "rf_element": "LLRF02",
@@ -148,37 +159,27 @@
           "corrector": "XC10",
           "bpm": "BPM10",
           "conditions": [{"element": "QL16", "channel": "K1_total"}],
-          "phase_response": {
-            "amplitude": {"tolerance": 0.1},
-            "current": {"step": 0.2, "tolerance": 0.005},
-            "minimum_sum": 10000,
-            "minimum_transmission_sum": 10000,
-            "maximum_relative_sum_change": 0.2,
-            "high_sum_fraction": 0.95,
-            "pair_tolerance_s": 0.001,
-            "optics_current_tolerance_a": 0.1,
-            "maximum_relative_power_change": 0.05
-          }
+          "phase_response": {}
         }
       },
-      {"rf_element": "LLRF03", "target_bpm": "BPM12"},
-      {"rf_element": "LLRF04", "target_bpm": "BPM12"},
-      {"rf_element": "LLRF05", "target_bpm": "BPM13"},
-      {"rf_element": "LLRF06", "target_bpm": "BPM13"},
-      {"rf_element": "LLRF07", "target_bpm": "BPM14"},
-      {"rf_element": "LLRF08", "target_bpm": "BPM14"},
-      {"rf_element": "LLRF09", "target_bpm": "BPM15"},
-      {"rf_element": "LLRF10", "target_bpm": "BPM15"},
-      {"rf_element": "LLRF11", "target_bpm": "BPM16"},
-      {"rf_element": "LLRF12", "target_bpm": "BPM16"},
-      {"rf_element": "LLRF13", "target_bpm": "BPM17"},
-      {"rf_element": "LLRF14", "target_bpm": "BPM17"},
-      {"rf_element": "LLRF15", "target_bpm": "BPM18"},
-      {"rf_element": "LLRF16", "target_bpm": "BPM18"},
-      {"rf_element": "LLRF17", "target_bpm": "BPM19"},
-      {"rf_element": "LLRF18", "target_bpm": "BPM19"},
-      {"rf_element": "LLRF19", "target_bpm": "BPM20"},
-      {"rf_element": "LLRF20", "target_bpm": "BPM20"}
+      {"rf_element": "LLRF03", "target_bpm": "BPM12", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF04", "target_bpm": "BPM12", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF05", "target_bpm": "BPM13", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF06", "target_bpm": "BPM13", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF07", "target_bpm": "BPM14", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF08", "target_bpm": "BPM14", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF09", "target_bpm": "BPM15", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF10", "target_bpm": "BPM15", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF11", "target_bpm": "BPM16", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF12", "target_bpm": "BPM16", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF13", "target_bpm": "BPM17", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF14", "target_bpm": "BPM17", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF15", "target_bpm": "BPM18", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF16", "target_bpm": "BPM18", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF17", "target_bpm": "BPM19", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF18", "target_bpm": "BPM19", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF19", "target_bpm": "BPM20", "phase_response": {"candidate": 0}},
+      {"rf_element": "LLRF20", "target_bpm": "BPM20", "phase_response": {"candidate": 0}}
     ],
     "phase_response_candidates": {
       "BPM12": [
@@ -194,6 +195,7 @@
           "corrector": "XC14",
           "bpm": "BPM14",
           "quadrupoles": ["QL22"],
+          "quadrupole_windows": {"QL22": [0.46, 0.70]},
           "intervening_rf": ["LLRF07", "LLRF08"]
         }
       ],
@@ -210,6 +212,7 @@
           "corrector": "XC16",
           "bpm": "BPM16",
           "quadrupoles": ["QL24"],
+          "quadrupole_windows": {"QL24": [0.46, 0.70]},
           "intervening_rf": ["LLRF11", "LLRF12"]
         }
       ],
@@ -226,6 +229,7 @@
           "corrector": "XC18",
           "bpm": "BPM18",
           "quadrupoles": ["QL26"],
+          "quadrupole_windows": {"QL26": [0.46, 0.70]},
           "intervening_rf": ["LLRF15", "LLRF16"]
         }
       ],
@@ -250,12 +254,14 @@
           "corrector": "XC21",
           "bpm": "BPM21",
           "quadrupoles": ["QT02", "QT03", "QT04"],
+          "quadrupole_windows": {"QT02": [1.12, 1.69], "QT03": [-1.61, -1.07], "QT04": [0.70, 1.07]},
           "intervening_rf": []
         },
         {
           "corrector": "XC22",
           "bpm": "BPM22",
           "quadrupoles": ["QT05", "QT06"],
+          "quadrupole_windows": {"QT05": [1.84, 2.78], "QT06": [-2.38, -1.58]},
           "intervening_rf": []
         }
       ]

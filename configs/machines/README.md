@@ -153,11 +153,10 @@ the scan page. Power Scan and Transmission Recovery use the
 `rf_phase_scan` workflow's `write_control` policy for the active backend.
 
 The **Use Accel / Decel** checkbox in Transmission Recovery defaults to off.
-The HALF profile enables this mode for `LLRF02`. It uses `BPM08` SUM for
-transmission and measures `BPM10` X/SUM at nominal current and at
-`XC10 ± 0.2 A` by default, with LLRF AMP held fixed. **Start Selected** lets
-operators edit the corrector step for each selected station. The path assumes
-that higher momentum produces a smaller horizontal response with `QL16` defocusing.
+The HALF profile enables this mode for `LLRF02`–`LLRF20`. For `LLRF02`, it uses
+`BPM08` SUM for transmission and measures `BPM10` X/SUM with `XC10` and `QL16`
+defocusing. The default corrector step is ±0.2 A, with LLRF AMP held fixed.
+**Start Selected** lets operators edit the corrector step for each selected station.
 The default scan covers ±180° in 30° steps. The scan checks quadrupole current
 and forward power and repeats one usable response to account for drift.
 The response BPM's nominal SUM is screened for low outliers using the median
@@ -169,13 +168,39 @@ priority, followed by the point with the highest transmission. If no point
 qualifies, the scan restores the initial phase. Per-point responses,
 classifications, and the response SUM threshold are saved in `run.json`.
 
-HALF lists candidate paths for `LLRF03`–`LLRF20` in
-`transmission_recovery.phase_response_candidates`, keyed by each stage's
-`target_bpm`. Paths are in preference order. The quadrupoles and inferred
-`intervening_rf` describe the span from the corrector to the response BPM.
-For `LLRF19`, also account for `LLRF20` upstream of both candidate
-correctors. An operational scan path uses the stage's
-`acceleration_check.phase_response` configuration after optics validation.
+Each `LLRF03`–`LLRF20` stage selects a zero-based `phase_response.candidate`
+in `transmission_recovery.phase_response_candidates` under its `target_bpm`.
+All start with candidate 0. Set overrides alongside `candidate` to tune the
+shared `phase_response_defaults` for an individual station. The scan checks
+the phase and AMP readbacks of RF stations between the corrector and response
+BPM, and of later stations that share the transmission BPM. For `LLRF19`,
+this includes `LLRF20` upstream of both candidate correctors.
+
+The offline response-path check runs from the repository root.
+
+```bash
+python3 scripts/repo_python.py scripts/check_rf_phase_response_paths.py
+```
+
+The check resolves the profile channels and compares the horizontal response
+on the nominal `ALL_MAIN` lattice at three station voltages. It holds the
+magnet fields fixed and reports other RF stations to monitor during calibration.
+At ±10 MV about the nominal voltage, the response magnitude decreases with
+increasing voltage for all listed paths. The model represents the incremental
+response near the reference point. LLRF20 uses the lattice's zero-voltage
+reference, so its result is a sensitivity estimate.
+
+| Stations | Response path | Initial optics and calibration priority |
+| --- | --- | --- |
+| LLRF03–04 | XC13 → BPM13 | First pair. QL21 is defocusing and the model predicts the largest response change. |
+| LLRF07–08, LLRF11–12, LLRF15–18 | XC15 → BPM15, XC17 → BPM17, XC19 → BPM19, XC20 → BPM20 | Defocusing paths with smaller changes. Check the downstream RF listed by the script. |
+| LLRF05–06, LLRF09–10, LLRF13–14 | XC14 → BPM14, XC16 → BPM16, XC18 → BPM18 | The focusing QL22, QL24, and QL26 use initial K1 windows around their model values. |
+| LLRF19–20 | XC21 → BPM21 | The selected mixed-polarity path uses K1 windows for QT02–QT04. XC22 → BPM22 is the second candidate. |
+
+The signed `quadrupole_windows` in 1/m² are initial settings, about ±20% around
+the nominal lattice values. A quadrupole without a window must be horizontally
+defocusing. Use measured BPM SUM, RF readbacks, and response reproducibility
+to refine the K1 windows and per-station thresholds during commissioning.
 
 Transmission Recovery can also check the gain direction at an applied phase.
 Set `acceleration_check` on an individual stage after validating that increasing

@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -30,6 +31,7 @@ from half_linac.src.apps.rf_phase_scan.acceleration_check import (
 )
 from half_linac.src.apps.rf_phase_scan.joint_phase_scan import (
     DEFAULT_CORRECTOR_SETTLE_TIME_S,
+    joint_phase_spec,
     resolve_joint_phase_scan,
 )
 from half_linac.src.apps.rf_phase_scan.phase_energy_scan import phase_difference_deg
@@ -190,11 +192,11 @@ class TransmissionRecoveryPage(QWidget):
         self.corrector_steps = {}
         self.corrector_settle_time_s = DEFAULT_CORRECTOR_SETTLE_TIME_S
         if self.write_enabled:
-            for stage, item in zip(self.candidates, self.config["stages"]):
-                spec = item.get("acceleration_check")
-                if not isinstance(spec, dict) or "phase_response" not in spec:
-                    continue
+            for stage in self.candidates:
                 try:
+                    spec = joint_phase_spec(self.config, stage.index)
+                    if spec is None:
+                        continue
                     route = resolve_joint_phase_scan(context, stage, self.default_settings, spec)
                 except (KeyError, ValueError, TypeError, OverflowError) as exc:
                     self.response_unavailable[stage.rf_element] = str(exc)
@@ -253,7 +255,7 @@ class TransmissionRecoveryPage(QWidget):
         if self.response_specs:
             response_tip = (
                 "Measure corrector response during the phase scan and apply a confirmed "
-                f"accelerating phase with high BPM SUM. Available for {', '.join(self.response_specs)}."
+                f"accelerating phase with high BPM SUM. Available for {len(self.response_specs)} stations."
             )
         elif self.response_unavailable:
             response_tip = "\n".join(
@@ -438,10 +440,9 @@ class TransmissionRecoveryPage(QWidget):
                 settings.points * per_point + settings.settle_time_s
             ) / 60.0
             if self.use_acceleration.isChecked():
-                names = ", ".join(self.candidates[row].rf_element for row in rows)
                 detail = (
-                    f"{names} selected · BPM SUM and corrector response at each usable phase."
-                    if rows else f"Select a station with a phase-response path · {', '.join(self.response_specs)}."
+                    f"{len(rows)} selected · BPM SUM and corrector response at each usable phase."
+                    if rows else "Select a station with a phase-response path."
                 )
             else:
                 detail = (
@@ -494,6 +495,9 @@ class TransmissionRecoveryPage(QWidget):
         )
         description.setWordWrap(True)
         layout.addRow(description)
+        station_list = QWidget(dialog)
+        station_layout = QFormLayout(station_list)
+        station_layout.setContentsMargins(0, 0, 0, 0)
         controls = {}
         for stage in stages:
             response = routes[stage.rf_element].response
@@ -506,11 +510,20 @@ class TransmissionRecoveryPage(QWidget):
             step.setSuffix(" A")
             step.setPrefix("± ")
             step.setToolTip("Corrector current step per side")
-            layout.addRow(
+            station_layout.addRow(
                 f"{stage.rf_element} · {stage.target_bpm} SUM · {corrector.element} → {response.bpm}",
                 step,
             )
             controls[stage.rf_element] = step
+        if station_list.sizeHint().height() > 320:
+            scroll = QScrollArea(dialog)
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(station_list)
+            scroll.setMinimumWidth(station_list.sizeHint().width() + scroll.verticalScrollBar().sizeHint().width() + 4)
+            scroll.setFixedHeight(320)
+            layout.addRow(scroll)
+        else:
+            layout.addRow(station_list)
         settle = self._double_spin(self.corrector_settle_time_s, 0, 60)
         settle.setSuffix(" s")
         settle.setToolTip(
