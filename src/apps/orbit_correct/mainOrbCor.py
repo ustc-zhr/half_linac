@@ -323,7 +323,7 @@ QLabel:disabled {{
     color: {button_disabled_fg};
 }}
 
-QComboBox::drop-down, QDoubleSpinBox::drop-down {{
+QWidget#centralwidget QComboBox::drop-down, QDoubleSpinBox::drop-down {{
     border: none;
     width: 20px;
 }}
@@ -333,6 +333,61 @@ QComboBox QAbstractItemView {{
     color: {input_fg};
     border: 1px solid {input_border};
     selection-background-color: {button_hover_bg};
+}}
+
+QFileDialog QAbstractItemView {{
+    background-color: {input_bg};
+    color: {input_fg};
+    border: 1px solid {input_border};
+    selection-background-color: {metric_active_fg};
+    selection-color: {window_bg};
+}}
+
+QFileDialog QAbstractItemView, QFileDialog QComboBox, QFileDialog QLineEdit {{
+    font-size: 12px;
+}}
+
+QFileDialog QHeaderView::section {{
+    background-color: {panel_bg};
+    color: {window_fg};
+    border: none;
+    border-right: 1px solid {panel_border};
+    border-bottom: 1px solid {panel_border};
+    padding: 3px 5px;
+}}
+
+QFileDialog QToolButton {{
+    background-color: {button_bg};
+    border: 1px solid {button_border};
+    border-radius: 5px;
+    padding: 3px;
+}}
+
+QFileDialog QToolButton:hover, QFileDialog QToolButton:checked {{
+    background-color: {button_hover_bg};
+}}
+
+QFileDialog QLineEdit {{
+    selection-color: {window_bg};
+}}
+
+QFileDialog QLineEdit:focus, QFileDialog QComboBox:focus, QFileDialog QPushButton:focus {{
+    border-color: {metric_active_fg};
+}}
+
+QFileDialog QScrollBar {{
+    background-color: {scroll_bg};
+}}
+
+QFileDialog QScrollBar::handle {{
+    background-color: {input_border};
+    border: 2px solid {scroll_bg};
+    border-radius: 4px;
+}}
+
+QFileDialog QScrollBar::add-line, QFileDialog QScrollBar::sub-line {{
+    width: 0;
+    height: 0;
 }}
 
 QCheckBox {{
@@ -677,6 +732,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         return int(match.group(1)) if match else 0
 
     def _configure_target_bpm_spinbox(self, spinbox):
+        spinbox.setButtonSymbols(QDoubleSpinBox.NoButtons)
         spinbox.setDecimals(TARGET_BPM_DECIMALS)
         spinbox.setSingleStep(TARGET_BPM_STEP_MM)
         for widget in (spinbox, spinbox.lineEdit()):
@@ -1454,9 +1510,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _apply_theme(self):
         palette = self._palette()
-        self.centralwidget.setStyleSheet(build_orbit_correct_theme(palette))
-        if hasattr(self, "global_corrector_dialog"):
-            self.global_corrector_dialog.setStyleSheet(build_orbit_correct_theme(palette))
+        self.setStyleSheet(build_orbit_correct_theme(palette))
+        correction_buttons = (
+            self.editCorrectorsButton,
+            self.openResponseMatrixTabButton,
+            self.selectMatrixDevicesButton,
+        )
+        button_width = max(button.sizeHint().width() for button in correction_buttons)
+        button_height = max(button.sizeHint().height() for button in correction_buttons)
+        for button in correction_buttons:
+            button.setFixedSize(button_width, button_height)
         self.status_panel.apply_theme(palette)
         self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
         self._update_theme_toggle_button()
@@ -1939,6 +2002,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "Save Target BPM Preset",
             str(default_path),
             "JSON files (*.json)",
+            options=QFileDialog.DontUseNativeDialog,
         )
         if not selected_path:
             return
@@ -1991,6 +2055,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "Load Target BPM Preset",
             str(preset_dir),
             "JSON files (*.json)",
+            options=QFileDialog.DontUseNativeDialog,
         )
         if not selected_path:
             return
