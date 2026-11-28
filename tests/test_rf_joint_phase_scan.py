@@ -228,7 +228,10 @@ def test_gui_checkbox_switches_supported_stations(joint_setup, tmp_path, monkeyp
     app.processEvents()
 
 
-def test_gui_corrector_step_reaches_runner_and_capture(joint_setup, tmp_path, monkeypatch):
+@pytest.mark.parametrize(("current_step", "expected_tolerance"), [(0.08, 0.005), (0.016, 0.004)])
+def test_gui_corrector_step_reaches_runner_and_capture(
+    joint_setup, tmp_path, monkeypatch, current_step, expected_tolerance,
+):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     from PyQt5.QtCore import QTimer
     from PyQt5.QtWidgets import QApplication, QDialogButtonBox, QDoubleSpinBox
@@ -258,24 +261,24 @@ def test_gui_corrector_step_reaches_runner_and_capture(joint_setup, tmp_path, mo
         dialog = app.activeModalWidget()
         step = dialog.findChild(QDoubleSpinBox)
         assert step.value() == pytest.approx(0.2)
-        step.setValue(0.08)
+        step.setValue(current_step)
         dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Ok).click()
 
     QTimer.singleShot(0, choose_step)
     page.start_button.click()
     route = launched[0].response_routes["LLRF02"]
-    assert route.response.corrector.step == pytest.approx(0.08)
-    assert route.response.corrector.tolerance == pytest.approx(0.02)
+    assert route.response.corrector.step == pytest.approx(current_step)
+    assert route.response.corrector.tolerance == pytest.approx(expected_tolerance)
     assert route.response.amplitude.step == 0
     assert launched[0]._payload()["configuration"]["phase_response_routes"]["LLRF02"][
         "response"
-    ]["corrector"]["step"] == pytest.approx(0.08)
+    ]["corrector"]["step"] == pytest.approx(current_step)
 
     def choose_capture_steps():
         dialog = app.activeModalWidget()
         amp, current = dialog.findChildren(QDoubleSpinBox)
         assert amp.value() == 0
-        assert current.value() == pytest.approx(0.08)
+        assert current.value() == pytest.approx(current_step)
         amp.setValue(1.5)
         current.setValue(0.3)
         dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Ok).click()

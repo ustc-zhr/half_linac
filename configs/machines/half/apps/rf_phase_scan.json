@@ -150,7 +150,7 @@
           "conditions": [{"element": "QL16", "channel": "K1_total"}],
           "phase_response": {
             "amplitude": {"tolerance": 0.1},
-            "current": {"step": 0.2, "tolerance": 0.05},
+            "current": {"step": 0.2, "tolerance": 0.005},
             "minimum_sum": 10000,
             "minimum_transmission_sum": 10000,
             "maximum_relative_sum_change": 0.2,
